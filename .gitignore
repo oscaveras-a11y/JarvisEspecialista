@@ -1,0 +1,7 @@
+.state/
+.venv/
+__pycache__/
+*.pyc
+.env
+*.log
+voice/assets/*.mp3
