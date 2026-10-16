@@ -1,8 +1,0 @@
-#!/usr/bin/env bash
-set -euo pipefail
-ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
-export OPENJARVIS_HOME="$ROOT/.state"
-export DO_NOT_TRACK=1 JARVIS_SKIP_MODEL_PICK=1
-export OPENJARVIS_NO_UPDATE_CHECK=1
-cd "$ROOT/jarvis"
-exec uv run --no-sync python "$ROOT/voice/launcher.py" "$@"

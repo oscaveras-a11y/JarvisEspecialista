@@ -1,169 +1,90 @@
-# J.A.R.V.I.S — local, com voz em português do Brasil
+# CYBER CORE
 
-Projeto pessoal baseado no [OpenJarvis oficial](https://github.com/open-jarvis/OpenJarvis),
-com Ollama para o modelo, faster-whisper para ouvir e Kokoro `pf_dora` para falar.
-Ativação pelo comando `jarvis` ou falando **“Jarvis”** no modo de escuta.
-Não há detector de palmas.
+Plataforma local de investigação tecnológica **autorizada**, em desenvolvimento. Python 3.12+, SQLite, Windows, sem GPU dedicada. Repositório privado J.A.R.V.I.S reutilizado por autorização do proprietário, com histórico anterior preservado.
 
-O código oficial completo está vinculado na pasta `jarvis/` como **submódulo Git**,
-fixado em uma versão. Veja [UPSTREAM.md](UPSTREAM.md).
+**Entrega atual:** Fase 1 e protótipo inicial de investigação. Não é a plataforma completa. Veja [estado das fases](docs/roadmap.md), [limites de segurança](docs/security.md) e [validação real](docs/validation.md).
 
-## Situação desta entrega
-
-Preparado para instalar depois no computador. Os testes automáticos do launcher
-e a sintaxe PowerShell foram verificados; microfone, alto-falantes, download dos
-modelos, build web e `jarvis doctor` precisam ser validados na instalação real.
-O GitHub armazena o código: ele não escuta seu microfone nem executa o assistente.
-
-## Windows
-
-Requer Windows 10/11 com winget. Clone este repositório usando Git autenticado
-na sua conta (ele é privado), sem colocar tokens na URL:
+## Instalação no Windows
 
 ```powershell
-git clone --recurse-submodules https://github.com/oscaveras-a11y/J.A.R.V.I.S.git
-cd J.A.R.V.I.S
-powershell -NoProfile -ExecutionPolicy Bypass -File .\install.ps1
+git clone https://github.com/oscaveras-a11y/J.A.R.V.I.S.git
+Set-Location J.A.R.V.I.S
+.\scripts\install.ps1 -Python python
+.\.venv\Scripts\cyber.exe doctor
+.\.venv\Scripts\cyber.exe --help
 ```
 
-O instalador anuncia cada etapa, instala o que faltar usando winget, exige
-Node >=22.22, usa npm 11.19.0 para construir a interface e deixa o uv escolher
-Python >=3.10 e <3.14. Instala desktop/voz, inicia Ollama, baixa o modelo,
-configura PT-BR e executa doctor, teste de texto e síntese de voz.
-Abra um terminal novo depois da instalação para atualizar o PATH.
+Se Python não estiver no PATH, passe `-Python 'C:\caminho\python.exe'`. O instalador cria um venv local e instala `cryptography`, a única dependência de runtime. Não instala Codex, Claude nem suítes externas. A política de execução de scripts do computador deve permitir os scripts; não é modificada automaticamente.
 
-Por padrão usa `gemma4:e4b`. Se detectar menos de 16 GB de RAM, avisa e escolhe
-`gemma4:e2b`. Para escolher explicitamente ou omitir a interface:
+Alternativa sem instalação do pacote, usando um Python com cryptography disponível:
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File .\install.ps1 -Model gemma4:e2b -SkipWeb
+$env:PYTHONPATH = Join-Path $PWD 'src'
+python -m cyber_core doctor
+python -m cyber_core --help
 ```
 
-`-SkipVoiceTest` omite o download/síntese inicial da voz; eles ocorrerão no primeiro uso.
+## Primeira investigação
 
-## Mac
-
-```bash
-git clone --recurse-submodules https://github.com/oscaveras-a11y/J.A.R.V.I.S.git
-cd J.A.R.V.I.S
-bash install.sh
-```
-
-Instala Homebrew se faltar, Node, Git, Ollama, PortAudio, eSpeak NG e uv oficial.
-O Homebrew pode solicitar autenticação no próprio terminal; nenhuma senha ou
-chave é solicitada em campos de navegador por este projeto.
-Depois, abra um terminal novo. Se `jarvis` não for encontrado:
-
-```bash
-export PATH="$HOME/.local/bin:$PATH"
-```
-
-Adicione essa linha ao seu `~/.zprofile` se necessário.
-Para escolher o modelo menor: `JARVIS_MODEL=gemma4:e2b bash install.sh`.
-
-## Três comandos do dia a dia
-
-```text
-jarvis
-jarvis --listen
-jarvis --web
-```
-
-- `jarvis`: começa a conversa por voz imediatamente, sem pressionar Enter a cada frase.
-- `jarvis --listen`: aguarda você falar “Jarvis”, responde “Estou aqui. Como posso ajudar?”
-  e inicia a conversa. Diga **“encerrar conversa”** ou **“voltar a esperar”** para
-  voltar a aguardar o nome. Primeiro diga o nome, aguarde o aviso, depois faça a pergunta.
-- `jarvis --web`: inicia o servidor local e abre `http://127.0.0.1:8000`.
-
-Também existem `jarvis --text`, `jarvis --doctor`, `jarvis --stop` e `jarvis --list-mics`.
-Se o comando ainda não estiver no PATH, use `./bin/jarvis` no Mac ou
-`.\bin\jarvis.cmd` no Windows, com os mesmos argumentos.
-Mantenha a pasta do projeto onde foi instalada: os atalhos apontam para ela.
-
-No modo de escuta, **Ctrl+C enquanto aguarda o nome** encerra o programa;
-durante a gravação da conversa, Ctrl+C pode devolver à escuta do nome.
-No modo direto, “encerrar conversa” encerra o chat.
-
-## Microfone e ativação pelo nome
-
-A ativação usa transcrição Whisper local em português; não é um detector
-especializado de wake word. Consome CPU enquanto está ouvindo e pode falhar
-com ruído, sotaque, distância ou se o nome for transcrito de outro modo.
-Uma gravação termina após silêncio, então há uma pequena espera para ativar.
-Conceda acesso ao microfone ao terminal nas configurações de privacidade do sistema.
-
-Liste os dispositivos com `jarvis --list-mics`, e escolha pelo número ou nome:
+Escolha uma pasta de arquivos autorizados fora do checkout. O armazenamento padrão é `%LOCALAPPDATA%\CyberCore`. Use um `CYBER_HOME` distinto por cliente e ACLs adequadas. Operações em diretórios Git e caminhos de rede são rejeitadas para armazenamento.
 
 ```powershell
-$env:JARVIS_MIC = '2'
-jarvis --listen
+$env:CYBER_HOME = Join-Path $env:LOCALAPPDATA 'CyberCore\cliente-demo'
+$cyber = '.\.venv\Scripts\cyber.exe'
+& $cyber init
+& $cyber investigate --project laboratorio --objective 'Identificar binário próprio' --scope 'C:\Laboratorio\entradas' --owner 'Responsavel' --authorization 'Autorizacao de bancada sobre arquivos sinteticos'
+# Copie o id retornado:
+& $cyber analyze-file ID 'C:\Laboratorio\entradas\amostra.bin'
+& $cyber status ID
+& $cyber report ID
 ```
 
-```bash
-JARVIS_MIC='Microfone USB' jarvis --listen
-```
+A autorização declarada vale 24 horas por padrão, configurável por `--valid-hours`; `cyber revoke ID` a revoga. O operador é responsável pela legitimidade da declaração. A plataforma não verifica uma identidade legal.
 
-A escolha vale tanto para a escuta do nome quanto para a conversa.
-Opcionalmente coloque `voice/assets/jingle.mp3`: ele toca quando o nome é reconhecido.
+`analyze-file` preserva o original, cria uma cópia exclusiva verificada, calcula SHA-256, mede entropia por fluxo e identifica assinaturas conhecidas. Uma assinatura ELF não valida estruturas ELF; entropia alta não comprova criptografia. Cada resultado gera hipótese aberta, proposta de experimento e checkpoint persistente. A investigação permanece EM INVESTIGACAO; não é declarada resolvida automaticamente.
 
-## Arquivos, modelos e privacidade
-
-- Personalizações: este repositório; código oficial: submódulo `jarvis/`.
-- Configuração, histórico local e teste de voz: `.state/`, fora do código oficial.
-- Ambiente Python: `jarvis/.venv/`; modelos Ollama: armazenamento padrão do Ollama.
-- Kokoro/Whisper: cache local do Hugging Face. O primeiro uso exige download;
-  depois a inferência de texto e voz é local.
-- Modelo e4b/e2b: o tamanho varia com a versão/quantização publicada no Ollama;
-  consulte [o catálogo oficial](https://ollama.com/library/gemma4).
-  Planeje espaço adicional para Python, dependências, frontend e caches.
-- Nenhuma chave de API é necessária. `.env`, `.state/` e modelos não vão para o GitHub.
-- Os instaladores desativam analytics e telemetry, deixam o servidor em
-  `127.0.0.1` e usam chat sem ferramentas externas por padrão.
-- O launcher desativa a consulta de atualização e restringe o fallback de TTS
-  ao Kokoro local. O perfil de segurança solicitado é `personal`.
-
-## Diagnóstico
-
-O instalador interrompe nas falhas; leia a mensagem completa. Ele executa o doctor
-normal e verifica seu JSON porque nem toda falha do doctor altera o código de saída.
-Os avisos sobre componentes opcionais devem ser avaliados conforme o uso desejado.
-
-Se `winget` falhar com certificado ou origem indisponível, não desative a validação
-TLS: use os instaladores oficiais de [uv](https://docs.astral.sh/uv/getting-started/installation/),
-[Git](https://git-scm.com/downloads/win), [Node](https://nodejs.org/) e
-[Ollama](https://ollama.com/download/windows), abra outro terminal e execute novamente.
-
-No Windows, `espeakng-loader` já é dependência do Kokoro. Só se aparecer erro
-específico de eSpeak NG, instale e configure após verificar a DLL:
+## Fila, pausa e retomada
 
 ```powershell
-winget install -e --id eSpeak-NG.eSpeak-NG --source winget
-Test-Path 'C:\Program Files\eSpeak NG\libespeak-ng.dll'
-# Apenas se o comando acima retornar True:
-setx PHONEMIZER_ESPEAK_LIBRARY 'C:\Program Files\eSpeak NG\libespeak-ng.dll'
+& $cyber analyze-file ID 'C:\Laboratorio\entradas\amostra.bin' --queue-only
+& $cyber pause ID
+# Pode encerrar o terminal. Em outro terminal, restaure CYBER_HOME:
+& $cyber resume ID
+& $cyber run ID
 ```
 
-Abra outro terminal. Para dependências de compilação, siga a
-[instalação oficial](https://open-jarvis.github.io/OpenJarvis/getting-started/installation/)
-e o [guia Windows](https://open-jarvis.github.io/OpenJarvis/getting-started/windows-native/).
-Não force Python 3.14. O instalador usa Whisper CPU/int8 para evitar exigir CUDA.
+`run` executa uma tarefa pendente; não é um daemon. Claims transacionais e leases impedem duplicação de resultados no banco. Após morte do processo, tarefas em execução podem ser retomadas após o vencimento do lease (timeout + 30 segundos), até três tentativas. Falha definitiva registra erro e não fica repetindo. Pausa ocorre entre operações, sem interromper uma aquisição já iniciada. Cancelamento/worker gerenciado e retomada automática após boot ainda estão pendentes.
 
-Se o modelo estiver lento, execute o instalador com `gemma4:e2b`; o modelo anterior
-continua no armazenamento até ser removido com `ollama rm gemma4:e4b`.
-No Windows, meça o tamanho da instalação com:
+## AES-256 autorizado
+
+Somente o envelope de laboratório `CCAES1` é suportado: magic de 6 bytes, nonce de 12 bytes, ciphertext e tag GCM de 16 bytes, com o magic como AAD. Não há suporte universal a arquivos AES, ZIP, BitLocker ou firmware. Não há quebra de AES ou busca indiscriminada de senhas.
+
+Registre a investigação com `--allow-recovery`, além do escopo e autorização. A chave deve estar em arquivo local protegido contendo exatamente **32 bytes brutos**, fora do Git. Não passe a chave na linha de comando.
 
 ```powershell
-(Get-ChildItem -LiteralPath . -File -Recurse -Force | Measure-Object Length -Sum).Sum / 1GB
+& $cyber recover-aes ID 'C:\Laboratorio\entradas\arquivo.ccaes' --key-file 'C:\Cofre\material.key' --expected-sha256 HASH_DO_PLAINTEXT --expected-format 'PDF signature'
 ```
 
-Esse valor não inclui caches de modelos fora da pasta. No Mac: `du -sh .`.
+Três tentativas criptográficas por investigação; entrada limitada a 64 MiB ou ao limite configurado menor. A tag é autenticada antes de escrever plaintext. Falhas de chave, integridade ou autorização não produzem saída recuperada. Chaves não são persistidas: a auditoria registra referência opaca ao material fornecido. As expectativas de hash e formato são opcionais; a autenticação GCM é sempre obrigatória. Python não garante zerar todas as cópias de uma chave na memória.
 
-## Testes sem instalar o assistente
+## Agentes
 
-```sh
+`cyber agents` e `cyber doctor` descobrem CLIs, sem assumir autenticação. O núcleo funciona sem agentes. O adaptador inicial Codex usa processo com stdin estruturado, sandbox read-only, tempo e saída limitados. A saída é proposta, não comando. A chamada real falhou no sandbox e uma segunda tentativa sob o usuário correto excedeu o timeout; a integração autenticada permanece não validada.
+
+`cyber review ID --allow-cloud-summary` envia somente tamanho, formato, entropia e estado de verificação ao Codex. Não envia caminhos, conteúdo, objetivo ou autorização. Exige permissão explícita de envio e limita a cinco chamadas por investigação; isso **não** é um limite financeiro garantido. O sandbox do CLI é uma dependência externa, não um isolamento implementado pelo CYBER CORE.
+
+Claude tem interface extensível e diagnóstico, mas sua execução é bloqueada até o CLI e o contrato serem validados. Worktrees por tarefa, paralelismo e revisão cruzada automatizada completa ainda não foram implementados.
+
+## Testes e demonstração
+
+```powershell
+.\scripts\test.ps1 -Python '.\.venv\Scripts\python.exe'
+# Ou:
+$env:PYTHONPATH = Join-Path $PWD 'src'
 python -m unittest discover -s tests -v
+python scripts/demo.py
 ```
 
-Testam reconhecimento do nome, frases de encerramento, seleção de microfone,
-opções e integração do leitor automático com restauração após falha. Não
-substituem o teste físico de voz na próxima etapa.
+A demonstração gera todos os arquivos sintéticos e uma chave aleatória em memória, preserva o relatório em diretório temporário e imprime os resultados. Não utiliza dados de clientes. `scripts/agent-smoke.py` é opcional, realiza chamada real ao Codex com resumo sintético e pode consumir a cota do agente; não faz parte da suíte offline.
+
+Os comandos `analyze-firmware`, `analyze-can`, `forensic` e `research` serão publicados quando suas implementações reais estiverem testadas; hoje são rejeitados como comandos desconhecidos. Não existem integrações fictícias com Ghidra, Autopsy, Nmap ou outras ferramentas.

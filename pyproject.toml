@@ -1,0 +1,16 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "cyber-core"
+version = "0.1.0"
+description = "Authorized local investigation engine"
+requires-python = ">=3.12"
+dependencies = ["cryptography>=50.0.2,<51"]
+
+[project.scripts]
+cyber = "cyber_core.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]

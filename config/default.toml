@@ -1,0 +1,5 @@
+# Public reference; runtime values are configured via environment or CLI.
+max_bytes = 67108864
+timeout_seconds = 60
+max_attempts = 3
+agent_calls_per_case = 5
