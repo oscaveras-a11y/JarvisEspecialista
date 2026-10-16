@@ -30,6 +30,8 @@ CREATE TABLE IF NOT EXISTS tasks(
 CREATE TABLE IF NOT EXISTS results(
  task_id TEXT PRIMARY KEY REFERENCES tasks(id), case_id TEXT NOT NULL REFERENCES investigations(id),
  data TEXT NOT NULL, created TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS task_limits(
+ task_id TEXT PRIMARY KEY REFERENCES tasks(id), max_bytes INTEGER NOT NULL CHECK(max_bytes>=0));
 CREATE TABLE IF NOT EXISTS hypotheses(
  id TEXT PRIMARY KEY, case_id TEXT NOT NULL REFERENCES investigations(id),
  task_id TEXT NOT NULL REFERENCES tasks(id), statement TEXT NOT NULL,
@@ -51,11 +53,12 @@ def connect(path):
     db.execute('PRAGMA foreign_keys=ON')
     db.execute('PRAGMA busy_timeout=10000')
     version = db.execute('PRAGMA user_version').fetchone()[0]
-    if version not in (0, 1):
+    if version not in (0, 1, 2):
         db.close()
         raise CoreError('Unsupported database version')
     db.executescript(SCHEMA)
-    db.execute('PRAGMA user_version=1')
+    # Schema 2 adds optional persisted task byte caps; all schema-1 records remain valid.
+    db.execute('PRAGMA user_version=2')
     db.commit()
     return db
 

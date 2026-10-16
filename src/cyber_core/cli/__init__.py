@@ -24,7 +24,7 @@ def parser():
     inv = sub.add_parser('investigate', help='Register investigation and declared authorization')
     for name in ('project', 'objective', 'scope', 'owner', 'authorization'):
         inv.add_argument('--' + name, required=True)
-    inv.add_argument('--allow-recovery', action='store_true', help='Explicitly authorize known-key AES recovery within scope')
+    inv.add_argument('--allow-recovery', action='store_true', help='Explicitly authorize recovery investigation within scope; no key required for assessment')
     inv.add_argument('--valid-hours', type=float, default=24)
     status = sub.add_parser('status', help='List cases or display one case')
     status.add_argument('case', nargs='?')
@@ -41,6 +41,13 @@ def parser():
     aes.add_argument('--key-file', required=True, help='Local protected file containing exactly 32 raw bytes; never logged')
     aes.add_argument('--expected-sha256')
     aes.add_argument('--expected-format')
+    assess = sub.add_parser('assess-recovery', help='Assess recovery options for a file or bounded batch without supplying keys')
+    assess.add_argument('case')
+    assess.add_argument('path')
+    assess.add_argument('--max-files', type=int, default=100)
+    assess.add_argument('--max-total-bytes', type=int, default=268435456)
+    assess.add_argument('--recursive', action='store_true')
+    assess.add_argument('--queue-only', action='store_true')
     review = sub.add_parser('review', help='Ask Codex to review derived metadata; cloud approval required')
     review.add_argument('case')
     review.add_argument('--allow-cloud-summary', action='store_true')
@@ -59,7 +66,7 @@ def main(argv=None):
             core = Core(args.home, max_bytes=args.max_bytes, timeout=args.timeout)
             cmd = args.command
             if cmd == 'init':
-                result = {'initialized': True, 'home': str(core.home), 'schema': 1}
+                result = {'initialized': True, 'home': str(core.home), 'schema': 2}
             elif cmd == 'investigate':
                 result = {'id': core.investigate(args.project, args.objective, args.scope, args.owner, args.authorization, recovery=args.allow_recovery, valid_hours=args.valid_hours)}
             elif cmd == 'status':
@@ -71,6 +78,9 @@ def main(argv=None):
                 result = {'task': task} if args.queue_only else core.run_one(args.case, task_id=task)
             elif cmd == 'run':
                 result = core.run_one(args.case)
+            elif cmd == 'assess-recovery':
+                result = core.assess_recovery(args.case, args.path, max_files=args.max_files, recursive=args.recursive,
+                                             queue_only=args.queue_only, max_total_bytes=args.max_total_bytes)
             elif cmd == 'report':
                 result = {'path': str(core.report(args.case))}
             elif cmd in ('pause', 'resume', 'revoke'):

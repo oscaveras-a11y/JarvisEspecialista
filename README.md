@@ -2,7 +2,7 @@
 
 Plataforma local de investigação tecnológica **autorizada**, em desenvolvimento. Python 3.12+, SQLite, Windows, sem GPU dedicada. Repositório privado J.A.R.V.I.S reutilizado por autorização do proprietário, com histórico anterior preservado.
 
-**Entrega atual:** Fase 1 e protótipo inicial de investigação. Não é a plataforma completa. Veja [estado das fases](docs/roadmap.md), [limites de segurança](docs/security.md) e [validação real](docs/validation.md).
+**Entrega atual:** Fase 1, protótipo de investigação e triagem de recuperação em lotes, sem chave fornecida. Não é a plataforma completa. Veja [cobertura de recuperação](docs/recovery-coverage.md), [estado das fases](docs/roadmap.md), [limites de segurança](docs/security.md) e [validação real](docs/validation.md).
 
 ## Instalação no Windows
 
@@ -55,11 +55,30 @@ A autorização declarada vale 24 horas por padrão, configurável por `--valid-
 
 `run` executa uma tarefa pendente; não é um daemon. Claims transacionais e leases impedem duplicação de resultados no banco. Após morte do processo, tarefas em execução podem ser retomadas após o vencimento do lease (timeout + 30 segundos), até três tentativas. Falha definitiva registra erro e não fica repetindo. Pausa ocorre entre operações, sem interromper uma aquisição já iniciada. Cancelamento/worker gerenciado e retomada automática após boot ainda estão pendentes.
 
-## AES-256 autorizado
+## Recuperação: começar sem chave fornecida
+
+O cliente fornece autorização, escopo e arquivos. O comando `assess-recovery` inicia a investigação sem chave ou senha: reconhece famílias de formatos, registra os indícios observados e indica os próximos testes e fontes autorizadas que podem viabilizar recuperação.
+
+```powershell
+& $cyber investigate --project cliente-demo --objective 'Avaliar recuperacao de arquivos' --scope 'C:\Laboratorio\entradas' --owner 'Responsavel' --authorization 'Autorizacao para investigar os arquivos deste diretorio' --allow-recovery
+& $cyber assess-recovery ID 'C:\Laboratorio\entradas' --max-files 100 --max-total-bytes 268435456
+& $cyber report ID
+# Para incluir subpastas explicitamente:
+& $cyber assess-recovery ID 'C:\Laboratorio\entradas' --recursive --queue-only
+& $cyber run ID
+```
+
+Cada arquivo recebe cópia verificada, hash, triagem, limitações e caminhos de investigação registrados no SQLite e no relatório. O lote tem limites de quantidade, bytes e duração, sem executar ou extrair arquivos. As tarefas ficam persistidas e a pausa preserva a contagem correta dos itens pendentes. O esquema SQLite 2 adiciona limites por tarefa e mantém os registros do esquema 1. Se o arquivo crescer depois da entrada na fila, a aquisição é rejeitada para preservar o orçamento de bytes, inclusive após reiniciar.
+
+Há reconhecimento inicial de PDF, ZIP, OLE/CFB, 7z, RAR, LUKS, envelope OpenSSL, SQLite, ELF/PE, gzip, PNG/JPEG e CCAES1. A [matriz de cobertura](docs/recovery-coverage.md) distingue assinatura reconhecida, metadados inspecionados e recuperação realmente implementada. Arquivos desconhecidos seguem para investigação de formato e proveniência; não são classificados automaticamente como criptografados.
+
+A triagem pode começar somente com autorização, mas isso não demonstra descriptografia. Inventário de backups, reparo estrutural, validação integral desses formatos e busca em fontes autorizadas ainda são procedimentos propostos, não ferramentas automáticas já implementadas. Não há promessa universal de recuperação nem requisito de que o cliente já possua uma chave.
+
+## Descriptografia opcional com material disponível
 
 Somente o envelope de laboratório `CCAES1` é suportado: magic de 6 bytes, nonce de 12 bytes, ciphertext e tag GCM de 16 bytes, com o magic como AAD. Não há suporte universal a arquivos AES, ZIP, BitLocker ou firmware. Não há quebra de AES ou busca indiscriminada de senhas.
 
-Registre a investigação com `--allow-recovery`, além do escopo e autorização. A chave deve estar em arquivo local protegido contendo exatamente **32 bytes brutos**, fora do Git. Não passe a chave na linha de comando.
+O teste de descriptografia CCAES1 continua disponível quando material legítimo vier a estar disponível durante uma investigação; ele não é pré-requisito da triagem nem do atendimento. A chave, quando disponível, deve estar em arquivo local protegido contendo exatamente **32 bytes brutos**, fora do Git. Não passe a chave na linha de comando.
 
 ```powershell
 & $cyber recover-aes ID 'C:\Laboratorio\entradas\arquivo.ccaes' --key-file 'C:\Cofre\material.key' --expected-sha256 HASH_DO_PLAINTEXT --expected-format 'PDF signature'
@@ -83,6 +102,8 @@ Claude tem interface extensível e diagnóstico, mas sua execução é bloqueada
 $env:PYTHONPATH = Join-Path $PWD 'src'
 python -m unittest discover -s tests -v
 python scripts/demo.py
+# Runner que também configura src para subprocessos:
+python scripts/run-tests.py
 ```
 
 A demonstração gera todos os arquivos sintéticos e uma chave aleatória em memória, preserva o relatório em diretório temporário e imprime os resultados. Não utiliza dados de clientes. `scripts/agent-smoke.py` é opcional, realiza chamada real ao Codex com resumo sintético e pode consumir a cota do agente; não faz parte da suíte offline.

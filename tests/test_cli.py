@@ -65,3 +65,10 @@ class CLITests(unittest.TestCase):
         self.home.mkdir()
         (self.home / 'core.sqlite3').write_bytes(b'not a sqlite database')
         self.cli('status', success=False)
+
+    def test_recovery_assessment_needs_no_key_argument(self):
+        case = self.cli('investigate', '--project', 'x', '--objective', 'no supplied key', '--scope', str(self.inputs), '--owner', 'owner', '--authorization', 'Authorized assessment', '--allow-recovery')['id']
+        (self.inputs / 'sample').write_bytes(b'Salted__' + bytes(24))
+        result = self.cli('assess-recovery', case, str(self.inputs))
+        self.assertEqual(result['results'][0]['recovery_assessment']['format_id'], 'openssl-salted')
+        self.assertFalse(result['results'][0]['recovery_assessment']['recovery_demonstrated'])

@@ -15,3 +15,9 @@ Revisão: caminhos UNC/device/ADS/traversal/reparse; revogação e validade; lim
 Dados em CYBER_HOME externo ao checkout. SQLite não fornece criptografia nem identidade multiusuário. ACLs/BitLocker são responsabilidade operacional documentada. Não executar binários desconhecidos nem shell arbitrário. Agentes só recebem resumo explicitamente autorizado; suas respostas não viram comandos. Alta entropia não prova criptografia. Não registrar chaves, somente referência opaca.
 
 Primeira entrega não conclui fases 2–6: worktrees/paralelismo/revisão independente, ferramentas externas, pesquisa online, CAN, perícia avançada e worker Windows serão declarados pendentes quando ausentes. AES suporta apenas envelope definido; não quebra AES nem recupera universalmente contêineres.
+
+## Evolução solicitada: vários formatos, sem chave fornecida
+
+Implementar triagem de recuperação sobre o fluxo de análise existente: classificador estático limitado, parecer com indícios e próximos testes, entrada em lotes autorizados sem segredo, persistência na mesma fila/relatório e cotas retomáveis. Não exigir um formato específico para cadastrar o caso. Não confundir reconhecimento com parser completo ou dados recuperados. Usar fontes primárias para os cabeçalhos inspecionados e documentar cobertura por família.
+
+Etapas executadas: testes negativos antes da implementação; classificador e lote; revisão independente; reprodução/correção de quotas e contagem de pausa; migração aditiva para esquema 2; suíte completa de 50 testes aprovada. A nova demonstração também exercita triagem multiformato sem passar chave ao módulo.

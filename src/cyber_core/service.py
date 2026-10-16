@@ -55,13 +55,16 @@ class Core:
             audit(self.db, case, 'authorization_revoked', {})
 
     def enqueue(self, case, path, *, tool='analyze-file'):
-        if tool != 'analyze-file':
-            raise CoreError('Tool is not allowlisted')
-        source = self.authorize(case, path)
-        task = uuid4().hex
         with self.db:
-            self.db.execute('INSERT INTO tasks(id,case_id,tool,path,created) VALUES(?,?,?,?,?)', (task, case, tool, str(source), utc()))
-            audit(self.db, case, 'task_queued', {'task': task, 'tool': tool, 'source': str(source)})
+            return self._enqueue(case, path, tool=tool)
+
+    def _enqueue(self, case, path, *, tool):
+        if tool not in ('analyze-file', 'assess-recovery'):
+            raise CoreError('Tool is not allowlisted')
+        source = self.authorize(case, path, recovery=tool == 'assess-recovery')
+        task = uuid4().hex
+        self.db.execute('INSERT INTO tasks(id,case_id,tool,path,created) VALUES(?,?,?,?,?)', (task, case, tool, str(source), utc()))
+        audit(self.db, case, 'task_queued', {'task': task, 'tool': tool, 'source': str(source)})
         return task
 
     def _claim(self, case, task_id=None):
@@ -90,18 +93,36 @@ class Core:
             self.db.rollback()
             raise
 
-    def run_one(self, case, task_id=None):
+    def run_one(self, case, task_id=None, *, time_budget=None):
+        budget = self.timeout if time_budget is None else time_budget
+        if not 0 < budget <= self.timeout:
+            raise CoreError('Invalid task time budget')
+        started = time.monotonic()
         task = self._claim(case, task_id)
         if task is None:
             return None
         output = None
         try:
-            source = self.authorize(case, task['path'])
+            recovery_assessment = task['tool'] == 'assess-recovery'
+            if task['tool'] not in ('analyze-file', 'assess-recovery'):
+                raise CoreError('Tool is not allowlisted')
+            source = self.authorize(case, task['path'], recovery=recovery_assessment)
             folder = storage_root(self.home / 'cases' / case / 'evidence')
             output = folder / (task['id'] + '-' + task['token'] + '.evidence')
-            result = analyze(source, output, self.max_bytes, self.timeout)
+            limit = self.db.execute('SELECT max_bytes FROM task_limits WHERE task_id=?', (task['id'],)).fetchone()
+            byte_limit = min(self.max_bytes, limit['max_bytes']) if limit is not None else self.max_bytes
+            remaining = budget - (time.monotonic() - started)
+            if remaining <= 0:
+                raise CoreError('Analysis time budget exhausted')
+            result = analyze(source, output, byte_limit, remaining)
+            result.update(task_id=task['id'], tool=task['tool'])
+            if recovery_assessment:
+                from cyber_core.cryptanalysis.assessment import assess
+                result['recovery_assessment'] = assess(output, entropy=result['entropy'])
+            if time.monotonic() - started > budget:
+                raise CoreError('Analysis resource limit exceeded')
             with self.db:
-                self.authorize(case, source)
+                self.authorize(case, source, recovery=recovery_assessment)
                 current = self.db.execute('SELECT status,token FROM tasks WHERE id=?', (task['id'],)).fetchone()
                 if current['status'] != 'running' or current['token'] != task['token']:
                     raise CoreError('Task lease was replaced')
@@ -165,3 +186,7 @@ class Core:
     def recover(self, case, source, key, **expectations):
         from cyber_core.cryptanalysis import recover
         return recover(self, case, source, key, **expectations)
+
+    def assess_recovery(self, case, path, **limits):
+        from cyber_core.cryptanalysis.intake import assess_recovery
+        return assess_recovery(self, case, path, **limits)

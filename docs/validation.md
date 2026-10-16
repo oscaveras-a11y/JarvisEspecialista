@@ -1,6 +1,6 @@
 # Validação — 16/10/2026
 
-**Resultado final: 33 testes passaram, 0 falhas, 0 erros, 0 skips, em 70,334 segundos.** Comando: `python -m unittest discover -s tests -v`, com PYTHONPATH=src. Não usar esses resultados como prova de módulos ainda pendentes.
+**Resultado atual: 50 testes passaram, 0 falhas, 0 erros, 0 skips, em 95,749 segundos.** Comando: `python scripts/run-tests.py`, com o runtime Python 3.12.14. A primeira entrega teve 33 testes aprovados em 70,334 segundos. Não usar esses resultados como prova de módulos ainda pendentes.
 
 Ambiente observado: Windows 10 build 19042, Python 3.12.14 (64 bits), SQLite 3.53.1, Git 2.55.0.windows.5, cryptography disponível. Python não estava no PATH inicial do shell; foi usado o runtime Python do aplicativo. O executável Codex foi descoberto no ambiente do processo Python e seu `exec --help` foi consultado. Claude e gh não foram encontrados.
 
@@ -17,3 +17,13 @@ Instalação verificada: venv local criado com `--system-site-packages` para reu
 Scripts PowerShell foram escritos, mas sua execução/validação não foi comprovada: o processo powershell.exe não retornou no ambiente de ferramentas e foi interrompido. Os testes e a instalação foram realizados pelos comandos Python diretos documentados no README. Não declarar o instalador PowerShell testado.
 
 O Git HTTPS falhou no sandbox inicial; fetch autorizado fora dele funcionou. Publicação deve preservar o commit remoto anterior e13049b0ba3368d3b31c772f97ef8d856950f37f como ancestral.
+
+## Atualização: investigação sem chave fornecida
+
+O usuário esclareceu que o cliente fornece autorização e arquivos variados, sem chave. Foi implementado `assess-recovery` para arquivo ou lote autorizado, sem argumento de segredo. A cobertura está descrita em [recovery-coverage.md](recovery-coverage.md). A triagem não afirma ter recuperado dados.
+
+Passaram testes de reconhecimento em 14 amostras de formatos, flags ZIP e campo AES, marcador PDF não conclusivo, amostragem limitada, entropia sem inferência automática de criptografia, lote sem chave, relatório persistido, escopo, revogação, limite de arquivos e recursão explícita.
+
+Foram reproduzidas e corrigidas duas falhas de retomada: crescimento de arquivo depois da entrada na fila podia exceder o orçamento agregado; pausa podia reportar tarefas ainda pendentes como falhas. O esquema 2 conserva tetos por tarefa e a migração do esquema 1 foi testada preservando hashes, resultados e auditoria. A revisão independente confirmou o problema de contabilização após pausa; o problema de bytes também foi identificado e corrigido com teste de regressão.
+
+A suíte completa de 50 testes passou após essas mudanças. Os limites de formato permanecem explícitos: prefixo de 64 KiB, assinatura sem validação integral, ZIP limitado ao primeiro cabeçalho, nenhuma extração, busca de segredos ou tentativa criptográfica durante a triagem. Não foi repetida chamada aos agentes de nuvem; suas limitações anteriores continuam válidas.

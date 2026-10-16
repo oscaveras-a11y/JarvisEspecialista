@@ -51,6 +51,12 @@ def main():
         plaintext = b'%PDF-1.7\nSynthetic authorized recovery.\n'
         encrypted = inputs / 'synthetic.ccaes'
         encrypted.write_bytes(b'CCAES1' + nonce + AESGCM(key).encrypt(nonce, plaintext, b'CCAES1'))
+        batch = core.assess_recovery(case, inputs)
+        assert len(batch['results']) == 2
+        assert {r['recovery_assessment']['format_id'] for r in batch['results']} == {'elf', 'ccaes1'}
+        assert not any(r['recovery_assessment']['recovery_demonstrated'] for r in batch['results'])
+        assert core.get(case)['recovery_attempts'] == 0
+        steps.append('multiformat_recovery_triage_without_supplied_key')
         recovered = core.recover(case, encrypted, key, expected_sha256=hashlib.sha256(plaintext).hexdigest(), expected_format='PDF signature')
         assert Path(recovered['output']).read_bytes() == plaintext
         steps.append('aes256_gcm_authenticated_and_plaintext_sha256_verified')
@@ -75,7 +81,7 @@ def main():
         report = core.report(case)
         steps.extend(['unauthorized_and_invalid_recovery_rejected', 'audit_integrity_verified_and_secret_not_logged', 'technical_report_generated'])
         output = {'case': case, 'passed_steps': steps, 'rejected': rejected, 'analysis': result,
-                  'recovery': recovered, 'report': str(report), 'synthetic_artifacts': str(root),
+                  'recovery': recovered, 'keyless_triage_files': len(batch['results']), 'report': str(report), 'synthetic_artifacts': str(root),
                   'state': core.get(case)['state'], 'platform_complete': False}
         print(json.dumps(output, indent=2))
         return 0

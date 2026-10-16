@@ -123,6 +123,18 @@ class CoreTests(unittest.TestCase):
             review_summary(self.core, self.case)
         self.assertEqual(self.core.get(self.case)['agent_calls'], 0)
 
+    def test_version_one_database_upgrades_without_losing_evidence(self):
+        self.core.enqueue(self.case, self.source)
+        result = self.core.run_one(self.case)
+        self.core.db.execute('DROP TABLE IF EXISTS task_limits')
+        self.core.db.execute('PRAGMA user_version=1')
+        self.core.db.commit()
+        upgraded = Core(self.root / 'state')
+        self.addCleanup(upgraded.close)
+        self.assertEqual(upgraded.db.execute('PRAGMA user_version').fetchone()[0], 2)
+        self.assertEqual(upgraded.results(self.case)[0]['sha256'], result['sha256'])
+        self.assertTrue(upgraded.verify_audit(self.case))
+
 
 if __name__ == '__main__':
     unittest.main()
