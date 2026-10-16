@@ -13,11 +13,14 @@ def write_report(core, case):
             'hypotheses': core.hypotheses(case), 'tasks': core.tasks(case),
             'checkpoints': core.checkpoints(case), 'audit_chain_valid': core.verify_audit(case),
             'audit': core.audit(case)}
+    from cyber_core.investigation.workflow import Workflow
+    data['scientific_workflow'] = Workflow(core).snapshot(case)
     # JSON is escaped so evidence-derived strings cannot terminate a Markdown code block.
     payload = json.dumps(data, ensure_ascii=True, indent=2).replace('`', '\\u0060')
     text = '# CYBER CORE technical report\n\nStatus: ' + row['state'] + '\n\n'
     text += 'Static observations are reproducible experiments. Hypotheses remain unconfirmed.\n'
-    text += 'No independent agent review has been completed. No conclusion of resolution is implied.\n'
+    text += ('Registered solution criteria have reproducible checks and declared independent reviews; inspect their scope below.\n' if row['state'] == 'RESOLVIDO' else 'No validated resolution is implied by an analysis result or agent assertion.\n')
+    text += 'Reviewer identities are local declarations, not authenticated identities or digital signatures.\n'
     text += 'Audit hash links detect edits only against this stored chain; they are not digital signatures.\n\n```json\n' + payload + '\n```\n'
     with output.open('x', encoding='utf-8') as handle:
         handle.write(text)

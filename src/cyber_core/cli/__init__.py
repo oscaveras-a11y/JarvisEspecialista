@@ -35,6 +35,11 @@ def parser():
     analyze.add_argument('case')
     analyze.add_argument('path')
     analyze.add_argument('--queue-only', action='store_true')
+    for name in ('analyze-firmware', 'analyze-can'):
+        specialist = sub.add_parser(name, help='Analyze authorized offline ' + name.removeprefix('analyze-') + ' evidence')
+        specialist.add_argument('case'); specialist.add_argument('path')
+        specialist.add_argument('--compare-to', help='Second authorized input to compare without modification')
+        specialist.add_argument('--queue-only', action='store_true')
     aes = sub.add_parser('recover-aes', help='Recover a CCAES1 AES-256-GCM envelope with supplied key')
     aes.add_argument('case')
     aes.add_argument('path')
@@ -51,6 +56,8 @@ def parser():
     review = sub.add_parser('review', help='Ask Codex to review derived metadata; cloud approval required')
     review.add_argument('case')
     review.add_argument('--allow-cloud-summary', action='store_true')
+    from cyber_core.cli.science import configure
+    configure(sub)
     return p
 
 
@@ -65,16 +72,19 @@ def main(argv=None):
         else:
             core = Core(args.home, max_bytes=args.max_bytes, timeout=args.timeout)
             cmd = args.command
-            if cmd == 'init':
-                result = {'initialized': True, 'home': str(core.home), 'schema': 2}
+            if cmd in ('hypothesis', 'experiment', 'research', 'verify', 'history'):
+                from cyber_core.cli.science import execute
+                result = execute(core, args)
+            elif cmd == 'init':
+                result = {'initialized': True, 'home': str(core.home), 'schema': 3}
             elif cmd == 'investigate':
                 result = {'id': core.investigate(args.project, args.objective, args.scope, args.owner, args.authorization, recovery=args.allow_recovery, valid_hours=args.valid_hours)}
             elif cmd == 'status':
                 result = {'investigation': core.get(args.case), 'tasks': core.tasks(args.case), 'checkpoints': core.checkpoints(args.case)} if args.case else [dict(r) for r in core.db.execute('SELECT id,project,state,paused,created FROM investigations ORDER BY created')]
-            elif cmd == 'analyze-file':
+            elif cmd in ('analyze-file', 'analyze-firmware', 'analyze-can'):
                 if core.get(args.case)['paused']:
                     raise CoreError('Investigation is paused')
-                task = core.enqueue(args.case, args.path)
+                task = core.enqueue(args.case, args.path, tool=cmd, second_path=getattr(args, 'compare_to', None))
                 result = {'task': task} if args.queue_only else core.run_one(args.case, task_id=task)
             elif cmd == 'run':
                 result = core.run_one(args.case)

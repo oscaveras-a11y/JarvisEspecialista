@@ -54,16 +54,24 @@ class Core:
             self.db.execute('UPDATE investigations SET revoked=1 WHERE id=?', (case,))
             audit(self.db, case, 'authorization_revoked', {})
 
-    def enqueue(self, case, path, *, tool='analyze-file'):
+    def enqueue(self, case, path, *, tool='analyze-file', second_path=None):
         with self.db:
-            return self._enqueue(case, path, tool=tool)
+            return self._enqueue(case, path, tool=tool, second_path=second_path)
 
-    def _enqueue(self, case, path, *, tool):
-        if tool not in ('analyze-file', 'assess-recovery'):
+    def _enqueue(self, case, path, *, tool, second_path=None):
+        if tool not in ('analyze-file', 'assess-recovery', 'analyze-firmware', 'analyze-can'):
             raise CoreError('Tool is not allowlisted')
         source = self.authorize(case, path, recovery=tool == 'assess-recovery')
+        secondary = None
+        if second_path is not None:
+            if tool not in ('analyze-firmware', 'analyze-can'):
+                raise CoreError('This tool does not support paired inputs')
+            secondary = self.authorize(case, second_path)
         task = uuid4().hex
         self.db.execute('INSERT INTO tasks(id,case_id,tool,path,created) VALUES(?,?,?,?,?)', (task, case, tool, str(source), utc()))
+        if secondary is not None:
+            self.db.execute('INSERT INTO task_parameters VALUES(?,?)', (task, encoded({'secondary': str(secondary)})))
+        self.reopen(case, reason='New task queued')
         audit(self.db, case, 'task_queued', {'task': task, 'tool': tool, 'source': str(source)})
         return task
 
@@ -101,10 +109,10 @@ class Core:
         task = self._claim(case, task_id)
         if task is None:
             return None
-        output = None
+        output, secondary_output = None, None
         try:
             recovery_assessment = task['tool'] == 'assess-recovery'
-            if task['tool'] not in ('analyze-file', 'assess-recovery'):
+            if task['tool'] not in ('analyze-file', 'assess-recovery', 'analyze-firmware', 'analyze-can'):
                 raise CoreError('Tool is not allowlisted')
             source = self.authorize(case, task['path'], recovery=recovery_assessment)
             folder = storage_root(self.home / 'cases' / case / 'evidence')
@@ -116,13 +124,34 @@ class Core:
                 raise CoreError('Analysis time budget exhausted')
             result = analyze(source, output, byte_limit, remaining)
             result.update(task_id=task['id'], tool=task['tool'])
+            parameters = self.db.execute('SELECT data FROM task_parameters WHERE task_id=?', (task['id'],)).fetchone()
+            secondary_source = None
+            if parameters:
+                secondary_source = self.authorize(case, json.loads(parameters['data'])['secondary'])
+                secondary_output = folder / (task['id'] + '-' + task['token'] + '-secondary.evidence')
+                remaining = budget - (time.monotonic() - started)
+                if remaining <= 0:
+                    raise CoreError('Paired analysis time budget exhausted')
+                result['secondary'] = analyze(secondary_source, secondary_output, self.max_bytes, remaining)
             if recovery_assessment:
                 from cyber_core.cryptanalysis.assessment import assess
                 result['recovery_assessment'] = assess(output, entropy=result['entropy'])
+            if task['tool'] == 'analyze-firmware':
+                from cyber_core.firmware import analyze_firmware, compare_firmware
+                result['firmware'] = analyze_firmware(output, max_bytes=byte_limit)
+                if secondary_output:
+                    result['firmware_comparison'] = compare_firmware(output, secondary_output, max_bytes=self.max_bytes)
+            elif task['tool'] == 'analyze-can':
+                from cyber_core.automotive import analyze_can, compare_can
+                result['can'] = analyze_can(output, max_bytes=min(byte_limit, 16777216))
+                if secondary_output:
+                    result['can_comparison'] = compare_can(output, secondary_output, max_bytes=min(self.max_bytes, 16777216))
             if time.monotonic() - started > budget:
                 raise CoreError('Analysis resource limit exceeded')
             with self.db:
                 self.authorize(case, source, recovery=recovery_assessment)
+                if secondary_source is not None:
+                    self.authorize(case, secondary_source)
                 current = self.db.execute('SELECT status,token FROM tasks WHERE id=?', (task['id'],)).fetchone()
                 if current['status'] != 'running' or current['token'] != task['token']:
                     raise CoreError('Task lease was replaced')
@@ -131,11 +160,14 @@ class Core:
                 self.db.execute('INSERT INTO hypotheses VALUES(?,?,?,?,?,?,?)', (uuid4().hex, case, task['id'], statement, 'unconfirmed', 'OPEN', 'Validate with a format-specific parser and authorized metadata; entropy alone is insufficient'))
                 self.db.execute("UPDATE tasks SET status='done',lease_until=0 WHERE id=?", (task['id'],))
                 self.db.execute('INSERT INTO checkpoints(case_id,event,data,created) VALUES(?,?,?,?)', (case, 'analysis_committed', encoded({'task': task['id'], 'sha256': result['sha256']}), utc()))
-                audit(self.db, case, 'analysis_verified', {'task': task['id'], 'sha256': result['sha256'], 'size': result['size'], 'source': str(source), 'copy': str(output)})
+                from cyber_core.verification.artifacts import result_digest
+                audit(self.db, case, 'analysis_verified', {'task': task['id'], 'sha256': result['sha256'], 'size': result['size'], 'source': str(source), 'copy': str(output), 'result_digest': result_digest(result)})
             return result
         except Exception as exc:
             if output:
                 output.unlink(missing_ok=True)
+            if secondary_output:
+                secondary_output.unlink(missing_ok=True)
             message = str(exc) if isinstance(exc, CoreError) else 'Local analysis failed; see error type'
             with self.db:
                 self.db.execute("UPDATE tasks SET status='failed',error=?,lease_until=0 WHERE id=? AND token=?", (message, task['id'], task['token']))
@@ -148,6 +180,12 @@ class Core:
             self.db.execute('UPDATE investigations SET paused=1 WHERE id=?', (case,))
             self.db.execute('INSERT INTO checkpoints(case_id,event,data,created) VALUES(?,?,?,?)', (case, 'paused', '{}', utc()))
             audit(self.db, case, 'paused', {})
+
+    def reopen(self, case, *, reason):
+        row = self.get(case)
+        if row['state'] in ('RESOLVIDO', 'SEM SOLUCAO VIAVEL DEMONSTRADA'):
+            self.db.execute("UPDATE investigations SET state='EM INVESTIGACAO' WHERE id=?", (case,))
+            audit(self.db, case, 'investigation_reopened', {'previous': row['state'], 'reason': reason})
 
     def resume(self, case):
         self.authorize(case)

@@ -9,7 +9,7 @@ from cyber_core.errors import CoreError
 
 with tempfile.TemporaryDirectory(prefix='cyber-agent-smoke-') as folder:
     try:
-        result = CodexAdapter(timeout=30).review({'synthetic': True, 'format': 'ELF signature', 'entropy': 7.99, 'question': 'Does a signature alone validate a complete file?'}, Path(folder))
+        result = CodexAdapter(timeout=120).review({'synthetic': True, 'format': 'ELF signature', 'entropy': 7.99, 'question': 'Does a signature alone validate a complete file?'}, Path(folder))
     except CoreError as exc:
         print(json.dumps({'live_integration': False, 'error': str(exc)}))
         raise SystemExit(2)

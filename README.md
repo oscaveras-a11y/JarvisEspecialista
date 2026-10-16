@@ -2,7 +2,7 @@
 
 Plataforma local de investigação tecnológica **autorizada**, em desenvolvimento. Python 3.12+, SQLite, Windows, sem GPU dedicada. Repositório privado J.A.R.V.I.S reutilizado por autorização do proprietário, com histórico anterior preservado.
 
-**Entrega atual:** Fase 1, protótipo de investigação e triagem de recuperação em lotes, sem chave fornecida. Não é a plataforma completa. Veja [cobertura de recuperação](docs/recovery-coverage.md), [estado das fases](docs/roadmap.md), [limites de segurança](docs/security.md) e [validação real](docs/validation.md).
+**Entrega atual:** núcleo funcional, ciclo científico com verificação, análise offline de firmware/CAN e triagem de recuperação em lotes sem chave fornecida. Não é a plataforma completa. Veja [cobertura de recuperação](docs/recovery-coverage.md), [estado das fases](docs/roadmap.md), [limites de segurança](docs/security.md) e [validação real](docs/validation.md).
 
 ## Instalação no Windows
 
@@ -88,7 +88,7 @@ Três tentativas criptográficas por investigação; entrada limitada a 64 MiB o
 
 ## Agentes
 
-`cyber agents` e `cyber doctor` descobrem CLIs, sem assumir autenticação. O núcleo funciona sem agentes. O adaptador inicial Codex usa processo com stdin estruturado, sandbox read-only, tempo e saída limitados. A saída é proposta, não comando. A chamada real falhou no sandbox e uma segunda tentativa sob o usuário correto excedeu o timeout; a integração autenticada permanece não validada.
+`cyber agents` e `cyber doctor` descobrem CLIs, sem assumir autenticação. O núcleo funciona sem agentes. O adaptador inicial Codex usa processo com stdin estruturado, sandbox read-only, tempo e saída limitados. A saída é proposta, não comando. Após as falhas iniciais do sandbox e de timeout curto, a autenticação ChatGPT foi confirmada e uma chamada real com prazo de 120 segundos passou usando somente resumo sintético. Isso valida o adaptador Codex neste ambiente; a resposta não é verificação independente de arquivos.
 
 `cyber review ID --allow-cloud-summary` envia somente tamanho, formato, entropia e estado de verificação ao Codex. Não envia caminhos, conteúdo, objetivo ou autorização. Exige permissão explícita de envio e limita a cinco chamadas por investigação; isso **não** é um limite financeiro garantido. O sandbox do CLI é uma dependência externa, não um isolamento implementado pelo CYBER CORE.
 
@@ -108,4 +108,4 @@ python scripts/run-tests.py
 
 A demonstração gera todos os arquivos sintéticos e uma chave aleatória em memória, preserva o relatório em diretório temporário e imprime os resultados. Não utiliza dados de clientes. `scripts/agent-smoke.py` é opcional, realiza chamada real ao Codex com resumo sintético e pode consumir a cota do agente; não faz parte da suíte offline.
 
-Os comandos `analyze-firmware`, `analyze-can`, `forensic` e `research` serão publicados quando suas implementações reais estiverem testadas; hoje são rejeitados como comandos desconhecidos. Não existem integrações fictícias com Ghidra, Autopsy, Nmap ou outras ferramentas.
+Os comandos `analyze-firmware` e `analyze-can` agora analisam e comparam arquivos offline autorizados; veja [firmware](docs/firmware.md) e [CAN](docs/can.md). O comando `research` registra referências consultadas pelo operador, sem fingir consulta web automática. O [ciclo científico](docs/scientific-workflow.md) oferece `hypothesis`, `experiment`, `verify` e `history`, com critérios reproduzíveis e revisão declarada. Perícia avançada, integrações externas e worker ainda estão em desenvolvimento.

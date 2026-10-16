@@ -3,9 +3,9 @@
 | Fase | Estado desta entrega | Próximo critério |
 |---|---|---|
 | 1 — núcleo | Concluída no escopo inicial: CLI, configuração por ambiente/flags, SQLite versionado, investigações, autorizações, auditoria; 33 testes passaram e entrypoint instalado executou | Evoluir pela Fase 2 sem presumir módulos profissionais prontos |
-| 2 — orquestração | Protótipo: tarefas persistentes, leases, adaptador Codex, diagnóstico e interface Claude, checkpoints | Autenticação real, Claude, worktrees por tarefa, conflitos, paralelismo e revisão cruzada |
-| 3 — investigação | Hipótese aberta, experimento proposto, observações estáticas e relatórios separados de conclusões | Atualização científica de hipóteses, planejamento iterativo, revisores e critérios formais de resolução |
-| 4 — ferramentas | Identificação por assinatura, SHA-256, entropia, triagem sem chave em lotes e recuperação AES-GCM opcional de envelope sintético | Parsers integrais e recuperação por família, Ghidra/Capstone/etc., firmware, CAN, perícia, segurança e pesquisa |
+| 2 — orquestração | Tarefas/leases/checkpoints, Codex autenticado e chamada real sintética validada; interface Claude opcional | Claude ausente, worktrees e locks em desenvolvimento, distribuição e revisão cruzada automatizada pendentes |
+| 3 — investigação | Hipóteses versionadas, experimentos falsificáveis vinculados a evidências, revisão declarada, rejeição de repetições e critérios de estado testados | Planejamento automatizado de estratégias, autenticação de revisores, disposição de tarefas fracassadas e ensaios profissionais |
+| 4 — ferramentas | Triagem, hashes/entropia, AES-GCM opcional sintético; parsers BIN/HEX/S-record/ELF/PE limitados e logs CAN clássicos com comparação offline | Perícia, segurança, parsers integrais por família e adaptadores de ferramentas profissionais ainda em desenvolvimento |
 | 5 — autonomia | Persistência, pausa, retomada manual e limite de tentativas | Worker Windows, boot, cancelamento cooperativo, monitoramento e limites financeiros/recursos rígidos |
 | 6 — validação completa | Testes automatizados do protótipo e demonstração sintética | Matriz integral dos módulos profissionais, testes de falhas, hardware e isolamento |
 

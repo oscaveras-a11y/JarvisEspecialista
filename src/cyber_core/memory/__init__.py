@@ -30,6 +30,8 @@ CREATE TABLE IF NOT EXISTS tasks(
 CREATE TABLE IF NOT EXISTS results(
  task_id TEXT PRIMARY KEY REFERENCES tasks(id), case_id TEXT NOT NULL REFERENCES investigations(id),
  data TEXT NOT NULL, created TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS task_parameters(
+ task_id TEXT PRIMARY KEY REFERENCES tasks(id), data TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS task_limits(
  task_id TEXT PRIMARY KEY REFERENCES tasks(id), max_bytes INTEGER NOT NULL CHECK(max_bytes>=0));
 CREATE TABLE IF NOT EXISTS hypotheses(
@@ -44,6 +46,32 @@ CREATE TABLE IF NOT EXISTS audit(
  event TEXT NOT NULL, data TEXT NOT NULL, created TEXT NOT NULL,
  previous TEXT NOT NULL, digest TEXT NOT NULL);
 CREATE INDEX IF NOT EXISTS task_queue ON tasks(case_id,status,lease_until);
+CREATE TABLE IF NOT EXISTS hypothesis_records(
+ id TEXT PRIMARY KEY, case_id TEXT NOT NULL REFERENCES investigations(id), statement TEXT NOT NULL,
+ author TEXT NOT NULL, plausibility REAL NOT NULL CHECK(plausibility>=0 AND plausibility<=1),
+ status TEXT NOT NULL DEFAULT 'OPEN', revision INTEGER NOT NULL DEFAULT 1, created TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS hypothesis_history(
+ id INTEGER PRIMARY KEY, hypothesis_id TEXT NOT NULL REFERENCES hypothesis_records(id),
+ revision INTEGER NOT NULL, data TEXT NOT NULL, reason TEXT NOT NULL, author TEXT NOT NULL, created TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS experiments(
+ id TEXT PRIMARY KEY, case_id TEXT NOT NULL REFERENCES investigations(id),
+ hypothesis_id TEXT NOT NULL REFERENCES hypothesis_records(id), name TEXT NOT NULL, criterion TEXT NOT NULL,
+ assertions TEXT NOT NULL, tool TEXT NOT NULL, author TEXT NOT NULL, max_runs INTEGER NOT NULL,
+ plan_hash TEXT NOT NULL, created TEXT NOT NULL, UNIQUE(case_id,plan_hash));
+CREATE TABLE IF NOT EXISTS experiment_runs(
+ id TEXT PRIMARY KEY, case_id TEXT NOT NULL REFERENCES investigations(id), experiment_id TEXT NOT NULL REFERENCES experiments(id),
+ task_id TEXT NOT NULL REFERENCES tasks(id), hypothesis_revision INTEGER NOT NULL, operator TEXT NOT NULL,
+ outcome TEXT NOT NULL, checks TEXT NOT NULL, evidence_digest TEXT NOT NULL, observation_fingerprint TEXT NOT NULL,
+ created TEXT NOT NULL, UNIQUE(experiment_id,observation_fingerprint));
+CREATE TABLE IF NOT EXISTS peer_reviews(
+ id TEXT PRIMARY KEY, case_id TEXT NOT NULL REFERENCES investigations(id), run_id TEXT NOT NULL REFERENCES experiment_runs(id),
+ reviewer TEXT NOT NULL, decision TEXT NOT NULL, reason TEXT NOT NULL, evidence_digest TEXT NOT NULL, created TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS source_records(
+ id TEXT PRIMARY KEY, case_id TEXT NOT NULL REFERENCES investigations(id), title TEXT NOT NULL, url TEXT NOT NULL,
+ version TEXT NOT NULL, provenance TEXT NOT NULL, author TEXT NOT NULL, retrieved TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS verification_records(
+ id TEXT PRIMARY KEY, case_id TEXT NOT NULL REFERENCES investigations(id), state TEXT NOT NULL,
+ actor TEXT NOT NULL, reason TEXT NOT NULL, snapshot_digest TEXT NOT NULL, validated INTEGER NOT NULL, created TEXT NOT NULL);
 '''
 
 
@@ -53,12 +81,12 @@ def connect(path):
     db.execute('PRAGMA foreign_keys=ON')
     db.execute('PRAGMA busy_timeout=10000')
     version = db.execute('PRAGMA user_version').fetchone()[0]
-    if version not in (0, 1, 2):
+    if version not in (0, 1, 2, 3):
         db.close()
         raise CoreError('Unsupported database version')
     db.executescript(SCHEMA)
-    # Schema 2 adds optional persisted task byte caps; all schema-1 records remain valid.
-    db.execute('PRAGMA user_version=2')
+    # Additive schemas retain earlier investigations, audit chains and evidence.
+    db.execute('PRAGMA user_version=3')
     db.commit()
     return db
 

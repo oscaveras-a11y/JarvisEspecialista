@@ -1,6 +1,6 @@
 # Validação — 16/10/2026
 
-**Resultado atual: 50 testes passaram, 0 falhas, 0 erros, 0 skips, em 95,749 segundos.** Comando: `python scripts/run-tests.py`, com o runtime Python 3.12.14. A primeira entrega teve 33 testes aprovados em 70,334 segundos. Não usar esses resultados como prova de módulos ainda pendentes.
+**Resultado atual: 94 testes passaram, 0 falhas, 0 erros, 0 skips, em 376,611 segundos.** A entrega anterior teve 50 testes em 95,749 segundos. Comando: `python scripts/run-tests.py`, com o runtime Python 3.12.14. A primeira entrega teve 33 testes aprovados em 70,334 segundos. Não usar esses resultados como prova de módulos ainda pendentes.
 
 Ambiente observado: Windows 10 build 19042, Python 3.12.14 (64 bits), SQLite 3.53.1, Git 2.55.0.windows.5, cryptography disponível. Python não estava no PATH inicial do shell; foi usado o runtime Python do aplicativo. O executável Codex foi descoberto no ambiente do processo Python e seu `exec --help` foi consultado. Claude e gh não foram encontrados.
 
@@ -26,4 +26,16 @@ Passaram testes de reconhecimento em 14 amostras de formatos, flags ZIP e campo 
 
 Foram reproduzidas e corrigidas duas falhas de retomada: crescimento de arquivo depois da entrada na fila podia exceder o orçamento agregado; pausa podia reportar tarefas ainda pendentes como falhas. O esquema 2 conserva tetos por tarefa e a migração do esquema 1 foi testada preservando hashes, resultados e auditoria. A revisão independente confirmou o problema de contabilização após pausa; o problema de bytes também foi identificado e corrigido com teste de regressão.
 
-A suíte completa de 50 testes passou após essas mudanças. Os limites de formato permanecem explícitos: prefixo de 64 KiB, assinatura sem validação integral, ZIP limitado ao primeiro cabeçalho, nenhuma extração, busca de segredos ou tentativa criptográfica durante a triagem. Não foi repetida chamada aos agentes de nuvem; suas limitações anteriores continuam válidas.
+A suíte completa de 50 testes passou após essas mudanças. Esse é o checkpoint anterior à continuação abaixo. Os limites de formato permanecem explícitos: prefixo de 64 KiB, assinatura sem validação integral, ZIP limitado ao primeiro cabeçalho, nenhuma extração, busca de segredos ou tentativa criptográfica durante a triagem. Naquela entrega não foi repetida chamada aos agentes de nuvem. A validação real posterior do Codex está descrita abaixo.
+
+## Continuação: ciclo científico, firmware e CAN
+
+Checkpoint validado: **94 testes aprovados, 0 falhas, 0 erros, 0 skips, em 376,611 segundos**, executando `python scripts/run-tests.py`. Inclui 21 testes científicos, 11 de firmware, 9 de CAN e 3 integrações CLI, além da suíte anterior. `compileall` também passou. O runner agora rejeita execução vazia e permite filtro opcional por nome de teste.
+
+Implementado: esquema SQLite 3 aditivo; hipóteses e revisões; critérios de experimento como dados; avaliação de resultados reais vinculados ao digest auditado; verificação das cópias primária e secundária; revisão independente declarada; histórico, fontes e estados com snapshots. Testes negativos reproduziram e corrigiram observações ausentes classificadas como refutação, fechamento durante entrada de nova tarefa, cópia secundária adulterada, repetição por nomes diferentes, execuções contrárias sem revisão e estado sem solução contradizendo resultados favoráveis.
+
+Firmware e CAN são analisados sobre cópias verificadas, sem execução nem hardware. Comparações preservam os dois originais. HEX/S-record têm teto rígido de 1 MiB decodificado; ELF/PE verificam apenas cabeçalhos e limites documentados. CAN aceita logs compactos clássicos e rejeita explicitamente tipos ainda não implementados. Não houve ensaio de bancada ou veículo.
+
+Integração Codex posterior: `codex login status` executado sob o usuário correto retornou `Logged in using ChatGPT`. `scripts/agent-smoke.py`, com timeout de 120 segundos, passou em chamada real usando apenas resumo sintético. A resposta estruturada reconheceu as limitações da amostra. Uso informado pelo CLI: 19148 tokens de entrada (12544 em cache) e 104 de saída; isso é contabilização reportada, não teto financeiro garantido. Claude continua ausente. Nenhum dado de cliente foi enviado.
+
+A revisão independente de código encontrou três problemas de fechamento/repetição, todos reproduzidos por testes antes da correção. Os nomes dos revisores do produto ainda são declarações locais, não identidades autenticadas. A plataforma completa continua pendente: isolamento/worktrees, perícia, ferramentas externas, pesquisa automática, worker e validação profissional seguem em desenvolvimento.
