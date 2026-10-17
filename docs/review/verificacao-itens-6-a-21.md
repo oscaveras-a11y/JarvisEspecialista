@@ -45,3 +45,13 @@ a `main` conforme ele entrega. Log atualizado por item.
 
 ## Correção de honestidade documental — docs/roadmap.md
 Durante a verificação, encontrada uma afirmação **desatualizada e falsa**: "Não há (...) buscas de vulnerabilidades, recuperação de senhas (...) nesta entrega" — mas os itens 7 e 9 desta sessão já implementam exatamente isso (de forma limitada/autorizada/estática). Corrigido no próprio `docs/roadmap.md` para refletir o estado real sem exagerar: recuperação de senha é só autoteste em arquivo próprio; auditoria de vulnerabilidade é só estática/autorizada, sem rede. O que permanece ausente (pesquisa web automática, extração de chaves, malware, gravação automotiva, varredura ativa) continua declarado como ausente.
+
+## Itens 16, 17, 19, 20, 21 — verificados (sem lacuna de código a preencher)
+
+- **Item 16 — Estrutura do repositório (par; Codex).** Decisão já registrada em `docs/roadmap.md`: raiz do repositório é a raiz do pacote (`src/cyber_core/`), sem árvore aninhada `core/agents/modules/` do escopo literal. Divergência de layout **documentada e deliberada**, não lacuna; mudar a árvore agora seria reestruturação de alto risco sobre código ativo do Codex — não feito sem decisão conjunta.
+- **Item 17 — Integração GitHub (par; Codex).** Git/branches/PRs/CI/revisão/histórico de decisões/documentação técnica: **[FATO]**, cobertos por este próprio fluxo de PRs. Git Worktrees para agentes paralelos: **[PENDENTE]**, depende de infraestrutura multiagente ainda não construída — corretamente declarado pendente, não simulado.
+- **Item 19 — Etapas de implementação.** É o próprio plano de fases; vive em `docs/roadmap.md`, agora corrigido para refletir o estado real (ver acima) em vez de uma lista estática desatualizada.
+- **Item 20 — Critérios de entrega.** Processo (implementar → instalar deps → testar → corrigir → retestar → registrar → documentar → declarar funcional/pendente → avançar). Seguido em cada item desta sessão: toda mudança desta sessão rodou `compileall` + suíte completa + `demo.py` antes do commit, com contagem de testes registrada no commit e em `docs/validation.md`. Nenhum resultado de teste foi inventado.
+- **Item 21 — Instrução final (papéis).** Já versionado como parte de `docs/escopo.md` §21 (o próprio texto de escopo fornecido pelo proprietário). Nada a implementar em código; é uma instrução de papel/processo para o Codex, já cumprida nesta colaboração (fundação e núcleo entregues antes do Claude Code, sem depender dele).
+
+Nenhum destes itens exigiu invenção de funcionalidade para "parecer completo": onde a dependência é externa (worktrees, hardware, ferramentas profissionais) ou é decisão deliberada de layout, fica declarado como tal.
