@@ -11,11 +11,19 @@ from cyber_core.reverse_engineering import analyze
 
 
 class Core:
-    def __init__(self, home, *, max_bytes=64 * 1024 * 1024, timeout=60):
-        if not 1 <= max_bytes <= 256 * 1024 * 1024 or not 0 < timeout <= 3600:
+    # A long sanity ceiling, not an operational deadline: a single authorized
+    # task may run for hours or days, so the timeout only guards against absurd
+    # or overflowing values, never cuts a legitimate long investigation short.
+    MAX_TIMEOUT = 365 * 24 * 3600
+
+    def __init__(self, home, *, max_bytes=64 * 1024 * 1024, timeout=60, max_attempts=3, agent_calls_per_case=5):
+        if not 1 <= max_bytes <= 256 * 1024 * 1024 or not 0 < timeout <= self.MAX_TIMEOUT:
             raise CoreError('Invalid resource limits')
+        if not 1 <= max_attempts <= 100 or not 0 <= agent_calls_per_case <= 100:
+            raise CoreError('Invalid attempt or agent-call limits')
         self.home = storage_root(home)
         self.max_bytes, self.timeout = max_bytes, timeout
+        self.max_attempts, self.agent_calls_per_case = max_attempts, agent_calls_per_case
         self.db = connect(self.home / 'core.sqlite3')
 
     def close(self):
@@ -82,11 +90,11 @@ class Core:
             if row['paused']:
                 raise CoreError('Investigation is paused')
             now = time.time()
-            exhausted = self.db.execute("SELECT id FROM tasks WHERE case_id=? AND status='running' AND lease_until<? AND attempts>=3", (case, now)).fetchall()
+            exhausted = self.db.execute("SELECT id FROM tasks WHERE case_id=? AND status='running' AND lease_until<? AND attempts>=?", (case, now, self.max_attempts)).fetchall()
             for task in exhausted:
                 self.db.execute("UPDATE tasks SET status='failed',error='Attempt budget exhausted' WHERE id=?", (task['id'],))
                 audit(self.db, case, 'task_failed', {'task': task['id'], 'error': 'Attempt budget exhausted'})
-            task = self.db.execute("SELECT * FROM tasks WHERE case_id=? AND (? IS NULL OR id=?) AND attempts<3 AND (status='pending' OR (status='running' AND lease_until<?)) ORDER BY created,id LIMIT 1", (case, task_id, task_id, now)).fetchone()
+            task = self.db.execute("SELECT * FROM tasks WHERE case_id=? AND (? IS NULL OR id=?) AND attempts<? AND (status='pending' OR (status='running' AND lease_until<?)) ORDER BY created,id LIMIT 1", (case, task_id, task_id, self.max_attempts, now)).fetchone()
             if task is None:
                 self.db.commit()
                 return None
@@ -157,7 +165,9 @@ class Core:
                     raise CoreError('Task lease was replaced')
                 self.db.execute('INSERT INTO results VALUES(?,?,?,?)', (task['id'], case, encoded(result), utc()))
                 statement = 'Possible compression or encryption' if result['entropy'] > 7.5 else 'Possible structured or repetitive data'
-                self.db.execute('INSERT INTO hypotheses VALUES(?,?,?,?,?,?,?)', (uuid4().hex, case, task['id'], statement, 'unconfirmed', 'OPEN', 'Validate with a format-specific parser and authorized metadata; entropy alone is insufficient'))
+                # Automatic entropy heuristic recorded as an analysis note, never a
+                # scientific hypothesis; the scientific workflow owns hypothesis_records.
+                self.db.execute('INSERT INTO analysis_notes VALUES(?,?,?,?,?,?)', (uuid4().hex, case, task['id'], statement, 'Validate with a format-specific parser and authorized metadata; entropy alone is insufficient', utc()))
                 self.db.execute("UPDATE tasks SET status='done',lease_until=0 WHERE id=?", (task['id'],))
                 self.db.execute('INSERT INTO checkpoints(case_id,event,data,created) VALUES(?,?,?,?)', (case, 'analysis_committed', encoded({'task': task['id'], 'sha256': result['sha256']}), utc()))
                 from cyber_core.verification.artifacts import result_digest
@@ -201,9 +211,9 @@ class Core:
         self.get(case)
         return [json.loads(r[0]) for r in self.db.execute('SELECT data FROM results WHERE case_id=? ORDER BY created', (case,))]
 
-    def hypotheses(self, case):
+    def analysis_notes(self, case):
         self.get(case)
-        return [dict(r) for r in self.db.execute('SELECT * FROM hypotheses WHERE case_id=?', (case,))]
+        return [dict(r) for r in self.db.execute('SELECT * FROM analysis_notes WHERE case_id=?', (case,))]
 
     def checkpoints(self, case):
         self.get(case)

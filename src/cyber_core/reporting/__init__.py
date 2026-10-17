@@ -10,7 +10,7 @@ def write_report(core, case):
     folder = storage_root(core.home / 'cases' / case / 'reports')
     output = folder / (uuid4().hex + '.md')
     data = {'investigation': row, 'generated_utc': utc(), 'results': core.results(case),
-            'hypotheses': core.hypotheses(case), 'tasks': core.tasks(case),
+            'analysis_notes': core.analysis_notes(case), 'tasks': core.tasks(case),
             'checkpoints': core.checkpoints(case), 'audit_chain_valid': core.verify_audit(case),
             'audit': core.audit(case)}
     from cyber_core.investigation.workflow import Workflow

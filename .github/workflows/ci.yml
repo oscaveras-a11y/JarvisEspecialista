@@ -16,8 +16,12 @@ concurrency:
 
 jobs:
   offline:
-    name: Windows / Python 3.12
-    runs-on: windows-2022
+    name: ${{ matrix.os }} / Python 3.12
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-2022, ubuntu-24.04]
     timeout-minutes: 20
     env:
       PYTHONUTF8: "1"

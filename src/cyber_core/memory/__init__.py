@@ -34,10 +34,6 @@ CREATE TABLE IF NOT EXISTS task_parameters(
  task_id TEXT PRIMARY KEY REFERENCES tasks(id), data TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS task_limits(
  task_id TEXT PRIMARY KEY REFERENCES tasks(id), max_bytes INTEGER NOT NULL CHECK(max_bytes>=0));
-CREATE TABLE IF NOT EXISTS hypotheses(
- id TEXT PRIMARY KEY, case_id TEXT NOT NULL REFERENCES investigations(id),
- task_id TEXT NOT NULL REFERENCES tasks(id), statement TEXT NOT NULL,
- plausibility TEXT NOT NULL, status TEXT NOT NULL, experiment TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS checkpoints(
  id INTEGER PRIMARY KEY, case_id TEXT NOT NULL REFERENCES investigations(id),
  event TEXT NOT NULL, data TEXT NOT NULL, created TEXT NOT NULL);
@@ -72,6 +68,10 @@ CREATE TABLE IF NOT EXISTS source_records(
 CREATE TABLE IF NOT EXISTS verification_records(
  id TEXT PRIMARY KEY, case_id TEXT NOT NULL REFERENCES investigations(id), state TEXT NOT NULL,
  actor TEXT NOT NULL, reason TEXT NOT NULL, snapshot_digest TEXT NOT NULL, validated INTEGER NOT NULL, created TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS analysis_notes(
+ id TEXT PRIMARY KEY, case_id TEXT NOT NULL REFERENCES investigations(id),
+ task_id TEXT NOT NULL REFERENCES tasks(id), statement TEXT NOT NULL,
+ basis TEXT NOT NULL, created TEXT NOT NULL);
 '''
 
 
@@ -81,12 +81,15 @@ def connect(path):
     db.execute('PRAGMA foreign_keys=ON')
     db.execute('PRAGMA busy_timeout=10000')
     version = db.execute('PRAGMA user_version').fetchone()[0]
-    if version not in (0, 1, 2, 3):
+    if version not in (0, 1, 2, 3, 4):
         db.close()
         raise CoreError('Unsupported database version')
     db.executescript(SCHEMA)
     # Additive schemas retain earlier investigations, audit chains and evidence.
-    db.execute('PRAGMA user_version=3')
+    # Schema 4 unifies "hypothesis" on the scientific records; automatic entropy
+    # heuristics move to analysis_notes. A legacy hypotheses table from an older
+    # database is left untouched and simply no longer written to or reported.
+    db.execute('PRAGMA user_version=4')
     db.commit()
     return db
 

@@ -13,10 +13,15 @@ from cyber_core.service import Core
 
 def parser():
     p = argparse.ArgumentParser(prog='cyber', description='CYBER CORE: authorized local investigations')
+    from cyber_core.config import load_defaults
+    defaults = load_defaults()
     default = Path(os.environ.get('LOCALAPPDATA', Path.home())) / 'CyberCore'
     p.add_argument('--home', default=os.environ.get('CYBER_HOME', str(default)), help='Protected storage outside the repository')
-    p.add_argument('--max-bytes', type=int, default=int(os.environ.get('CYBER_MAX_BYTES', 67108864)))
-    p.add_argument('--timeout', type=float, default=float(os.environ.get('CYBER_TIMEOUT', 60)))
+    p.add_argument('--max-bytes', type=int, default=int(os.environ.get('CYBER_MAX_BYTES', defaults['max_bytes'])))
+    p.add_argument('--timeout', type=float, default=float(os.environ.get('CYBER_TIMEOUT', defaults['timeout_seconds'])),
+                   help='Per-task time budget in seconds; a single task may run for hours or days')
+    p.add_argument('--max-attempts', type=int, default=int(os.environ.get('CYBER_MAX_ATTEMPTS', defaults['max_attempts'])))
+    p.add_argument('--agent-calls-per-case', type=int, default=int(os.environ.get('CYBER_AGENT_CALLS', defaults['agent_calls_per_case'])))
     sub = p.add_subparsers(dest='command', required=True)
     sub.add_parser('init', help='Initialize local SQLite storage')
     sub.add_parser('doctor', help='Diagnose runtime and optional CLIs')
@@ -70,13 +75,14 @@ def main(argv=None):
             if args.command == 'agents':
                 result = result['agents']
         else:
-            core = Core(args.home, max_bytes=args.max_bytes, timeout=args.timeout)
+            core = Core(args.home, max_bytes=args.max_bytes, timeout=args.timeout,
+                        max_attempts=args.max_attempts, agent_calls_per_case=args.agent_calls_per_case)
             cmd = args.command
             if cmd in ('hypothesis', 'experiment', 'research', 'verify', 'history'):
                 from cyber_core.cli.science import execute
                 result = execute(core, args)
             elif cmd == 'init':
-                result = {'initialized': True, 'home': str(core.home), 'schema': 3}
+                result = {'initialized': True, 'home': str(core.home), 'schema': 4}
             elif cmd == 'investigate':
                 result = {'id': core.investigate(args.project, args.objective, args.scope, args.owner, args.authorization, recovery=args.allow_recovery, valid_hours=args.valid_hours)}
             elif cmd == 'status':

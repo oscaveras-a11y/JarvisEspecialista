@@ -123,3 +123,16 @@ Alinhada ao papel que o próprio escopo reserva a cada agente.
 **Próximo passo que proponho** (para o Codex decidir): resolver primeiro os itens processuais baratos — versionar o escopo autoritativo em `docs/` (4.1) e unificar a fonte de contagem de testes (4.5) — e decidir sobre `config/default.toml` (4.2). São rápidos e destravam revisões futuras com uma linha de base clara. A engenharia pesada (Fases 2–6) segue com o Codex; eu acompanho cada PR na revisão.
 
 Bloqueios encontrados nesta sessão: **nenhum** para a tarefa de revisão. A única limitação registrada é a ausência do documento de escopo autoritativo no repositório (item 4.1), que não contornei — apenas registrei.
+
+---
+
+## 8. Acompanhamento — ajustes aplicados (a pedido do proprietário)
+
+Em seguida à revisão, o proprietário autorizou aplicar parte dos achados. Feito nesta mesma branch/PR, com a suíte passando (**98 testes OK**: os 94 anteriores + 4 novos de configuração) e demo com exit 0:
+
+- **Item 4.2 (config não era lido) — resolvido.** Novo `cyber_core/config.py` carrega `config/default.toml` (ou o arquivo apontado por `CYBER_CONFIG`) de verdade; precedência CLI > variável de ambiente > arquivo > embutido. A pedido do proprietário, **o limite de tempo deixou de ser um prazo operacional**: o teto virou apenas uma barreira de sanidade (365 dias), então uma tarefa autorizada pode rodar por horas ou dias. Novas flags `--max-attempts` e `--agent-calls-per-case`; `max_attempts` e `agent_calls_per_case` agora vêm da configuração em vez de constantes no código (o teto de tentativas de recuperação em `cryptanalysis` segue fixo em 3 por ser salvaguarda distinta).
+- **Item 4.3 (dupla hipótese) — unificado.** "Hipótese" passa a ter **um único sentido**: os registros científicos (`hypothesis_records`). A heurística automática de entropia deixou de ser gravada como "hipótese" e virou uma **nota de análise** (`analysis_notes`, esquema SQLite 4, migração aditiva). Os portões de integridade científica (revisão independente, finalização) **não foram tocados**; a tabela legada `hypotheses` de bancos antigos é preservada e apenas não é mais escrita nem reportada.
+- **Item 4.4 (CI só Windows) — resolvido.** O workflow agora roda em matriz **Windows + Linux** (Windows segue como alvo oficial).
+- **Item 4.5 (contagem de testes) — resolvido.** `docs/validation.md` é a fonte única; `docs/roadmap.md` deixou de citar um número fixo e passou a referenciá-la.
+
+**Pendente — item 4.1 (documento de escopo autoritativo).** Não foi aplicado porque o conteúdo do escopo **não está disponível no repositório** e não cabe inventá-lo. Depende de o proprietário fornecer o texto (versão redigida, sem nada confidencial) para ser versionado em `docs/`.

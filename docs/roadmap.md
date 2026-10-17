@@ -2,7 +2,7 @@
 
 | Fase | Estado desta entrega | Próximo critério |
 |---|---|---|
-| 1 — núcleo | Concluída no escopo inicial: CLI, configuração por ambiente/flags, SQLite versionado, investigações, autorizações, auditoria; 33 testes passaram e entrypoint instalado executou | Evoluir pela Fase 2 sem presumir módulos profissionais prontos |
+| 1 — núcleo | Concluída no escopo inicial: CLI, configuração por arquivo/ambiente/flags, SQLite versionado, investigações, autorizações, auditoria; a suíte de testes passou e o entrypoint instalado executou (contagem atual em [validação](validation.md)) | Evoluir pela Fase 2 sem presumir módulos profissionais prontos |
 | 2 — orquestração | Tarefas/leases/checkpoints, Codex autenticado e chamada real sintética validada; interface Claude opcional | Claude ausente, worktrees e locks em desenvolvimento, distribuição e revisão cruzada automatizada pendentes |
 | 3 — investigação | Hipóteses versionadas, experimentos falsificáveis vinculados a evidências, revisão declarada, rejeição de repetições e critérios de estado testados | Planejamento automatizado de estratégias, autenticação de revisores, disposição de tarefas fracassadas e ensaios profissionais |
 | 4 — ferramentas | Triagem, hashes/entropia, AES-GCM opcional sintético; parsers BIN/HEX/S-record/ELF/PE limitados e logs CAN clássicos com comparação offline | Perícia, segurança, parsers integrais por família e adaptadores de ferramentas profissionais ainda em desenvolvimento |

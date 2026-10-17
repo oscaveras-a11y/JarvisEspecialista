@@ -7,7 +7,7 @@ Plataforma de investigação digital **autorizada**, em desenvolvimento. Núcleo
 ## Desenvolvimento no GitHub
 
 1. As alterações são feitas em branches e apresentadas em pull requests para a `main`.
-2. O workflow [Offline validation](.github/workflows/ci.yml) executa a validação em um runner Windows hospedado pelo GitHub, com Python 3.12.
+2. O workflow [Offline validation](.github/workflows/ci.yml) executa a validação em runners hospedados pelo GitHub — Windows (alvo oficial) e Linux —, com Python 3.12.
 3. O runner instala o pacote e suas dependências no ambiente temporário do GitHub, verifica dependências, compila as fontes, verifica a CLI instalada, executa `python scripts/run-tests.py` e `python scripts/demo.py`.
 4. Consulte a aba **Checks** do PR ou [Actions](https://github.com/oscaveras-a11y/CyberCore/actions) para ver resultados e logs. Uma execução pendente ou ausente não significa aprovação.
 5. A integração na `main` permanece uma etapa separada de revisão. Este workflow não configura proteção de branch nem faz merge automático.
