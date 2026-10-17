@@ -4,6 +4,7 @@ from pathlib import Path
 import struct
 import tempfile
 import unittest
+import zlib
 
 from cyber_core.errors import CoreError
 from cyber_core.firmware import analyze_firmware
@@ -170,6 +171,27 @@ class BinaryStructureTests(unittest.TestCase):
         self.assertTrue(result["copy_verified"])
         self.assertIn(".shstrtab", Path(core.report(case)).read_text(encoding="utf-8"))
         self.assertEqual(core.results(case)[0]["firmware"]["metadata"]["section_count"], 4)
+
+
+    def test_dll_with_zero_entry_rva_has_no_entry_point(self):
+        data = pe_fixture()
+        struct.pack_into("<I", data, 104, 0)
+        meta = self.parse(data)
+        self.assertIsNone(meta.get("entry_point"))
+        self.assertIs(meta.get("has_entry_point"), False)
+        self.assertEqual(meta["entry_point_rva"], 0)
+
+    def test_compressed_elf_uses_physical_size_without_entry_modulo(self):
+        data = elf_fixture()
+        payload = struct.pack("<IIQQ", 1, 0, 8, 8) + zlib.compress(bytes(8))
+        data[0x280:0x280 + len(payload)] = payload
+        struct.pack_into("<IIQQQQIIQQ", data, 0x180 + 64,
+                         1, 1, 0x800, 0, 0x280, len(payload), 0, 0, 1, 8)
+        meta = self.parse(data)
+        section = meta["section_headers"][1]
+        self.assertTrue(section.get("compressed"))
+        self.assertEqual(section["file_size"], len(payload))
+        self.assertEqual(section["memory_size"], 0)
 
 
 if __name__ == "__main__":
