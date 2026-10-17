@@ -37,9 +37,15 @@ class AgentTests(unittest.TestCase):
         with self.assertRaises(CoreError):
             CodexAdapter(executable=str(self.root / 'missing.exe')).review({}, self.root)
 
-    def test_claude_unvalidated_adapter_refuses_execution(self):
-        with self.assertRaisesRegex(CoreError, 'validated'):
-            ClaudeAdapter().review({}, self.root)
+    def test_claude_adapter_unavailable_executable_refuses_execution(self):
+        # ClaudeAdapter evolved from a hardcoded stub (PR #14) into a real adapter
+        # that locates its own executable, mirroring CodexAdapter. A bare
+        # ClaudeAdapter() must not be used here: shutil.which('claude') can find
+        # an unrelated 'claude' binary already on PATH in a Claude Code session
+        # (this very CLI), so the executable is pinned explicitly, exactly like
+        # test_unavailable does for CodexAdapter.
+        with self.assertRaises(CoreError):
+            ClaudeAdapter(executable=str(self.root / 'missing-claude.exe')).review({}, self.root)
 
     def test_timeout_covers_blocked_stdin(self):
         sleeper = self.root / 'sleeper.py'
