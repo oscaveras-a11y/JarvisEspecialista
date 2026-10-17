@@ -1,5 +1,5 @@
 const {test,expect}=require('@playwright/test');
-test.beforeEach(async({page})=>{await page.goto('/');});
+test.beforeEach(async({page})=>{const response=await page.goto('/web/');expect(response.ok()).toBe(true);});
 test('approved dashboard is usable without implying real execution',async({page})=>{
  await expect(page.getByRole('heading',{name:'Clareza para cada investigação.'})).toBeVisible();
  await expect(page.getByText('Ambiente de demonstração',{exact:true})).toBeVisible();
