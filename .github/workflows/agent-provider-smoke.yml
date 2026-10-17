@@ -1,0 +1,82 @@
+name: Agent broker manual provider smoke
+on:
+  workflow_dispatch:
+    inputs:
+      confirm_live:
+        description: "Allow potentially billable provider calls using fixed synthetic metadata"
+        type: boolean
+        default: false
+        required: true
+      agents:
+        description: "Provider(s); both performs Codex primary then Claude cross-review"
+        type: choice
+        options: [both, codex, claude]
+        default: both
+      codex_version:
+        description: "Codex npm version; prefer an exact version for repeatability"
+        type: string
+        default: latest
+      claude_version:
+        description: "Claude Code npm version; prefer an exact version for repeatability"
+        type: string
+        default: latest
+permissions:
+  contents: read
+concurrency:
+  group: manual-agent-provider-smoke
+  cancel-in-progress: false
+jobs:
+  synthetic:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - name: Explicitly report that no live run was requested
+        if: ${{ !inputs.confirm_live }}
+        run: python scripts/agent-broker-smoke.py
+      - name: Install package only on disposable runner
+        if: ${{ inputs.confirm_live }}
+        run: python -m pip install .
+      - name: Install selected CLIs without provider credentials
+        if: ${{ inputs.confirm_live }}
+        shell: bash
+        env:
+          SELECTED: ${{ inputs.agents }}
+          CODEX_VERSION: ${{ inputs.codex_version }}
+          CLAUDE_VERSION: ${{ inputs.claude_version }}
+        run: |
+          for version in "$CODEX_VERSION" "$CLAUDE_VERSION"; do
+            if [[ ! "$version" =~ ^(latest|[0-9]+\.[0-9]+\.[0-9]+([-.][A-Za-z0-9.-]+)?)$ ]]; then
+              echo "Use latest or a concrete CLI package version."
+              exit 2
+            fi
+          done
+          if [[ "$SELECTED" == "codex" || "$SELECTED" == "both" ]]; then
+            npm install --global "@openai/codex@$CODEX_VERSION"
+            codex --version
+          fi
+          if [[ "$SELECTED" == "claude" || "$SELECTED" == "both" ]]; then
+            npm install --global "@anthropic-ai/claude-code@$CLAUDE_VERSION"
+            claude --version
+          fi
+      - name: Run real broker only with explicit opt-in
+        if: ${{ inputs.confirm_live }}
+        shell: bash
+        env:
+          SELECTED: ${{ inputs.agents }}
+          CODEX_API_KEY: ${{ secrets.CYBER_CODEX_API_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.CYBER_ANTHROPIC_API_KEY }}
+          CODEX_HOME: ${{ runner.temp }}/cyber-codex
+          CLAUDE_CONFIG_DIR: ${{ runner.temp }}/cyber-claude
+        run: python scripts/agent-broker-smoke.py --live --agents "$SELECTED"
+      - name: Validation boundary
+        if: ${{ always() }}
+        shell: bash
+        run: |
+          echo "Only a completed provider response proves live communication." >> "$GITHUB_STEP_SUMMARY"
+          echo "Missing credentials are awaiting_resources, not success. No evidence or credential artifact is uploaded." >> "$GITHUB_STEP_SUMMARY"

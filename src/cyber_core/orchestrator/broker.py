@@ -207,7 +207,8 @@ class Broker:
             if (not isinstance(response, dict) or response.get('agent') != row['agent']
                     or response.get('independent_validation') is not False
                     or not isinstance(response.get('review'), str) or not response['review'].strip()
-                    or len(response['review'].encode('utf-8')) > 8192):
+                    or len(response['review'].encode('utf-8')) > 8192
+                    or not isinstance(response.get('usage', {}), dict)):
                 raise CoreError('Invalid agent review contract')
             # Do not persist arbitrary adapter/provider extras.
             response = {'agent': row['agent'], 'review': response['review'],
