@@ -493,6 +493,32 @@ class Core:
             audit(self.db, case, 'strings_extracted', {'counts': result['counts'], 'min_length': min_length})
         return result
 
+    def analyze_capture(self, case, path, *, second_path=None, max_sample=4194304):
+        # Passive generic protocol-capture analysis (item 10). Static text capture;
+        # never opens a bus/device/socket. Optional comparison with a second capture.
+        if not isinstance(max_sample, int) or not 1 <= max_sample <= 16 * 1024 * 1024:
+            raise CoreError('Invalid capture sample limit')
+        self.authorize(case)
+        source = self.authorize(case, path)
+        if source.stat().st_size > self.max_bytes:
+            raise CoreError('File exceeds byte limit')
+        text = source.read_bytes()[:max_sample].decode('utf-8', errors='replace')
+        from cyber_core.protocol import analyze_capture, compare_captures
+        if second_path is not None:
+            other = self.authorize(case, second_path)
+            if other.stat().st_size > self.max_bytes:
+                raise CoreError('Second file exceeds byte limit')
+            other_text = other.read_bytes()[:max_sample].decode('utf-8', errors='replace')
+            result = compare_captures(text, other_text)
+            event = {'messages': result['first']['messages'], 'second_messages': result['second']['messages']}
+        else:
+            result = analyze_capture(text)
+            event = {'messages': result['messages'], 'unique_payloads': result['unique_payloads']}
+        with self.db:
+            self.authorize(case)
+            audit(self.db, case, 'capture_analyzed', event)
+        return result
+
     def audit_config(self, case, path, *, max_sample=1048576):
         # Static, authorized configuration/exposure audit (item 9). No active scan,
         # no network. Findings are redacted; the audit records only counts by severity.

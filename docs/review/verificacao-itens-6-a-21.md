@@ -22,3 +22,8 @@ a `main` conforme ele entrega. Log atualizado por item.
 - **[LACUNA→feito]** Não havia auditoria de vulnerabilidades. Implementada **estrita e estática**: `vulnerability/audit_config` (`Core.audit_config`, CLI `audit-config`) lê um prefixo limitado de um arquivo **autorizado** e sinaliza, por padrão, segredos expostos (senha/chave/token/private key/AWS id) e configurações inseguras (DEBUG on, verificação TLS desligada, PermitRootLogin yes, http://, hashes fracos). Severidades alto/médio/baixo.
 - **Garantias:** sem teste ativo, sem rede, sem ferramentas externas; valores de segredos **redigidos**; auditoria registra só contagens por severidade. Correspondência é indício a verificar, não prova de falha.
 - **[PENDENTE]** Nmap/Wireshark/Semgrep/OWASP ZAP/YARA e testes ativos em laboratório autorizado — ferramentas externas / escopo ativo, declarado pendente (Fase 6, com o Codex).
+
+## Item 10 — Análise de protocolos (par; Codex) — verificado + 1 lacuna preenchida
+- **[FATO]** `automotive` analisa/compara logs CAN clássicos (passivo).
+- **[LACUNA→feito]** Analisador **genérico e passivo** de capturas: `protocol/analyze_capture`/`compare_captures` (`Core.analyze_capture`, CLI `analyze-capture` com `--compare-to`). Captura textual, uma mensagem por linha em hex (separadores espaço/":"/","/"-"; id opcional antes de '#'/'|'); reporta contagem, pulados, payloads únicos, histogramas de tamanho e id, e diff entre capturas. Passivo: nunca abre barramento/dispositivo/socket.
+- **[PENDENTE]** USB/UART/SPI/I2C e integração python-can/cantools/SavvyCAN/Wireshark — exigem hardware/ferramentas externas, declarado pendente.

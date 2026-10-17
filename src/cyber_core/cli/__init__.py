@@ -91,6 +91,10 @@ def parser():
     auditcfg = sub.add_parser('audit-config', help='Static authorized audit of a config file for exposed secrets / insecure settings')
     auditcfg.add_argument('case')
     auditcfg.add_argument('path')
+    capture = sub.add_parser('analyze-capture', help='Passively analyze a generic hex protocol capture (no bus/network access)')
+    capture.add_argument('case')
+    capture.add_argument('path')
+    capture.add_argument('--compare-to', help='Second authorized capture to compare')
     strings = sub.add_parser('strings', help='Extract bounded ASCII/UTF-16LE strings from an authorized file (static)')
     strings.add_argument('case')
     strings.add_argument('path')
@@ -172,6 +176,8 @@ def main(argv=None):
                 result = core.custody_timeline(args.case)
             elif cmd == 'audit-config':
                 result = core.audit_config(args.case, args.path)
+            elif cmd == 'analyze-capture':
+                result = core.analyze_capture(args.case, args.path, second_path=args.compare_to)
             elif cmd == 'strings':
                 result = core.extract_strings(args.case, args.path, min_length=args.min_length, max_strings=args.max_strings)
             elif cmd == 'differentiate':
