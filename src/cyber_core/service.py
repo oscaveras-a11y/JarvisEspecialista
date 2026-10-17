@@ -471,6 +471,25 @@ class Core:
                     break
         return matches
 
+    def differentiate_content(self, case, path, *, max_sample=65536):
+        # Static differentiation (item 7): encoding vs compression vs encryption vs
+        # structured, over a bounded prefix. Never asserts encryption from entropy alone.
+        if not isinstance(max_sample, int) or not 1 <= max_sample <= 262144:
+            raise CoreError('Invalid differentiation sample limit')
+        self.authorize(case)
+        source = self.authorize(case, path)
+        if source.stat().st_size > self.max_bytes:
+            raise CoreError('File exceeds byte limit')
+        with source.open('rb') as handle:
+            sample = handle.read(max_sample)
+            truncated = bool(handle.read(1))
+        from cyber_core.cryptanalysis.differentiate import differentiate
+        result = differentiate(sample, sample_truncated=truncated)
+        with self.db:
+            self.authorize(case)
+            audit(self.db, case, 'content_differentiated', {'content_class': result['content_class'], 'label': result['label']})
+        return result
+
     def recall_by_type(self, investigation_type, *, limit=20):
         # Prior investigations of a given type, to reuse approaches (item 5).
         if not isinstance(investigation_type, str) or not investigation_type.strip():

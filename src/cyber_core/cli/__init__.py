@@ -86,6 +86,9 @@ def parser():
     aes.add_argument('--key-file', required=True, help='Local protected file containing exactly 32 raw bytes; never logged')
     aes.add_argument('--expected-sha256')
     aes.add_argument('--expected-format')
+    differ = sub.add_parser('differentiate', help='Statically differentiate encoding vs compression vs encryption vs structured')
+    differ.add_argument('case')
+    differ.add_argument('path')
     assess = sub.add_parser('assess-recovery', help='Assess recovery options for a file or bounded batch without supplying keys')
     assess.add_argument('case')
     assess.add_argument('path')
@@ -155,6 +158,8 @@ def main(argv=None):
                 result = core.self_test_recovery(args.case, args.path, candidates, max_attempts=args.max_candidates, max_seconds=args.max_seconds)
             elif cmd == 'run':
                 result = core.run_one(args.case)
+            elif cmd == 'differentiate':
+                result = core.differentiate_content(args.case, args.path)
             elif cmd == 'assess-recovery':
                 result = core.assess_recovery(args.case, args.path, max_files=args.max_files, recursive=args.recursive,
                                              queue_only=args.queue_only, max_total_bytes=args.max_total_bytes)
