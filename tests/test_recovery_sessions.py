@@ -7,6 +7,7 @@ import sys
 import tempfile
 import time
 import unittest
+from unittest.mock import patch
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from cryptography.hazmat.primitives.asymmetric import ed25519
 from cryptography.hazmat.primitives import serialization
@@ -164,6 +165,15 @@ class RecoverySessionTests(unittest.TestCase):
         self.material.write_bytes(b"x"*(8*1024*1024+1))
         with self.assertRaises(CoreError):
             self.start()
+
+    def test_deadline_stops_before_trying_another_candidate(self):
+        manager = self.sessions()
+        job = self.start()["id"]
+        future = time.time() + 86410
+        with patch("cyber_core.cryptanalysis.sessions.time.time", return_value=future):
+            item = manager.work(self.case, job)
+        self.assertEqual(item["status"], "deadline")
+        self.assertEqual(item["attempts"], 0)
 
     def test_tampered_evidence_or_plan_is_not_used(self):
         manager = self.sessions()
