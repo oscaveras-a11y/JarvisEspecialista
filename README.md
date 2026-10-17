@@ -4,6 +4,8 @@ Plataforma de investigação digital **autorizada**, em desenvolvimento. Núcleo
 
 **Fluxo atual: desenvolvimento e validação somente no GitHub. Nenhuma instalação no computador do proprietário é necessária para acompanhar esta entrega.**
 
+**Política do beta:** uso e administração reservados ao proprietário; Codex e Claude continuam desenvolvendo e testando. O [controle de acesso exclusivo](docs/beta-access.md) ainda precisa de autenticação e validação antes da liberação operacional.
+
 ## Desenvolvimento no GitHub
 
 1. As alterações são feitas em branches e apresentadas em pull requests para a `main`.
