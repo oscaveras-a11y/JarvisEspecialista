@@ -1,6 +1,6 @@
 # Orquestração beta
 
-Estado: implementada na branch de desenvolvimento, com validação em andamento. Os resultados por commit são os checks do PR. Esta beta não comprova a conclusão de toda a fase de orquestração do projeto original.
+**Beta implementada e validada em amostras sintéticas:** 114 testes aprovados, sem falhas ou skips, e demonstração aprovada na [execução 38986772289](https://github.com/oscaveras-a11y/CyberCore/actions/runs/38986772289), head `ef28b7a3bee68fff0bd02a58ee03d6f5fef49e4a`. São 20 testes novos de orquestração além dos 94 anteriores. Consulte os checks do PR para alterações posteriores. Esta beta não comprova a conclusão de toda a fase de orquestração do projeto original.
 
 ## Contrato
 
