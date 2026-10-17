@@ -34,13 +34,14 @@ Uma assinatura não comprova validade integral do formato; alta entropia não co
 
 O núcleo funciona sem agentes. O adaptador Codex e a chamada real sintética têm um registro histórico em [validação](docs/validation.md); esse registro não comprova autenticação ou funcionamento no runner atual. O envio de resumo exige autorização explícita. Claude permanece opcional e bloqueado até validação do contrato.
 
-O sandbox do CLI é dependência externa. Nomes de revisores são declarações, não identidades autenticadas. A [orquestração beta](docs/orchestration-beta.md) acrescenta worker com limites, checkpoints e cancelamento persistente, com validação em andamento neste PR. O comando `run` continua processando uma tarefa. Serviços de boot, isolamento de análise, worktrees por tarefa, revisão cruzada automática e ferramentas profissionais externas continuam pendentes.
+O sandbox do CLI é dependência externa. Nomes de revisores são declarações, não identidades autenticadas. A [orquestração beta](docs/orchestration-beta.md) acrescenta worker com limites, checkpoints e cancelamento persistente, validada em amostras sintéticas pelo GitHub Actions. O comando `run` continua processando uma tarefa. Serviços de boot, isolamento de análise, worktrees por tarefa, revisão cruzada automática e ferramentas profissionais externas continuam pendentes.
 
 **A plataforma completa ainda não foi entregue.** Testes aprovados comprovam apenas o comportamento coberto, não a prontidão de módulos profissionais ou ensaios com hardware.
 
 ## Documentação
 
 - [Referência técnica da CLI para uso futuro](docs/cli-reference.md)
+- [Orquestração beta: worker, pausa, cancelamento e limites](docs/orchestration-beta.md)
 - [Estado das fases e próximos critérios](docs/roadmap.md)
 - [Validação e resultados históricos](docs/validation.md)
 - [Limites de segurança](docs/security.md)
