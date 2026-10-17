@@ -66,7 +66,7 @@ jobs:
         with:
           python-version: "3.12"
       - name: Install combined package on GitHub runner
-        run: python -m pip install . capstone==5.0.9
+        run: python -m pip install ".[reverse]"
       - name: Check installed dependencies and syntax
         run: |
           python -m pip check
