@@ -33,5 +33,7 @@ def review_summary(core, case, *, allow_cloud=False):
             audit(core.db, case, 'agent_failed', {'error': str(exc)})
         raise
     with core.db:
+        core.db.execute('BEGIN IMMEDIATE')
+        core.authorize(case)
         audit(core.db, case, 'agent_review_proposed', result)
     return result

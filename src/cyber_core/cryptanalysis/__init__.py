@@ -85,6 +85,7 @@ def recover(core, case, source, key, *, expected_sha256=None, expected_format=No
                   'material_id': material_id, 'algorithm': 'AES-256-GCM',
                   'validation': 'GCM authentication and output SHA-256; supplied expectations checked when present'}
         with core.db:
+            core.db.execute('BEGIN IMMEDIATE')
             core.authorize(case, path, recovery=True)
             audit(core.db, case, 'recovery_verified', result)
         return result

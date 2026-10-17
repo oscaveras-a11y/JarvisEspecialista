@@ -42,6 +42,8 @@ class Core:
 
     def authorize(self, case, path=None, *, recovery=False):
         row = self.get(case)
+        if row['state'] == 'CANCELADO':
+            raise CoreError('Investigation is cancelled; create a new investigation to continue')
         if row['revoked'] or row['expires'] <= time.time():
             raise CoreError('Authorization revoked or expired')
         if recovery and not row['recovery_allowed']:
@@ -59,6 +61,9 @@ class Core:
             return self._enqueue(case, path, tool=tool, second_path=second_path)
 
     def _enqueue(self, case, path, *, tool, second_path=None):
+        # Serialize the authorization check with cancellation and insertion.
+        if not self.db.in_transaction:
+            self.db.execute('BEGIN IMMEDIATE')
         if tool not in ('analyze-file', 'assess-recovery', 'analyze-firmware', 'analyze-can'):
             raise CoreError('Tool is not allowlisted')
         source = self.authorize(case, path, recovery=tool == 'assess-recovery')
@@ -149,6 +154,8 @@ class Core:
             if time.monotonic() - started > budget:
                 raise CoreError('Analysis resource limit exceeded')
             with self.db:
+                # Read state and publish under the same writer lock as cancel().
+                self.db.execute('BEGIN IMMEDIATE')
                 self.authorize(case, source, recovery=recovery_assessment)
                 if secondary_source is not None:
                     self.authorize(case, secondary_source)
@@ -163,16 +170,58 @@ class Core:
                 from cyber_core.verification.artifacts import result_digest
                 audit(self.db, case, 'analysis_verified', {'task': task['id'], 'sha256': result['sha256'], 'size': result['size'], 'source': str(source), 'copy': str(output), 'result_digest': result_digest(result)})
             return result
-        except Exception as exc:
+        except BaseException as exc:
+            # An interrupt can arrive after SQLite commits, before returning to the caller.
+            # A done claim owns durable evidence; never clean it up as a partial result.
+            current = self.db.execute('SELECT status,token FROM tasks WHERE id=?', (task['id'],)).fetchone()
+            if current['status'] == 'done' and current['token'] == task['token']:
+                if not isinstance(exc, Exception):
+                    raise
+                raise CoreError('Analysis committed; inspect stored result before retrying') from exc
             if output:
                 output.unlink(missing_ok=True)
             if secondary_output:
                 secondary_output.unlink(missing_ok=True)
-            message = str(exc) if isinstance(exc, CoreError) else 'Local analysis failed; see error type'
+            interrupted = not isinstance(exc, Exception)
+            message = ('Interrupted before commit' if interrupted else
+                       str(exc) if isinstance(exc, CoreError) else 'Local analysis failed; see error type')
             with self.db:
-                self.db.execute("UPDATE tasks SET status='failed',error=?,lease_until=0 WHERE id=? AND token=?", (message, task['id'], task['token']))
-                audit(self.db, case, 'task_failed', {'task': task['id'], 'error': message, 'type': type(exc).__name__})
+                self.db.execute('BEGIN IMMEDIATE')
+                current = self.db.execute('SELECT status,token,attempts FROM tasks WHERE id=?', (task['id'],)).fetchone()
+                owns_claim = current['status'] == 'running' and current['token'] == task['token']
+                if owns_claim:
+                    status = 'pending' if interrupted and current['attempts'] < 3 else 'failed'
+                    self.db.execute('UPDATE tasks SET status=?,error=?,lease_until=0,token=NULL WHERE id=?',
+                                    (status, message, task['id']))
+                    event = 'task_interrupted' if interrupted else 'task_failed'
+                    audit(self.db, case, event, {'task': task['id'], 'error': message, 'type': type(exc).__name__})
+                else:
+                    audit(self.db, case, 'analysis_discarded', {'task': task['id'], 'reason': 'Claim no longer active'})
+            if interrupted:
+                raise
             raise CoreError(message) from exc
+
+    def run_queue(self, case, **limits):
+        from cyber_core.orchestrator.worker import run_queue
+        return run_queue(self, case, **limits)
+
+    def cancel(self, case, *, reason):
+        if not isinstance(reason, str) or not reason.strip() or len(reason) > 1024:
+            raise CoreError('Provide a cancellation reason of 1 to 1024 characters')
+        with self.db:
+            self.db.execute('BEGIN IMMEDIATE')
+            row = self.get(case)
+            if row['state'] == 'CANCELADO':
+                return {'id': case, 'state': 'CANCELADO', 'already_cancelled': True}
+            self.db.execute("UPDATE investigations SET state='CANCELADO',paused=1 WHERE id=?", (case,))
+            count = self.db.execute(
+                "UPDATE tasks SET status='cancelled',lease_until=0,token=NULL,error='Investigation cancelled' "
+                "WHERE case_id=? AND status IN ('pending','running')", (case,)).rowcount
+            data = {'reason': reason.strip(), 'cancelled_tasks': count}
+            self.db.execute('INSERT INTO checkpoints(case_id,event,data,created) VALUES(?,?,?,?)',
+                            (case, 'cancelled', encoded(data), utc()))
+            audit(self.db, case, 'investigation_cancelled', data)
+        return {'id': case, 'state': 'CANCELADO', 'cancelled_tasks': count, 'already_cancelled': False}
 
     def pause(self, case):
         self.get(case)
@@ -188,8 +237,9 @@ class Core:
             audit(self.db, case, 'investigation_reopened', {'previous': row['state'], 'reason': reason})
 
     def resume(self, case):
-        self.authorize(case)
         with self.db:
+            self.db.execute('BEGIN IMMEDIATE')
+            self.authorize(case)
             self.db.execute('UPDATE investigations SET paused=0 WHERE id=?', (case,))
             audit(self.db, case, 'resumed', {})
 

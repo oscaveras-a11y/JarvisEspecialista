@@ -51,3 +51,21 @@ Branch: `codex/github-validation`. Automação: `.github/workflows/ci.yml`, runn
 Em 16/10/2026, às 21:08 (America/Sao_Paulo), o runner Windows Server 2022 com CPython 3.12.10 concluiu **94 testes em 53,583 segundos: OK, sem falhas, erros ou skips reportados**. A demonstração terminou com 13 etapas sintéticas e quatro rejeições esperadas; `platform_complete` permaneceu false. Instalação do pacote, `pip check`, compilação e CLI instalada também passaram. Dependências observadas: cryptography 50.0.2, cffi 2.1.1 e pycparser 3.11.
 
 A revisão independente das alterações do PR nesse head não encontrou achados acionáveis. A revisão foi estática, sem execução local, e não substitui os testes do GitHub. Este registro é vinculado ao commit citado; consulte os checks do PR para qualquer commit posterior. Não houve instalação nem execução do projeto no computador do proprietário. Integrações reais de agentes, ferramentas externas e hardware permanecem fora desta validação.
+
+
+## Orquestração beta — 16/10/2026
+
+Escopo aprovado como beta: worker sequencial sobre fila persistente, limites de tarefas/tempo, pausa, cancelamento permanente por investigação, checkpoints e retomada após interrupção. Desenvolvimento e execução de testes exclusivamente no GitHub, sem instalações no computador do proprietário.
+
+**Resultado comprovado:** 114 testes em 49,166 segundos, OK (sem falhas, erros ou skips), e demonstração sintética aprovada. [execução 38986772289](https://github.com/oscaveras-a11y/CyberCore/actions/runs/38986772289), [job Windows](https://github.com/oscaveras-a11y/CyberCore/actions/runs/38986772289/job/117259961629), head `ef28b7a3bee68fff0bd02a58ee03d6f5fef49e4a`. Instalação no runner temporário, `pip check`, compilação e CLI instalada também passaram. O teste de merge temporário combina a branch da beta com a base do PR. Consulte os checks para o estado do commit mais recente, inclusive atualizações posteriores de documentação.
+
+Os 20 testes novos cobrem drenagem da fila, orçamento de tarefas/tempo, opções inválidas, pausa/retomada em processo novo, falhas sem bloquear outras tarefas, leases válidos e vencidos, dois workers reais concorrentes, cancelamento idempotente, preservação de resultados/evidências confirmados, descarte de análises tardias, impedimento de retomada/reabertura, interrupção antes/depois do commit, respostas de agentes tardias, ordenação transacional de recuperação AES e cancelamento de lotes compartilhados. Não houve chamada real a agente: o ensaio de resposta tardia usa um adaptador controlado e comprova somente o comportamento do CORE.
+
+### Falhas reproduzidas antes das correções
+
+- A primeira execução, somente com testes novos, falhou pela ausência de `worker`, `cancel` e seu contrato; [run 38985763724](https://github.com/oscaveras-a11y/CyberCore/actions/runs/38985763724).
+- [Run 38986128774](https://github.com/oscaveras-a11y/CyberCore/actions/runs/38986128774) reproduziu exclusão indevida de evidência após commit/interrupção, aceitação de resposta tardia de agente e lote cancelado informado como parcial. As correções preservam cópias de claims já confirmados, serializam autorização/publicação e distinguem itens cancelados.
+- [Run 38986400394](https://github.com/oscaveras-a11y/CyberCore/actions/runs/38986400394) reproduziu recuperação aceita após cancelamento e itens já leased omitidos da lista de cancelados. A aceitação AES agora adquire writer lock antes da autorização final; a contagem reconcilia todo o lote com os estados duráveis.
+- Uma execução posterior encontrou erro na sincronização do teste AES: inicialização do segundo banco dentro do bloqueio de escrita. O teste foi corrigido para preparar a conexão antes da operação, preservando sua verificação de ordem de commits.
+
+A revisão independente estática foi realizada via GitHub e não encontrou novos achados após as correções e o ajuste do teste. A aprovação dos testes é limitada ao escopo coberto: não valida serviço de boot, persistência de disco entre jobs do GitHub, interrupção imediata de parsers, limites rígidos de recursos, hardware ou integrações reais Codex/Claude. A fase completa continua com essas pendências; veja [contrato da beta](orchestration-beta.md).
