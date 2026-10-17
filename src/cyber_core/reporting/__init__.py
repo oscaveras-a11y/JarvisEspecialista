@@ -15,6 +15,8 @@ def write_report(core, case):
             'audit': core.audit(case)}
     from cyber_core.investigation.workflow import Workflow
     data['scientific_workflow'] = Workflow(core).snapshot(case)
+    from cyber_core.investigation.reasoning import snapshot_data
+    data['reasoning'] = snapshot_data(core, case)
     # JSON is escaped so evidence-derived strings cannot terminate a Markdown code block.
     payload = json.dumps(data, ensure_ascii=True, indent=2).replace('`', '\\u0060')
     text = '# CYBER CORE technical report\n\nStatus: ' + row['state'] + '\n\n'
