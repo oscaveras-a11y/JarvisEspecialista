@@ -86,6 +86,8 @@ def parser():
     aes.add_argument('--key-file', required=True, help='Local protected file containing exactly 32 raw bytes; never logged')
     aes.add_argument('--expected-sha256')
     aes.add_argument('--expected-format')
+    custody = sub.add_parser('custody', help='Forensic timeline / chain-of-custody view from the audit trail')
+    custody.add_argument('case')
     strings = sub.add_parser('strings', help='Extract bounded ASCII/UTF-16LE strings from an authorized file (static)')
     strings.add_argument('case')
     strings.add_argument('path')
@@ -163,6 +165,8 @@ def main(argv=None):
                 result = core.self_test_recovery(args.case, args.path, candidates, max_attempts=args.max_candidates, max_seconds=args.max_seconds)
             elif cmd == 'run':
                 result = core.run_one(args.case)
+            elif cmd == 'custody':
+                result = core.custody_timeline(args.case)
             elif cmd == 'strings':
                 result = core.extract_strings(args.case, args.path, min_length=args.min_length, max_strings=args.max_strings)
             elif cmd == 'differentiate':

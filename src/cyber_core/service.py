@@ -493,6 +493,29 @@ class Core:
             audit(self.db, case, 'strings_extracted', {'counts': result['counts'], 'min_length': min_length})
         return result
 
+    def custody_timeline(self, case):
+        # Forensic timeline / chain-of-custody view (item 8), assembled from the
+        # hash-linked audit trail. Read-only; surfaces only audited metadata.
+        self.get(case)
+        chain_valid = self.verify_audit(case)
+        events = []
+        for row in self.audit(case):
+            try:
+                data = json.loads(row['data'])
+            except (ValueError, TypeError):
+                data = {}
+            entry = {'seq': row['id'], 'utc': row['created'], 'event': row['event'], 'digest': row['digest']}
+            for key in ('sha256', 'result_digest', 'source', 'copy', 'task', 'owner', 'actor', 'reviewer', 'size'):
+                if key in data:
+                    entry[key] = data[key]
+            events.append(entry)
+        acquisitions = [{'task': e.get('task'), 'sha256': e.get('sha256'), 'size': e.get('size'), 'copy': e.get('copy'), 'utc': e['utc']}
+                        for e in events if e['event'] == 'analysis_verified']
+        return {'case': case, 'chain_valid': chain_valid, 'generated_utc': utc(),
+                'events': events, 'acquisitions': acquisitions,
+                'limitations': ['Cadeia encadeada por SHA-256: detecta edição, mas não é assinatura digital nem custódia imutável.',
+                                'Para custódia forense formal, use retenção externa assinada e mídia protegida contra escrita.']}
+
     def differentiate_content(self, case, path, *, max_sample=65536):
         # Static differentiation (item 7): encoding vs compression vs encryption vs
         # structured, over a bounded prefix. Never asserts encryption from entropy alone.

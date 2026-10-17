@@ -12,3 +12,8 @@ a `main` conforme ele entrega. Log atualizado por item.
 - **[FATO]** identificação de arquitetura/máquina em ELF/PE (campo `machine`), cabeçalhos e limites de seções validados.
 - **[LACUNA→feito]** **Extração de strings** não existia. Implementada em `reverse_engineering/strings.py` (`Core.extract_strings`, CLI `strings`): runs ASCII e UTF-16LE de um prefixo limitado, com `min_length`/`max_strings`; as strings vão ao operador e a auditoria registra **apenas contagens** (conteúdo de evidência não entra na auditoria).
 - **[PENDENTE]** Integração de Ghidra/Capstone/Binwalk (ferramentas externas não instaladas) e desmontagem — declarado pendente (itens pares/Fase 4, com o Codex); não afirmar o que não foi executado.
+
+## Item 8 — Perícia digital (par; Codex) — verificado + 1 lacuna preenchida
+- **[FATO]** cópia verificada + SHA-256, preservação do original, auditoria encadeada (origem, data UTC, operações, hashes), relatório pericial (`reporting.write_report`), verificação de integridade (`verification/artifacts`).
+- **[LACUNA→feito]** **Linha do tempo / cadeia de custódia** como artefato dedicado. `Core.custody_timeline` (CLI `custody`) monta, a partir da auditoria encadeada, uma linha cronológica por caso (sequência, UTC, evento, digest, e campos auditados como sha256/cópia/origem/ator) + lista de aquisições, confere a integridade da cadeia e declara as limitações (tamper-evident, não assinatura digital). Lê só metadados já auditados.
+- **[PENDENTE]** Autopsy/Sleuth Kit/YARA e análise de imagem de disco completa — ferramentas externas, declarado pendente (Fase 5, com o Codex).
