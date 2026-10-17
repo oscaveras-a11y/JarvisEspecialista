@@ -22,7 +22,7 @@ function loadState(){
 let state=loadState();
 const firstVisit=state===null;
 if(firstVisit)state=structuredClone(DEFAULT_STATE);
-let search='',currentView='dashboard',auditQueue=Promise.resolve(),actionQueue=Promise.resolve(),renderVersion=0;
+let search='',currentView='dashboard',auditQueue=Promise.resolve(),actionQueue=Promise.resolve(),renderVersion=0,lastFocusedElement=null;
 const mobileMenu=window.matchMedia('(max-width:760px)');
 function uid(){return crypto.randomUUID().replaceAll('-','');}
 function nowIso(){return new Date().toISOString();}
@@ -77,10 +77,12 @@ function openMenu(){
 }
 function syncMenuViewport(){
  const sidebar=document.getElementById('sidebar'),toggle=document.getElementById('menu-toggle');
- const focusInSidebar=sidebar.contains(document.activeElement),focusOnToggle=document.activeElement===toggle;
+ // A breakpoint can hide a control and blur it before this callback runs.
+ const focused=document.activeElement===document.body?lastFocusedElement:document.activeElement;
+ const focusInSidebar=sidebar.contains(focused),focusOnToggle=focused===toggle;
  closeMenu();
  if(mobileMenu.matches&&focusInSidebar)toggle.focus();
- if(!mobileMenu.matches&&focusOnToggle)sidebar.querySelector('[aria-current="page"]').focus();
+ if(!mobileMenu.matches&&focusOnToggle)(sidebar.querySelector('[aria-current="page"]')||sidebar.querySelector('.nav-item'))?.focus();
 }
 function handleMenuKeyboard(event){
  if(!mobileMenu.matches||!document.body.classList.contains('menu-open'))return;
@@ -214,6 +216,7 @@ async function seedExamples(){
 }
 document.addEventListener('DOMContentLoaded',async()=>{
  document.body.dataset.view='dashboard';
+ document.addEventListener('focusin',event=>{lastFocusedElement=event.target;});
  syncMenuViewport();mobileMenu.addEventListener('change',syncMenuViewport);
  document.getElementById('menu-toggle').addEventListener('click',()=>{if(document.body.classList.contains('menu-open'))closeMenu();else openMenu();});
  document.getElementById('menu-backdrop').addEventListener('click',closeMenu);
