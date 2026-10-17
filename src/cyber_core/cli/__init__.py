@@ -88,6 +88,9 @@ def parser():
     aes.add_argument('--expected-format')
     custody = sub.add_parser('custody', help='Forensic timeline / chain-of-custody view from the audit trail')
     custody.add_argument('case')
+    auditcfg = sub.add_parser('audit-config', help='Static authorized audit of a config file for exposed secrets / insecure settings')
+    auditcfg.add_argument('case')
+    auditcfg.add_argument('path')
     strings = sub.add_parser('strings', help='Extract bounded ASCII/UTF-16LE strings from an authorized file (static)')
     strings.add_argument('case')
     strings.add_argument('path')
@@ -167,6 +170,8 @@ def main(argv=None):
                 result = core.run_one(args.case)
             elif cmd == 'custody':
                 result = core.custody_timeline(args.case)
+            elif cmd == 'audit-config':
+                result = core.audit_config(args.case, args.path)
             elif cmd == 'strings':
                 result = core.extract_strings(args.case, args.path, min_length=args.min_length, max_strings=args.max_strings)
             elif cmd == 'differentiate':

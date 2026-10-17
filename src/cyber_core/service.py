@@ -493,6 +493,26 @@ class Core:
             audit(self.db, case, 'strings_extracted', {'counts': result['counts'], 'min_length': min_length})
         return result
 
+    def audit_config(self, case, path, *, max_sample=1048576):
+        # Static, authorized configuration/exposure audit (item 9). No active scan,
+        # no network. Findings are redacted; the audit records only counts by severity.
+        if not isinstance(max_sample, int) or not 1 <= max_sample <= 16 * 1024 * 1024:
+            raise CoreError('Invalid audit sample limit')
+        self.authorize(case)
+        source = self.authorize(case, path)
+        if source.stat().st_size > self.max_bytes:
+            raise CoreError('File exceeds byte limit')
+        with source.open('rb') as handle:
+            sample = handle.read(max_sample)
+            truncated = bool(handle.read(1))
+        from cyber_core.vulnerability import audit_config
+        result = audit_config(sample.decode('utf-8', errors='replace'))
+        result['sample_truncated'] = truncated
+        with self.db:
+            self.authorize(case)
+            audit(self.db, case, 'config_audited', {'summary': result['summary'], 'findings': len(result['findings'])})
+        return result
+
     def custody_timeline(self, case):
         # Forensic timeline / chain-of-custody view (item 8), assembled from the
         # hash-linked audit trail. Read-only; surfaces only audited metadata.
