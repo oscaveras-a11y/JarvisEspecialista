@@ -6,6 +6,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from unittest.mock import patch
 from cyber_core.service import Core
 from cyber_core.errors import CoreError
 
@@ -66,6 +67,24 @@ class OperationTests(unittest.TestCase):
         run = self.command("agent-jobs", "list", self.case)
         self.assertEqual(run.returncode, 0, run.stderr)
         self.assertEqual(json.loads(run.stdout), [])
+
+
+    def test_inventory_rejects_copy_changed_after_verification(self):
+        import cyber_core.operations as module
+        original = module.verified_result
+        path = self.scope/"capture.pcap"
+        path.write_bytes(struct.pack("<IHHIIII",0xa1b2c3d4,2,4,0,0,65535,1))
+        def alter(*args,**kw):
+            result,digest = original(*args,**kw)
+            copy = Path(result["copy"])
+            data = bytearray(copy.read_bytes())
+            data[16] ^= 1
+            copy.write_bytes(data)
+            return result,digest
+        with patch.object(module,"verified_result",side_effect=alter):
+            with self.assertRaises(CoreError):
+                module.inventory_pcap(self.core,self.case,path)
+        self.assertFalse(any(r["event"] == "operation_result_committed" for r in self.core.audit(self.case)))
 
 if __name__ == "__main__":
     unittest.main()

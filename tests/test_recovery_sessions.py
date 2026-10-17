@@ -184,5 +184,67 @@ class RecoverySessionTests(unittest.TestCase):
             manager.work(self.case, job)
         self.assertFalse(list(self.core.home.rglob("*.recovered")))
 
+
+    def test_show_list_and_report_reject_forged_state_or_result(self):
+        for field, value in (("status", "succeeded"), ("result", '{"authenticated":true}'), ("attempts", 9)):
+            with self.subTest(field=field):
+                manager = self.sessions()
+                job = self.start()["id"]
+                with self.core.db:
+                    self.core.db.execute("UPDATE recovery_sessions SET "+field+"=? WHERE id=?", (value, job))
+                for show in (lambda: manager.get(self.case,job), lambda: manager.jobs(self.case),
+                             lambda: self.core.report(self.case)):
+                    with self.assertRaises(CoreError):
+                        show()
+                # Restore only this synthetic adversarial row for the next subtest.
+                with self.core.db:
+                    self.core.db.execute("DELETE FROM recovery_sessions WHERE id=?", (job,))
+
+    def test_hard_interruption_never_publishes_uncommitted_plaintext(self):
+        self.material.write_text(self.key.hex()+"\n")
+        job = self.start()["id"]
+        code = (
+            "import os; from pathlib import Path; from cyber_core.service import Core; "
+            "import cyber_core.cryptanalysis.sessions as m; "
+            "core=Core("+repr(str(self.core.home))+"); original=m.run_bounded; "
+            "exec('def stop(*a,**k):\\n result=original(*a,**k)\\n os._exit(97)'); "
+            "m.run_bounded=stop; m.RecoverySessions(core).work("+repr(self.case)+","+repr(job)+")")
+        run = subprocess.run([sys.executable,"-c",code],capture_output=True,text=True,timeout=60)
+        self.assertEqual(run.returncode,97,run.stderr)
+        recovered = self.core.home/"cases"/self.case/"recovered"
+        self.assertFalse(list(recovered.glob("*.recovered")))
+        with self.core.db:
+            self.core.db.execute("UPDATE recovery_sessions SET lease_until=0 WHERE id=?", (job,))
+        done = self.sessions().work(self.case,job,max_attempts=1)
+        self.assertEqual(done["status"],"succeeded")
+        staging = self.core.home/"recovery-staging"
+        self.assertFalse(list(staging.rglob("*.pending")))
+
+    def test_case_cancellation_during_trial_discards_late_plaintext(self):
+        import cyber_core.cryptanalysis.sessions as module
+        self.material.write_text(self.key.hex()+"\n")
+        manager = self.sessions()
+        job = self.start()["id"]
+        original = module.run_bounded
+        def cancel_after_trial(*args,**kw):
+            response = original(*args,**kw)
+            self.core.cancel(self.case,reason="Synthetic in-flight cancellation")
+            return response
+        with patch.object(module,"run_bounded",side_effect=cancel_after_trial):
+            item = manager.work(self.case,job)
+        self.assertEqual(item["status"],"cancelled")
+        self.assertIsNone(item["result"])
+        self.assertFalse(list((self.core.home/"cases").rglob("*.recovered")))
+
+    def test_trial_resource_failure_is_durable_and_not_automatically_retried(self):
+        import cyber_core.cryptanalysis.sessions as module
+        manager = self.sessions()
+        job = self.start()["id"]
+        with patch.object(module,"run_bounded",side_effect=CoreError("Agent timeout exceeded")):
+            item = manager.work(self.case,job)
+        self.assertEqual(item["status"],"resource_limited")
+        self.assertEqual(item["attempts"],1)
+        self.assertEqual(manager.work(self.case,job)["attempts"],1)
+
 if __name__ == "__main__":
     unittest.main()

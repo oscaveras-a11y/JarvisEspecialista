@@ -81,6 +81,11 @@ class KeyMetadataTests(unittest.TestCase):
         self.assertEqual(report["structural_status"], "malformed")
         self.assertFalse(report["private_material_validated"])
 
+    def test_key_parser_obeys_subprocess_time_limit(self):
+        from cyber_core.recovery import inspect_key
+        with self.assertRaises(CoreError):
+            inspect_key(self.file("bounded.pem", self.private()), timeout=0.00001)
+
     def test_oversized_input_is_rejected(self):
         with self.assertRaises(CoreError):
             self.inspect(self.file("big.pem", b"x" * 1025), max_bytes=1024)
