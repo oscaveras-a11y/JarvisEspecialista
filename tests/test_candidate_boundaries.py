@@ -216,6 +216,20 @@ class ServiceBoundaryTests(unittest.TestCase):
                 self.assertTrue(result["ascii"])
                 self.assertEqual(len(self.core.results(self.case)[-1]["strings"]["ascii"]), 1)
 
+    def test_large_capture_identifier_has_explicit_bounded_presentation(self):
+        path = self.file("large-id.txt", b"A" * (3 * 1024 * 1024) + b"#01\n")
+        result = self.core.analyze_capture(self.case, path)
+        self.assertEqual(result["messages"], 1)
+        self.assertTrue(result.get("ids_truncated", False))
+        self.assertLessEqual(len(json.dumps(result).encode("utf-8")), 1024 * 1024)
+
+    def test_large_payload_comparison_has_explicit_bounded_presentation(self):
+        first = self.file("large-payload.txt", b"AA" * (1024 * 1024) + b"\n")
+        second = self.file("small-payload.txt", b"01\n")
+        result = self.core.analyze_capture(self.case, first, second_path=second)
+        self.assertTrue(result.get("comparison_truncated", False))
+        self.assertLessEqual(len(json.dumps(result).encode("utf-8")), 1024 * 1024)
+
     def test_completed_specialist_survives_reopen(self):
         path = self.file("config.txt", b"DEBUG=true")
         self.core.audit_config(self.case, path)
