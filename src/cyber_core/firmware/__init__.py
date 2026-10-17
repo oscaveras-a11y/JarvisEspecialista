@@ -211,6 +211,8 @@ def _load(path, max_bytes, max_records, max_decoded_bytes):
         result.update(address_min=min(memory), address_max=max(memory), address_space='absolute')
     else:
         result['address_space'] = 'file_offset'
+    from cyber_core.reverse_engineering.disassembly import preview
+    result['code_preview'] = preview(data, {**metadata, 'endian': metadata.get('endian', 'little')})
     return result, data if memory is None else memory
 
 
