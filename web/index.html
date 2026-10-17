@@ -1,0 +1,227 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CYBER CORE — Painel</title>
+<link rel="icon" href="data:,">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<div class="app">
+
+  <aside class="sidebar">
+    <div class="brand">
+      <span class="brand-mark">◈</span>
+      <div>
+        <div class="brand-name">CYBER CORE</div>
+        <div class="brand-sub">painel de investigação</div>
+      </div>
+    </div>
+
+    <nav class="nav">
+      <button class="nav-item is-active" data-view="dashboard">
+        <span class="nav-icon">▦</span> Painel
+      </button>
+      <button class="nav-item" data-view="new">
+        <span class="nav-icon">＋</span> Nova investigação
+      </button>
+      <button class="nav-item" data-view="investigations">
+        <span class="nav-icon">▤</span> Investigações
+      </button>
+      <button class="nav-item" data-view="tasks">
+        <span class="nav-icon">◷</span> Tarefas &amp; progresso
+      </button>
+      <button class="nav-item" data-view="logs">
+        <span class="nav-icon">≋</span> Logs &amp; hipóteses
+      </button>
+      <button class="nav-item" data-view="reports">
+        <span class="nav-icon">▥</span> Relatórios
+      </button>
+    </nav>
+
+    <div class="sidebar-foot">
+      <div class="status-pill" id="engine-status">
+        <span class="dot"></span> Protótipo visual
+      </div>
+      <a class="foot-link" href="https://github.com/oscaveras-a11y/JarvisEspecialista" target="_blank" rel="noopener">repositório ↗</a>
+    </div>
+  </aside>
+
+  <main class="main">
+
+    <header class="topbar">
+      <div class="topbar-title" id="view-title">Painel</div>
+      <div class="topbar-case">
+        <label for="case-select" class="sr-only">Investigação ativa</label>
+        <select id="case-select">
+          <option value="">Nenhuma investigação selecionada</option>
+        </select>
+      </div>
+    </header>
+
+    <div class="banner" id="proto-banner">
+      <strong>Protótipo de interface (frontend).</strong>
+      Ainda não está conectado ao motor real do CORE (o CLI <code>cyber</code>).
+      Tudo aqui roda só no seu navegador e fica salvo em <code>localStorage</code> — nada é
+      enviado para fora, nenhuma análise real acontece. Serve para validar o fluxo e o
+      visual antes de ligar isso ao backend de verdade / app desktop.
+      <button class="banner-close" id="banner-close" aria-label="Fechar aviso">×</button>
+    </div>
+
+    <section class="view" id="view-dashboard">
+      <div class="grid stats">
+        <div class="card stat">
+          <div class="stat-label">Investigações</div>
+          <div class="stat-value" id="stat-total">0</div>
+        </div>
+        <div class="card stat">
+          <div class="stat-label">Em investigação</div>
+          <div class="stat-value" id="stat-active">0</div>
+        </div>
+        <div class="card stat">
+          <div class="stat-label">Pausadas</div>
+          <div class="stat-value" id="stat-paused">0</div>
+        </div>
+        <div class="card stat">
+          <div class="stat-label">Canceladas</div>
+          <div class="stat-value" id="stat-cancelled">0</div>
+        </div>
+      </div>
+
+      <div class="grid two">
+        <div class="card">
+          <div class="card-head">
+            <h2>Investigações recentes</h2>
+            <button class="btn btn-ghost" data-nav="investigations">ver todas</button>
+          </div>
+          <div id="dashboard-recent" class="list"></div>
+        </div>
+        <div class="card">
+          <div class="card-head">
+            <h2>Atividade recente</h2>
+            <button class="btn btn-ghost" data-nav="logs">ver logs</button>
+          </div>
+          <div id="dashboard-activity" class="list"></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="view" id="view-new" hidden>
+      <div class="card form-card">
+        <div class="card-head">
+          <h2>Nova investigação</h2>
+          <p class="muted">Autorização e escopo declarados — sem isso, nada pode ser analisado.</p>
+        </div>
+        <form id="form-new-case">
+          <div class="field">
+            <label for="f-project">Projeto / caso</label>
+            <input id="f-project" required placeholder="ex.: incidente-2026-04">
+          </div>
+          <div class="field">
+            <label for="f-objective">Objetivo da investigação</label>
+            <textarea id="f-objective" required placeholder="o que precisa ser respondido com esta investigação"></textarea>
+          </div>
+          <div class="field">
+            <label for="f-scope">Escopo (caminho autorizado)</label>
+            <input id="f-scope" required placeholder="ex.: /evidencias/caso-01">
+          </div>
+          <div class="row">
+            <div class="field">
+              <label for="f-owner">Proprietário / responsável</label>
+              <input id="f-owner" required placeholder="quem autoriza">
+            </div>
+            <div class="field">
+              <label for="f-authorization">Código de autorização</label>
+              <input id="f-authorization" required placeholder="referência da autorização">
+            </div>
+          </div>
+          <div class="row">
+            <div class="field">
+              <label for="f-valid-hours">Validade (horas)</label>
+              <input id="f-valid-hours" type="number" min="1" max="8760" value="72">
+            </div>
+            <div class="field field-check">
+              <label class="checkbox">
+                <input id="f-recovery" type="checkbox">
+                Permitir operações de recuperação
+              </label>
+            </div>
+          </div>
+          <div class="form-actions">
+            <button type="submit" class="btn btn-primary">Criar investigação</button>
+            <button type="reset" class="btn btn-ghost">Limpar</button>
+          </div>
+        </form>
+      </div>
+    </section>
+
+    <section class="view" id="view-investigations" hidden>
+      <div class="card">
+        <div class="card-head">
+          <h2>Investigações</h2>
+          <button class="btn btn-primary" data-nav="new">＋ nova</button>
+        </div>
+        <div id="investigations-table"></div>
+      </div>
+    </section>
+
+    <section class="view" id="view-tasks" hidden>
+      <div class="card">
+        <div class="card-head">
+          <h2>Tarefas &amp; progresso</h2>
+          <p class="muted">Da investigação selecionada no topo da página.</p>
+        </div>
+        <form id="form-new-task" class="inline-form">
+          <select id="task-tool">
+            <option value="analyze-file">analyze-file</option>
+            <option value="audit-config">audit-config</option>
+            <option value="audit-crypto">audit-crypto</option>
+            <option value="inspect-disk">inspect-disk</option>
+            <option value="inspect-pcap">inspect-pcap</option>
+            <option value="strings">strings</option>
+            <option value="differentiate">differentiate</option>
+            <option value="assess-recovery">assess-recovery</option>
+          </select>
+          <input id="task-path" placeholder="caminho do arquivo autorizado" required>
+          <button type="submit" class="btn btn-primary">Enfileirar</button>
+        </form>
+        <div id="tasks-list" class="list"></div>
+      </div>
+    </section>
+
+    <section class="view" id="view-logs" hidden>
+      <div class="card">
+        <div class="card-head">
+          <h2>Logs &amp; hipóteses</h2>
+          <button class="btn btn-ghost" id="verify-chain">verificar integridade da cadeia</button>
+        </div>
+        <p class="muted">Cada evento guarda o hash do evento anterior (SHA-256), igual ao
+          princípio do <code>memory.audit()</code> real — qualquer alteração retroativa quebra a cadeia.</p>
+        <div id="chain-status" class="chain-status"></div>
+        <div id="logs-list" class="list mono"></div>
+      </div>
+    </section>
+
+    <section class="view" id="view-reports" hidden>
+      <div class="card">
+        <div class="card-head">
+          <h2>Relatórios</h2>
+          <p class="muted">Gera um relatório Markdown real a partir dos dados desta investigação (demonstração local) e baixa no seu computador.</p>
+        </div>
+        <div id="report-preview" class="report-preview"></div>
+        <div class="form-actions">
+          <button class="btn btn-primary" id="gen-report">Gerar e baixar relatório (.md)</button>
+        </div>
+      </div>
+    </section>
+
+  </main>
+</div>
+
+<div class="toast-stack" id="toast-stack"></div>
+
+<script src="app.js"></script>
+</body>
+</html>
