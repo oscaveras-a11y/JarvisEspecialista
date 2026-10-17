@@ -10,7 +10,7 @@ Plataforma de investigação digital **autorizada**, em desenvolvimento. Núcleo
 
 1. As alterações são feitas em branches e apresentadas em pull requests para a `main`.
 2. O workflow [Offline validation](.github/workflows/ci.yml) executa a validação em runners hospedados pelo GitHub — Windows (alvo oficial) e Linux —, com Python 3.12.
-3. O runner instala o pacote e suas dependências no ambiente temporário do GitHub, verifica dependências, compila as fontes, verifica a CLI instalada, executa `python scripts/run-tests.py` e `python scripts/demo.py`.
+3. O runner instala o pacote e suas dependências no ambiente temporário do GitHub, verifica dependências, compila as fontes, verifica a CLI instalada, executa `python scripts/run-tests.py`, `python scripts/demo.py` e `python scripts/try-me.py` — este último é o roteiro de teste pessoal, pensado para o proprietário ler: saída PASSOU/FALHOU em português, sem JSON técnico.
 4. Consulte a aba **Checks** do PR ou [Actions](https://github.com/oscaveras-a11y/JarvisEspecialista/actions) para ver resultados e logs. Uma execução pendente ou ausente não significa aprovação.
 5. A integração na `main` permanece uma etapa separada de revisão. Este workflow não configura proteção de branch nem faz merge automático.
 
@@ -28,10 +28,16 @@ GitHub Actions valida o software em ambientes temporários; a plataforma ainda n
 - Hipóteses versionadas, experimentos com critérios declarados, avaliação de resultados auditados e revisão independente declarada.
 - Análise e comparação offline de BIN, Intel HEX, S-record e estruturas ELF/PE: arquitetura declarada, seções e segmentos, com limites documentados.
 - Prévia opcional de instruções com Capstone para arquiteturas declaradas compatíveis, limitada a bytes respaldados pelo arquivo; nunca executa o binário.
-- Análise e comparação de logs CAN clássicos, sem acesso a barramentos ou transmissão.
-- Recuperação autenticada AES-GCM somente do envelope sintético de laboratório `CCAES1`, quando material legítimo está disponível.
+- Análise e comparação de logs CAN clássicos, sem acesso a barramentos ou transmissão; analisador genérico passivo de capturas hex, com truncamento de amostra sinalizado explicitamente.
+- Recuperação autenticada AES-GCM somente do envelope sintético de laboratório `CCAES1`, quando material legítimo está disponível. Autoteste de recuperação de senha em envelope próprio `CCPW1` (nunca contra material de terceiros); demonstrações reais de RSA-OAEP, ECDH (X25519) e ChaCha20-Poly1305 com chaves efêmeras geradas na hora.
+- Auditoria estática e autorizada de configuração (segredos expostos, ajustes inseguros) e de padrões de implementação criptográfica (modo ECB, IV estático, chave fixa) — sem teste ativo, sem rede; valores sensíveis sempre redigidos.
+- Extração limitada de strings ASCII/UTF-16LE; diferenciação estática entre codificação, compressão, criptografia e dados estruturados.
+- CORE com classificação de tipo de investigação, plano de execução, decomposição em tarefas e atribuição de executor (broker local; agentes só recebem metadados derivados).
+- Linha do tempo/cadeia de custódia derivada da trilha de auditoria; log de auditoria bruto consultável; reaproveitamento de conhecimento por hash de evidência ou tipo de investigação entre casos.
+- Backup e restauração duráveis de todo o store local, via API nativa do SQLite, comprovados num diretório novo (fora da sessão original).
+- Resultados de toda análise nova ficam persistidos e reconstruíveis pelo histórico do caso, não só por contagens de auditoria.
 
-Uma assinatura não comprova validade integral do formato; alta entropia não comprova criptografia. A triagem não demonstra descriptografia e não há promessa universal de recuperação.
+Uma assinatura não comprova validade integral do formato; alta entropia não comprova criptografia. A triagem não demonstra descriptografia e não há promessa universal de recuperação. Toda correspondência de auditoria estática é indício a verificar, nunca prova de vulnerabilidade.
 
 ## Agentes e limites
 
