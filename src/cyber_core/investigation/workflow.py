@@ -272,7 +272,8 @@ class Workflow:
     def finalize(self, case, state, *, actor, reason):
         self._ready(case)
         actor, reason = text(actor, 'actor', 200), text(reason, 'state rationale')
-        allowed = ('RESOLVIDO', 'EM INVESTIGACAO', 'AGUARDANDO RECURSOS', 'SEM SOLUCAO VIAVEL DEMONSTRADA')
+        allowed = ('RESOLVIDO', 'EM INVESTIGACAO', 'AGUARDANDO INFORMACOES', 'AGUARDANDO AUTORIZACAO',
+                   'AGUARDANDO RECURSOS', 'SEM SOLUCAO VIAVEL DEMONSTRADA')
         if state not in allowed:
             raise CoreError('Unknown investigation state')
         snapshot = self.snapshot(case)

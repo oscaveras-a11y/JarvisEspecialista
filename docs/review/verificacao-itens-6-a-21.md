@@ -32,3 +32,8 @@ a `main` conforme ele entrega. Log atualizado por item.
 - **[FATO]** registro de fontes (`research` / `Workflow.add_source`): título, url, versão, proveniência, autor; sem busca web implícita (coerente com o escopo).
 - **[LACUNA→feito]** diferenciação de **autoridade da fonte**: `research/classify_source` (`Core.classify_source`, CLI `classify-source`) rotula oficial/acadêmica/comunidade/desconhecida por heurística de domínio, offline; `Core.sources` (CLI `sources`) lista as fontes do caso já com a autoridade. Honesto: heurística a confirmar, nenhuma requisição de rede.
 - **[PENDENTE]** Consulta automática a bases/documentação quando houver conectividade autorizada — fora do modo offline atual; declarado pendente.
+
+## Item 13 — Verificação independente (ímpar; Claude) — lacuna preenchida
+- **[FATO]** `Workflow.finalize` já exige evidência verificável, testes reproduzíveis, comparação com resultado esperado e documentação de limitações antes de "resolvido"; revisão independente obrigatória (bloqueia auto-revisão).
+- **[LACUNA→feito]** O escopo lista **7 estados possíveis**; `finalize` só aceitava 4 (faltavam "Aguardando informações" e "Aguardando autorização"). Adicionados como estados **não-terminais** (não exigem portões de evidência/revisão, como já era o caso de "Aguardando recursos"); `validated` permanece `false` para eles.
+- **[PENDENTE]** nada identificado; os 7 estados do escopo estão todos cobertos agora.
