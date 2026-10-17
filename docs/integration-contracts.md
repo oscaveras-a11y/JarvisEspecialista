@@ -47,5 +47,34 @@ até cinco segundos. Não é uma nova garantia de sandbox ou morte do pai.
 
 ## Resultado final
 
-Pendente de correção, execução e revisão. Contagens futuras devem distinguir
-testes descobertos, executados, skips e sondas adicionais.
+Correções e revisão estática independente concluídas no head
+`ec5344d0b85cb9e57eab1b7e1e45fc48d03126e9`, sem novos achados acionáveis.
+A revisão leu o código pelo GitHub; execução comprovada pelos jobs abaixo.
+
+| Conjunto | Plataforma | Descobertos | Executados | Skips | Resultado |
+|---|---|---:|---:|---:|---|
+| Base própria do PR #5 | Windows | 132 | 132 | 0 | OK em 59.659s |
+| Combinação com candidato fixado | Windows | 160 | 160 | 0 | OK em 80.702s |
+| Combinação com candidato fixado | Linux | 160 | 158 | 2 | OK em 17.313s |
+| Sondas de integração, adicionais à suíte | Windows | 3 | 3 | 0 | OK em 1.657s |
+| Sondas de integração, adicionais à suíte | Linux | 3 | 3 | 0 | OK em 0.150s |
+
+[Validação da base própria](https://github.com/oscaveras-a11y/CyberCore/actions/runs/39028689597)
+e [validação combinada](https://github.com/oscaveras-a11y/CyberCore/actions/runs/39028689568).
+Instalação no runner, dependências, compilação, CLI e demonstrações aprovadas.
+Os dois skips Linux são específicos de Job Objects: morte do pai e membro
+criado durante encerramento. Eles foram executados e passaram no Windows.
+
+O supervisor e o filho compartilham o teto de sanidade de 365 dias, preservando
+o orçamento individual menor recebido do chamador. A base pública atual ainda
+limita o Core a 3600 segundos; aceitar prazo maior pelo Core depende da
+configuração do candidato, que não é integrada por este PR. Interrupções
+usam `max_attempts` quando configurado e preservam o padrão 3 na base atual.
+Não mudam os contratos de cancelamento nem a publicação transacional.
+
+A combinação por SHA é evidência de compatibilidade desses commits, não de
+qualquer versão futura da branch. A suíte não representa uma análise
+exaustiva de segurança nem conclui todas as seções do projeto. A evidência de
+24 horas é um arquivo pequeno com esse orçamento; não é uma execução de
+24 horas. Permanecem os limites documentados de sandbox, CPU/RAM, boot,
+morte abrupta do pai em POSIX e coleta automática de cópias órfãs.
