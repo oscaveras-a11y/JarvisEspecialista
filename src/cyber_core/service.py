@@ -11,6 +11,9 @@ from cyber_core.analysis_process import analyze_in_process
 
 
 class Core:
+    # Shared configuration may override this per instance; preserve base behavior.
+    max_attempts = 3
+
     def __init__(self, home, *, max_bytes=64 * 1024 * 1024, timeout=60):
         if not 1 <= max_bytes <= 256 * 1024 * 1024 or not 0 < timeout <= 3600:
             raise CoreError('Invalid resource limits')
@@ -190,7 +193,7 @@ class Core:
                 current = self.db.execute('SELECT status,token,attempts FROM tasks WHERE id=?', (task['id'],)).fetchone()
                 owns_claim = current['status'] == 'running' and current['token'] == task['token']
                 if owns_claim:
-                    status = 'pending' if interrupted and current['attempts'] < 3 else 'failed'
+                    status = 'pending' if interrupted and current['attempts'] < self.max_attempts else 'failed'
                     self.db.execute('UPDATE tasks SET status=?,error=?,lease_until=0,token=NULL WHERE id=?',
                                     (status, message, task['id']))
                     event = 'task_interrupted' if interrupted else 'task_failed'
