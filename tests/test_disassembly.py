@@ -172,5 +172,19 @@ class DisassemblyTests(unittest.TestCase):
         self.assertEqual(out.get("instructions", []), [])
 
 
+    def test_relocatable_elf_sections_keep_their_own_relative_address_context(self):
+        data = elf_fixture()
+        struct.pack_into("<H", data, 16, 1)
+        struct.pack_into("<Q", data, 24, 0)
+        struct.pack_into("<Q", data, 32, 0)
+        struct.pack_into("<H", data, 56, 0)
+        struct.pack_into("<Q", data, 0x180 + 64 + 16, 0)
+        struct.pack_into("<Q", data, 0x180 + 2 * 64 + 16, 0)
+        out = self.parse(data)
+        self.assertEqual(out.get("status"), "decoded" if self.backend() else "dependency_unavailable")
+        self.assertEqual(out.get("source_file_offset"), 256)
+        self.assertEqual(out.get("start_address"), 0)
+
+
 if __name__ == "__main__":
     unittest.main()
