@@ -9,6 +9,12 @@ on:
       - 'src/cyber_core/analysis_process/**'
       - 'src/cyber_core/service.py'
       - 'tests/test_process*.py'
+      - 'src/cyber_core/investigation/**'
+      - 'src/cyber_core/cli/science.py'
+      - 'src/cyber_core/cli/reasoning.py'
+      - 'src/cyber_core/reporting/**'
+      - 'tests/test_reasoning.py'
+      - 'scripts/check-reasoning-handoff.py'
 
 permissions:
   contents: read
@@ -30,7 +36,7 @@ jobs:
       PYTHONUTF8: "1"
       PYTHONUNBUFFERED: "1"
       PIP_DISABLE_PIP_VERSION_CHECK: "1"
-      CANDIDATE_SHA: c5f87f363bcc472e4087636ce29c366aefe95e28
+      CANDIDATE_SHA: 5f87ca3ca374ad1bba910ab1d7062e2c4ec4b2f9
     defaults:
       run:
         shell: bash
@@ -68,3 +74,5 @@ jobs:
       - name: Run combined synthetic demonstration
         if: ${{ !cancelled() && steps.combine.outcome == 'success' && steps.suite.outcome != 'skipped' }}
         run: python scripts/demo.py
+      - name: Reproduce item 4 and Claude item 5 memory handoff
+        run: python scripts/check-reasoning-handoff.py
