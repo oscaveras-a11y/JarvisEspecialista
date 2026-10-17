@@ -7,7 +7,12 @@ guarda a saída no SQLite/relatório. Nenhum binário examinado é executado.
 ## Seleção e significado
 
 Para uma entrada ELF/PE com arquitetura declarada compatível, a prévia procura
-os bytes em arquivo que correspondem ao ponto de entrada. Se não há entrada,
+os bytes em arquivo que correspondem ao ponto de entrada. ELF executável usa
+PT_LOAD; segmentos NOTE e outros tipos não servem como mapa de carregamento.
+Seções alocadas conflitantes, mapeamentos virtuais ambíguos e caudas zero-fill
+são recusados. O fallback por seção permanece para objetos sem mapa LOAD
+apropriado, não para inventar um mapa de executável/dynamic sem LOAD.
+Se não há entrada,
 pode usar a primeira região declarada executável, identificando essa escolha
 em `selection_basis`. Endereço virtual e offset de arquivo continuam distintos;
 regiões sem bytes armazenados não são preenchidas nem decodificadas.
@@ -26,6 +31,8 @@ bytes não demonstra alcance, intenção, segurança, função ou comportamento.
 ## Limites
 
 - No máximo 4 KiB da região selecionada e 128 instruções.
+- Mudanças de mapa/permissão ou limite da seção podem encurtar a prévia;
+  nesse caso, mapping_truncated fica explícito.
 - `sample_truncated`, `instruction_limit_reached`, `decoded_bytes` e
   `undecoded_bytes` deixam os limites e as interrupções da leitura explícitos.
 - Não habilita skipdata, execução, emulação nem comandos derivados da amostra.
@@ -49,6 +56,12 @@ de capacidades ausentes (três asserções e três campos ausentes; 246 testes
 descobertos, com 2 skips específicos de Windows). Uma regressão adicional,
 run39038905927, demonstrou que zero instruções era rotulado indevidamente
 como decoded; a implementação passou a registrar ausência de decodificação.
+
+A revisão independente encontrou escolha incorreta quando seção ELF e
+PT_LOAD divergiam. O run39039274433 reproduziu quatro falhas: mapas divergentes,
+seção sobre cauda zero-fill, segmento não LOAD tratado como mapa e sobreposição
+virtual PE escolhida por ordem. A correção consulta LOAD e recusa ambiguidades
+antes de invocar o backend.
 
 Os testes usam bytes sintéticos conhecidos de x86/x86_64/AArch64, entradas
 em memória sem bytes, limite de instruções/amostra e o caminho real
