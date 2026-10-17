@@ -23,6 +23,17 @@ def parser():
     p.add_argument('--max-attempts', type=int, default=int(os.environ.get('CYBER_MAX_ATTEMPTS', defaults['max_attempts'])))
     p.add_argument('--agent-calls-per-case', type=int, default=int(os.environ.get('CYBER_AGENT_CALLS', defaults['agent_calls_per_case'])))
     sub = p.add_subparsers(dest='command', required=True)
+    keys = sub.add_parser('keys', help='Inspect only key/certificate metadata or scan an authorized recovery directory')
+    key_commands = keys.add_subparsers(dest='keys_action', required=True)
+    inspect = key_commands.add_parser('inspect', help='Read metadata only; never print private material')
+    inspect.add_argument('path')
+    inspect.add_argument('--max-bytes', type=int, default=1048576, dest='key_max_bytes')
+    scan = key_commands.add_parser('scan', help='Inventory a directory explicitly covered by case recovery authorization')
+    scan.add_argument('case')
+    scan.add_argument('path')
+    scan.add_argument('--recursive', action='store_true')
+    scan.add_argument('--max-files', type=int, default=100)
+    scan.add_argument('--max-total-bytes', type=int, default=16777216)
     sub.add_parser('init', help='Initialize local SQLite storage')
     sub.add_parser('doctor', help='Diagnose runtime and optional CLIs')
     sub.add_parser('agents', help='List available agents')
@@ -154,7 +165,10 @@ def main(argv=None):
     core = None
     try:
         args = parser().parse_args(argv)
-        if args.command in ('doctor', 'agents', 'crypto-demo'):
+        if args.command == 'keys' and args.keys_action == 'inspect':
+            from cyber_core.recovery import inspect_key
+            result = inspect_key(args.path, max_bytes=args.key_max_bytes)
+        elif args.command in ('doctor', 'agents', 'crypto-demo'):
             if args.command == 'crypto-demo':
                 from cyber_core.cryptanalysis.algorithms import demonstrate_all
                 result = demonstrate_all()
@@ -181,6 +195,10 @@ def main(argv=None):
                 result = execute(core, args)
             elif cmd == 'init':
                 result = {'initialized': True, 'home': str(core.home), 'schema': 8}
+            elif cmd == 'keys':
+                from cyber_core.recovery import scan_keys
+                result = scan_keys(core, args.case, args.path, max_files=args.max_files,
+                                   recursive=args.recursive, max_total_bytes=args.max_total_bytes)
             elif cmd == 'backup':
                 result = core.backup(args.dest)
             elif cmd == 'investigate':

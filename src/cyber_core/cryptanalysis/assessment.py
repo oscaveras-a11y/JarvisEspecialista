@@ -89,6 +89,16 @@ def assess(path, *, entropy=None, max_sample=65536):
                    {'route': 'format_specific_repair', 'status': 'requires_format_validation_and_implementation'},
                    {'route': 'cryptographic_decryption', 'status': 'not_attempted_no_material_supplied'}],
     }
+    from cyber_core.cryptanalysis.keys import inspect_data
+    key_metadata = inspect_data(data, complete=not more)
+    if key_metadata['material_kind'] != 'unknown':
+        report.update(format_id=key_metadata['format_id'], family='key-material',
+                      metadata_status=key_metadata['structural_status'])
+        report['details']['key_metadata'] = key_metadata
+        if key_metadata['password_protected'] is True:
+            report['encryption_evidence'] = 'header_declares_encryption'
+            report['next_steps'].append('An authorized passphrase is required to validate the private material.')
+        report['next_steps'].append('Inventory authorized backups; a missing private key and a lost passphrase require different recovery routes.')
     if entropy is not None:
         report['details']['whole_file_entropy'] = entropy
     for magic, identifier, family in SIGNATURES:

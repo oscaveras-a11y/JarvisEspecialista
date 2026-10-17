@@ -343,7 +343,7 @@ class Core:
         return recover(self, case, source, key, **expectations)
 
     def assess_recovery(self, case, path, **limits):
-        from cyber_core.cryptanalysis.intake import assess_recovery
+        from cyber_core.recovery import assess_recovery
         return assess_recovery(self, case, path, **limits)
 
     def classify(self, case):
