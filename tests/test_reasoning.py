@@ -367,5 +367,20 @@ class ReasoningTests(unittest.TestCase):
         self.assertEqual(len(self.core.tasks(self.case)), 2)
 
 
+    def test_blocked_reservation_does_not_prevent_an_independent_ready_strategy(self):
+        first, _, _ = self.strategy(cost=0)
+        second, _, _ = self.strategy(cost=5)
+        with patch.object(self.core, 'run_one', side_effect=KeyboardInterrupt):
+            with self.assertRaises(KeyboardInterrupt):
+                self.engine.step(self.case, self.source, actor='operator')
+        self.engine.block(self.case, first, kind='data', detail='Missing prerequisite', actor='analyst')
+        out = self.engine.step(self.case, self.source, actor='operator')
+        self.assertEqual(out['status'], 'evaluated')
+        cycles = self.engine.snapshot(self.case)['cycles']
+        self.assertEqual(next(c for c in cycles if c['strategy_id'] == first)['status'], 'QUEUED')
+        self.assertEqual(next(c for c in cycles if c['strategy_id'] == second)['status'], 'EVALUATED')
+        self.assertEqual(len(self.core.tasks(self.case)), 2)
+
+
 if __name__ == '__main__':
     unittest.main()
