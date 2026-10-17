@@ -15,3 +15,8 @@ private/
 .cyber/
 test-output/
 environment_probe.py
+
+# Portfólio (Node/JS e logs de laboratório)
+venv/
+node_modules/
+*.log
