@@ -107,7 +107,8 @@ def _run(command, cwd, env, deadline):
         if time.monotonic() >= deadline:
             raise CoreError("External analysis shared deadline exceeded")
         if process.returncode:
-            raise CoreError("External backend exited unsuccessfully")
+            tail = bytes(buffers[1] or buffers[0])[-384:].decode("utf-8", errors="replace")
+            raise CoreError("External backend exited " + str(process.returncode) + ": " + tail)
         return bytes(buffers[0]).decode("utf-8", errors="replace")
     finally:
         if process.poll() is None:
@@ -121,7 +122,11 @@ def _read_json(path):
     if path.is_symlink() or not path.is_file() or path.stat().st_size > MAX_JSON:
         raise CoreError("External backend JSON missing or oversized")
     try:
-        return json.loads(path.read_bytes().decode("utf-8"))
+        with path.open("rb") as stream:
+            data = stream.read(MAX_JSON + 1)
+        if len(data) > MAX_JSON:
+            raise CoreError("External backend JSON exceeds byte limit")
+        return json.loads(data.decode("utf-8"))
     except (ValueError, UnicodeError) as exc:
         raise CoreError("Invalid external backend JSON") from exc
 
@@ -143,11 +148,14 @@ def normalize_binwalk(raw, path, size):
         at, length = record.get("offset"), record.get("size")
         if type(at) is not int or type(length) is not int or not 0 <= at < size or not 0 <= length <= size - at:
             raise CoreError("Binwalk finding outside verified input")
+        confidence = record.get("confidence", 0)
+        if type(confidence) is not int or not 0 <= confidence <= 255:
+            raise CoreError("Invalid Binwalk confidence")
         if len(result) < LIMITS["findings"]:
             result.append({"offset": at, "size": length or None,
                            "name": str(record.get("name", ""))[:128],
                            "description": str(record.get("description", ""))[:1024],
-                           "backend_confidence": record.get("confidence")})
+                           "backend_confidence": confidence})
     return {"findings": result, "findings_total": len(findings),
             "truncated": len(findings) > len(result), "extraction_enabled": False}
 
@@ -167,7 +175,18 @@ def _ghidra_result(raw):
     if not all(isinstance(raw.get(key), str) and len(raw[key]) <= 256
                for key in ("language_id", "compiler_spec", "image_base")):
         raise CoreError("Invalid Ghidra metadata")
-    return raw
+    allowed = ("backend_version", "language_id", "compiler_spec", "image_base",
+               "analysis_timed_out", "functions_truncated")
+    normalized = {key: raw.get(key) for key in allowed}
+    if type(normalized["functions_truncated"]) is not bool:
+        raise CoreError("Invalid Ghidra truncation metadata")
+    normalized["functions"] = [{key: f[key] for key in
+                               ("address", "name", "status", "pseudocode", "error")}
+                              | {"pseudocode_truncated": f.get("pseudocode_truncated", False)}
+                              for f in functions]
+    if any(type(f["pseudocode_truncated"]) is not bool for f in normalized["functions"]):
+        raise CoreError("Invalid Ghidra truncation metadata")
+    return normalized
 
 
 def analyze_external(verified_path, metadata, config, timeout):
@@ -247,13 +266,18 @@ def analyze_external(verified_path, metadata, config, timeout):
                     scripts = Path(__file__).with_name("ghidra_scripts")
                     loader = "ElfLoader" if metadata["format"] == "elf" else "PeLoader"
                     analysis_seconds = max(1, min(30, int(deadline - time.monotonic()) - 3))
+                    loader_options = ["-loader-loadLibraries", "false"]
+                    if metadata["format"] == "elf":
+                        loader_options += ["-loader-applyRelocations", "false"]
                     command = [executable, scratch, "Preview", "-import", path,
-                               "-loader", loader, "-loader-loadLibraries", "false",
-                               "-loader-applyRelocations", "false", "-readOnly",
+                               "-loader", loader, *loader_options, "-readOnly",
                                "-scriptPath", scripts, "-postScript", "ExportPreview.java", output,
                                "-analysisTimeoutPerFile", str(analysis_seconds), "-max-cpu", "1",
                                "-log", scratch / "application.log", "-scriptlog", scratch / "script.log"]
-                    _run(command, scratch, env, deadline)
+                    diagnostic = _run(command, scratch, env, deadline)
+                    if not output.is_file():
+                        errors = [line for line in diagnostic.splitlines() if "error" in line.lower() or "exception" in line.lower()]
+                        raise CoreError("Ghidra exporter did not produce JSON: " + " ".join(errors)[-400:])
                     raw = _ghidra_result(_read_json(output))
                     result.update(raw)
                     result["status"] = ("partial" if raw["analysis_timed_out"] or

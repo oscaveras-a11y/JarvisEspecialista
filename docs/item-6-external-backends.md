@@ -79,3 +79,16 @@ integration is not covered by this standalone adapter acceptance.
 - [Pinned headless contract](https://github.com/NationalSecurityAgency/ghidra/blob/Ghidra_12.1.4_build/Ghidra/RuntimeScripts/Common/support/analyzeHeadlessREADME.md)
 - [Binwalk pinned CLI](https://github.com/ReFirmLabs/binwalk/blob/v3.1.0/src/cliparser.rs)
 - [Published crate checksum index](https://github.com/rust-lang/crates.io-index/blob/master/bi/nw/binwalk)
+
+Regression run [39041223831](https://github.com/oscaveras-a11y/JarvisEspecialista/actions/runs/39041223831)
+ran 15 contracts: 12 passed, two assertions failed and the JSON reader fake
+exposed the old unbounded read_bytes path. The corrected reader uses
+read(MAX_JSON+1), including when stat becomes stale, and normalized schemas
+drop unrecognized fields and reject non-integer confidence values.
+
+The first real run [39041000349](https://github.com/oscaveras-a11y/JarvisEspecialista/actions/runs/39041000349)
+installed verified tools and confirmed Java packaging, then failed because
+the exporter produced no JSON. The actual HeadlessScript 12.1.4 API is
+analysisTimeoutOccurred(), despite the README's stale method reference.
+The Java exporter now uses the class API. This failed run is not a passing
+Ghidra or Binwalk analysis receipt.

@@ -29,7 +29,7 @@ public class ExportPreview extends HeadlessScript {
         root.addProperty("language_id", currentProgram.getLanguageID().toString());
         root.addProperty("compiler_spec", currentProgram.getCompilerSpec().getCompilerSpecID().toString());
         root.addProperty("image_base", currentProgram.getImageBase().toString());
-        root.addProperty("analysis_timed_out", getHeadlessAnalysisTimeoutStatus());
+        root.addProperty("analysis_timed_out", analysisTimeoutOccurred());
         JsonArray functions = new JsonArray();
         DecompInterface decompiler = new DecompInterface();
         try {

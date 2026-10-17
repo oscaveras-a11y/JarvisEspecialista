@@ -6,6 +6,8 @@ import gzip
 import hashlib
 import json
 import os
+import re
+import struct
 from pathlib import Path
 import signal
 import subprocess
@@ -14,7 +16,6 @@ import tempfile
 
 def worker():
     from cyber_core.reverse_engineering.external import analyze_external
-    from cyber_core.firmware import analyze_firmware
     data = json.loads(Path(sys.argv[2]).read_text())
     result = analyze_external(Path(data["input"]), {"format": data["format"]}, data["config"], 120)
     Path(data["output"]).write_text(json.dumps(result))
@@ -52,10 +53,24 @@ def main():
         output = result["ghidra"]
         assert output["status"] == "completed", output
         assert output["backend_version"] == "12.1.4", output
-        assert any(f["status"] == "decompiled" and "42" in f["pseudocode"]
+        assert any(f["status"] == "decompiled" and re.search(r"return\\s+(?:42|0x2a)\\s*;", f["pseudocode"])
                    for f in output["functions"]), output
         assert output["input_sha256"] == original
         assert hashlib.sha256(binary.read_bytes()).hexdigest() == original
+
+        sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "tests"))
+        from test_binary_structure import pe_fixture
+        pe_data = pe_fixture()
+        pe_data[0x200:0x206] = bytes.fromhex("b82a000000c3")
+        struct.pack_into("<I", pe_data, 88 + 224 + 8, 16)
+        pe_file = root / "synthetic.pe"
+        pe_file.write_bytes(pe_data)
+        result = supervised({"input": str(pe_file), "format": "pe", "config": ghidra,
+                             "output": str(root / "ghidra-pe.json")}, root)
+        pe_out = result["ghidra"]
+        assert pe_out["status"] == "completed", pe_out
+        assert any(f["status"] == "decompiled" and re.search(r"return\\s+(?:42|0x2a)\\s*;", f["pseudocode"])
+                   for f in pe_out["functions"]), pe_out
 
         firmware = root / "synthetic.bin"
         firmware.write_bytes(b"Z" * 256 + gzip.compress(b"synthetic authorized firmware\n" * 16, mtime=0))
