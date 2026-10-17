@@ -92,7 +92,7 @@ def elf_details(data, *, bits, endian, machine, phoff, phnum, shoff, shnum, shst
             _address(address, size, bits)
         if link and link >= shnum:
             _fail("ELF section link outside section table")
-        if entsize and size % entsize:
+        if entsize and not flags & 0x800 and size % entsize:
             _fail("ELF section size is not a multiple of its entry size")
         file_size = 0 if kind == 8 else size
         _file_range(data, offset, file_size)
@@ -101,7 +101,7 @@ def elf_details(data, *, bits, endian, machine, phoff, phnum, shoff, shnum, shst
         name, truncated = _section_name(data, names, name_index)
         sections.append({"index": index, "type": kind, "name": name,
                          "name_truncated": truncated, "name_offset": name_index,
-                         "flags": flags, "allocated": bool(flags & 2),
+                         "flags": flags, "compressed": bool(flags & 0x800), "allocated": bool(flags & 2),
                          "writable": bool(flags & 1), "executable": bool(flags & 4),
                          "virtual_address": address, "file_offset": offset,
                          "file_size": file_size, "declared_size": size,
@@ -146,7 +146,7 @@ def pe_details(data, *, machine, optional, optional_size, sections, magic, chara
     _count(sections)
     bits = 32 if magic == 0x10b else 64
     image_base = int.from_bytes(data[optional + (28 if bits == 32 else 24):
-                                     optional + (32 if bits == 32 else 32)], "little")
+                                     optional + 32], "little")
     entry_rva = struct.unpack_from("<I", data, optional + 16)[0]
     _address(image_base + entry_rva, 0, bits)
     headers, ranges = [], []
@@ -170,7 +170,8 @@ def pe_details(data, *, machine, optional, optional_size, sections, magic, chara
     return {"architecture": _PE_ARCH.get(machine, "unknown"),
             "architecture_basis": "PE Machine; declared, not execution-verified",
             "image_base": image_base, "entry_point_rva": entry_rva,
-            "entry_point": image_base + entry_rva, "is_dll": bool(characteristics & 0x2000),
+            "entry_point": image_base + entry_rva if entry_rva else None,
+            "has_entry_point": bool(entry_rva), "is_dll": bool(characteristics & 0x2000),
             "characteristics": characteristics, "section_count": sections,
             "section_headers": headers,
             "validation_scope": "PE headers, section file bounds and declared ranges; not loader semantics"}
