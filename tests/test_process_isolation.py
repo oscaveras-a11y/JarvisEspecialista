@@ -243,3 +243,43 @@ class ProcessIsolationTests(unittest.TestCase):
         self.assertFalse(alive(descendant), 'Descendant still running when supervisor returned')
         destination.unlink()
         self.assertEqual(result['value'], 1)
+
+    @unittest.skipUnless(os.name == 'nt', 'Windows shutdown membership race')
+    def test_child_spawned_during_shutdown_releases_all_file_handles(self):
+        supervisor = self.supervisor()
+        trigger, ready = self.root / 'spawn-now', self.root / 'new-child.ready'
+        target, pid_file = self.root / 'late-copy.bin', self.root / 'late-child.pid'
+        late = ("import sys,time;from pathlib import Path;"
+                "handles=[open('NUL','wb') for _ in range(4096)];"
+                "held=open(sys.argv[1],'wb');held.write(b'partial');held.flush();"
+                "Path(sys.argv[2]).write_text('ready');time.sleep(60)")
+        spawning = (
+            "import sys,time,subprocess;from pathlib import Path\n"
+            "trigger=Path(sys.argv[1])\n"
+            "while not trigger.exists(): time.sleep(.01)\n"
+            "child=subprocess.Popen([sys.executable,'-c'," + repr(late) + "," +
+            repr(str(target)) + "," + repr(str(ready)) +
+            "],stdin=subprocess.DEVNULL,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)\n"
+            "Path(" + repr(str(pid_file)) + ").write_text(str(child.pid))\n"
+            "time.sleep(60)\n")
+        body = (
+            "subprocess.Popen([sys.executable,'-c'," + repr(spawning) + "," +
+            repr(str(trigger)) + "],stdin=subprocess.DEVNULL,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)\n"
+            "print(json.dumps({'ok':True,'result':{'value':1}}),flush=True)\n")
+        original_attach = supervisor._attach_tree
+        def attach_with_shutdown_interleaving(process):
+            tree = original_attach(process)
+            terminate = tree.api.TerminateJobObject
+            def spawn_before_termination(*args):
+                trigger.write_text('spawn')
+                deadline = time.monotonic() + 15
+                while not ready.exists() and time.monotonic() < deadline:
+                    time.sleep(.01)
+                self.assertTrue(ready.exists(), 'Late descendant did not open its handles')
+                return terminate(*args)
+            tree.api.TerminateJobObject = spawn_before_termination
+            return tree
+        with patch.object(supervisor, '_attach_tree', side_effect=attach_with_shutdown_interleaving):
+            self.assertEqual(self.run_fixture(body, timeout=25)['value'], 1)
+        self.assertFalse(alive(int(pid_file.read_text())), 'New member survived shutdown return')
+        target.unlink()
