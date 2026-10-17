@@ -70,3 +70,13 @@ O PR #9 (mergeado na main) combinou o candidato Claude (70deac2) com a main num 
 Validação: **242 testes OK** (227 + 15 de regressão), `compileall` e `demo.py` (exit 0); confirmação ponta a ponta pela CLI dos 3 cenários exatos relatados (segredo redigido nos dois achados; pausa recusando `audit-config`; domínio semelhante → `unknown`).
 
 Os demais pontos do PR #9 (integração plena ao pipeline de tarefas/fila do item 12/14, allowlist de 4 operações do processo filho supervisionado cobrindo as rotas novas, unificação dos 7 estados do item 13 também no lado do Codex) permanecem como trabalho conjunto futuro — não forçados aqui para não colidir com o item 12/14/18 do Codex.
+
+## Item 15 — Interface do sistema: pendência final fechada (PR #9)
+
+A revisão cruzada do Codex (PR #9) apontou a última pendência real do item 15: "roteiro de teste pessoal simples no GitHub com cenários sintéticos e saídas claras", pedido pelo próprio proprietário (PR #8, teste pessoal sem login).
+
+- `scripts/try-me.py`: roteiro narrado em português, saída **PASSOU/FALHOU** legível (não JSON técnico), para o proprietário rodar e entender sem ler código. Exercita de ponta a ponta: criar investigação, analisar arquivo, classificar/planejar, auditoria de config (segredo redigido), auditoria de implementação cripto (ECB detectado), autoteste de recuperação (senha fraca própria), RSA/ECC/ChaCha20 reais, backup/restauração em diretório novo, integridade da cadeia de auditoria.
+- Termina com resumo honesto: quantas verificações passaram, lista exata de falhas (se houver — nunca inventa resultado), e as limitações reais (sintético, sem ferramentas profissionais, sem hardware, `platform_complete` seria `false`).
+- Adicionado ao CI (`.github/workflows/ci.yml`), rodando junto do `demo.py` em cada execução.
+
+Execução local: **9 de 9 verificações passaram**, exit 0. Suíte completa: 290 testes OK; demo exit 0.
