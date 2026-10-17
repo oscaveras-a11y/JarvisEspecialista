@@ -1,0 +1,29 @@
+name: Real external backends
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'src/cyber_core/reverse_engineering/**'
+      - 'tests/test_external_backends.py'
+      - 'scripts/check-real-backends.py'
+      - '.github/workflows/external-backends.yml'
+      - 'pyproject.toml'
+permissions:
+  contents: read
+concurrency:
+  group: external-backends-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  contracts:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - run: python -m pip install .
+      - name: External adapter contracts
+        run: python scripts/run-tests.py test_external_backends.py
