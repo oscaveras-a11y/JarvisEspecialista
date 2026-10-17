@@ -1,5 +1,7 @@
 """External adapter contracts. Dummies exercise failure handling, not real integration."""
 import hashlib
+import io
+from types import SimpleNamespace
 import json
 import math
 from pathlib import Path
@@ -82,3 +84,23 @@ class ExternalTests(unittest.TestCase):
         with self.assertRaises(CoreError):
             self.api._run([sys.executable, "-c", "import time; time.sleep(10)"], self.root, {}, started+.15)
         self.assertLess(time.monotonic()-started, 3)
+
+    def test_json_read_cannot_grow_past_budget_after_stat(self):
+        oversized = b" " * (self.api.MAX_JSON + 1)
+        fake = SimpleNamespace(is_symlink=lambda: False, is_file=lambda: True,
+                               stat=lambda: SimpleNamespace(st_size=1),
+                               open=lambda mode: io.BytesIO(oversized))
+        with self.assertRaises(CoreError):
+            self.api._read_json(fake)
+
+    def test_binwalk_confidence_cannot_expand_normalized_output(self):
+        raw = [{"Analysis": {"file_path": str(self.input), "file_map": [
+            {"offset": 0, "size": 1, "confidence": ["untrusted"]}], "extractions": {}}}]
+        with self.assertRaises(CoreError):
+            self.api.normalize_binwalk(raw, self.input, self.input.stat().st_size)
+
+    def test_ghidra_discards_unknown_backend_fields(self):
+        raw = {"backend_version": "12.1.4", "functions": [], "analysis_timed_out": False,
+               "language_id": "x86:LE:64:default", "compiler_spec": "gcc", "image_base": "00400000",
+               "functions_truncated": False, "unexpected": "do not forward"}
+        self.assertNotIn("unexpected", self.api._ghidra_result(raw))
