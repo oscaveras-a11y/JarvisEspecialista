@@ -262,3 +262,23 @@ class OrchestrationBetaTests(unittest.TestCase):
         self.assertEqual(len(result['cancelled_tasks']), 1)
         self.assertFalse(result['pending_tasks'])
         self.assertFalse(result['failures'])
+
+    def test_interrupt_after_commit_preserves_committed_evidence(self):
+        self.assertTrue(callable(getattr(self.core, 'run_queue', None)), 'Continuous bounded queue execution is missing')
+        self.queue()
+        from cyber_core import service
+        real_audit = service.audit
+        def interrupt_after_commit(db, case, event, data):
+            real_audit(db, case, event, data)
+            if event == 'analysis_verified':
+                db.commit()
+                raise KeyboardInterrupt
+        with patch.object(service, 'audit', side_effect=interrupt_after_commit):
+            with self.assertRaises(KeyboardInterrupt):
+                self.worker()
+        result = self.core.results(self.case)[0]
+        self.assertEqual(self.core.tasks(self.case)[0]['status'], 'done')
+        self.assertEqual(Path(result['copy']).read_bytes(), b'abc')
+        self.assertTrue(self.core.verify_audit(self.case))
+        self.assertEqual(self.worker()['status'], 'drained')
+        self.assertEqual(len(self.core.results(self.case)), 1)
