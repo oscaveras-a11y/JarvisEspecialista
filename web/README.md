@@ -1,57 +1,31 @@
-# CYBER CORE — interface web (protótipo)
+# CYBER CORE — interface azul aprovada
 
-Item 15 do escopo ("Interface do sistema"), fase visual: um painel moderno,
-em HTML/CSS/JS puro (sem build, sem dependências), para validar o fluxo
-essencial do CORE antes de conectar a um backend real ou empacotar como
-app desktop.
+A direção visual foi apresentada como imagem e aprovada pelo proprietário antes do primeiro commit de implementação: fundo escuro, azul/ciano, escudo/globo e módulos na barra lateral.
 
-## O que é e o que não é
+## Escopo desta entrega
 
-- **É**: HTML/CSS/JS estático, sem nenhuma chamada de rede. Todo estado
-  (investigações, tarefas, trilha de auditoria) fica em `localStorage`,
-  só no navegador de quem está usando. A cadeia de auditoria usa SHA-256
-  real (Web Crypto API) com o mesmo princípio do `memory.audit()` do
-  backend (cada evento guarda o hash do anterior) — dá para ver a cadeia
-  quebrar se os dados forem adulterados manualmente no `localStorage`.
-  O botão de relatório gera e baixa um Markdown real a partir dos dados
-  da investigação selecionada.
-- **Não é**: não está conectado ao motor real do CORE (o CLI `cyber`).
-  Criar uma "investigação" aqui não chama `cyber investigate`, não grava
-  no SQLite real, não analisa arquivo nenhum. Isso é intencional nesta
-  fase — ver `docs/escopo.md`, item 15: terminal funcional primeiro,
-  depois interface gráfica.
+Interface de demonstração em HTML/CSS/JavaScript, sem dependências de produção ou fontes remotas. Reaproveita/evolui os fluxos do protótipo do Claude (referência ef8c6de4c5ab43c8d4c37ba441c3a6d2ad4d4343), mantendo compatibilidade com a chave de estado do navegador cybercore.ui.v1.
 
-O banner no topo da página deixa isso explícito para quem for usar.
+Inclui visão geral com busca, criação e seleção de investigações, tarefas, pausa/retomada/cancelamento, recuperação, perícia, ferramentas, agentes e relatório Markdown. Casos de exemplo são carregados na primeira visita; dados existentes não são substituídos pelos exemplos. A interface permanece identificada como demonstração em todas as telas.
 
-## Rodar localmente
+Nenhum arquivo é lido/enviado, nenhuma análise do CORE é executada e nenhum provedor é chamado. Ghidra/Binwalk são apresentados como capacidades já integradas ao CORE, sem inventar disponibilidade ao vivo. Agentes aparecem aguardando configuração; a interface não recebe credenciais. A integridade indicada refere-se somente à cadeia dos registros locais de demonstração, não a evidências reais.
 
-Não precisa de nada além de um servidor estático (são arquivos simples):
+Não há login adicional. Armazenamento no navegador não fornece autenticação, exclusividade de uso, confidencialidade ou custódia forense. Usar apenas dados fictícios nesta prévia.
 
-```bash
-cd web
-python3 -m http.server 8080
-# abra http://localhost:8080/
-```
+## Testar sem instalar no computador
 
-Ou simplesmente abra `index.html` direto no navegador.
+Actions → Approved interface validation → Run workflow. Os testes instalam Chromium e Playwright somente nos runners descartáveis Windows/Linux. Artefatos interface-preview-* contêm capturas reais desktop/mobile e relatório dos testes; todos os dados são sintéticos.
 
-## Publicar no GitHub Pages
+Os testes cobrem busca, navegação responsiva, criação/persistência, pausa/cancelamento, estado legado, escape de HTML, download de relatório e auditoria concorrente/adulterada. A suíte Python existente continua independente da interface.
 
-Workflow em `.github/workflows/pages.yml` publica esta pasta automaticamente
-a cada push na branch padrão. Passo manual único e necessário (só o
-dono do repositório pode fazer, via configurações do GitHub):
+## Abrir no GitHub Pages
 
-1. **Settings → Pages**
-2. Em "Build and deployment" → **Source**, selecionar **GitHub Actions**
-   (não "Deploy from a branch").
+A publicação é manual. O proprietário configura Settings → Pages → Source: GitHub Actions e executa Actions → Publish approved interface → Run workflow na main. O link aparece no resultado da etapa de publicação. Nenhuma configuração administrativa ou publicação é executada automaticamente por este trabalho.
 
-Depois disso o workflow passa a publicar sozinho; a URL aparece em
-Settings → Pages após o primeiro deploy bem-sucedido.
+GitHub Pages hospeda somente estes arquivos estáticos; não executa Python, Ghidra ou Binwalk e não fornece armazenamento operacional do CORE. A ligação visual ao motor real continua uma entrega separada. Se a página for pública, continua sendo uma demonstração, sem acesso aos casos do CORE.
 
-## Próximos passos (fora desta fase)
+## Integração com a branch do Claude
 
-- Ligar a um backend real (API local em cima de `cyber_core.service.Core`)
-  para que as ações passem a valer de verdade.
-- App desktop nativo (Windows), reaproveitando este HTML/CSS/JS como a
-  camada visual dentro de um WebView, conforme combinado com o
-  proprietário.
+Somente os arquivos da interface foram reaproveitados; a branch do Claude e seus módulos Python permanecem intactos. Como web/ não existia na main, um merge futuro do protótipo anterior pode apresentar conflitos add/add: manter a direção visual aprovada e preservar a compatibilidade do estado/fluxos, verificando novamente os testes de navegador. Não resolver isso substituindo automaticamente a interface aprovada pela paleta anterior.
+
+Desenvolvimento e validação somente no GitHub. Nada foi instalado, clonado ou executado no computador do proprietário.

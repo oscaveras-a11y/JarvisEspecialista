@@ -20,3 +20,7 @@ environment_probe.py
 venv/
 node_modules/
 *.log
+
+# Resultados locais do Playwright (tests/web.spec.cjs)
+playwright-report/
+test-results/

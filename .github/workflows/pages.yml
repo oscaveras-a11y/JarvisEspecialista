@@ -1,20 +1,13 @@
-name: Publish web UI (GitHub Pages)
-
+name: Publish approved interface
 on:
-  push:
-    branches: [main, claude/gifted-gates-kd07xv]
-    paths: [web/**, .github/workflows/pages.yml]
   workflow_dispatch:
-
 permissions:
   contents: read
   pages: write
   id-token: write
-
 concurrency:
   group: pages
   cancel-in-progress: false
-
 jobs:
   deploy:
     runs-on: ubuntu-24.04
@@ -22,10 +15,12 @@ jobs:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/configure-pages@v5
-      - uses: actions/upload-pages-artifact@v3
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/configure-pages@v6.0.0
+      - uses: actions/upload-pages-artifact@v5.0.0
         with:
           path: web
       - id: deployment
-        uses: actions/deploy-pages@v4
+        uses: actions/deploy-pages@v5.0.1

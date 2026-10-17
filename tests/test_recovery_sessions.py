@@ -1,0 +1,357 @@
+"""Recovery sessions use only owner-supplied material and synthetic fixtures."""
+import hashlib
+import json
+from pathlib import Path
+import subprocess
+import sys
+import tempfile
+import time
+import unittest
+from unittest.mock import patch
+from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+from cryptography.hazmat.primitives.asymmetric import ed25519
+from cryptography.hazmat.primitives import serialization
+from cyber_core.errors import CoreError
+from cyber_core.service import Core
+
+class RecoverySessionTests(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.root = Path(self.tmp.name)
+        self.scope = self.root / "scope"
+        self.scope.mkdir()
+        self.core = Core(self.root / "state", timeout=30)
+        self.addCleanup(lambda: self.core.close())
+        self.case = self.core.investigate("synthetic", "Recovery", str(self.scope), "owner", "Synthetic owner material", recovery=True, valid_hours=72)
+        self.key = bytes(range(32))
+        self.plain = b"%PDF-1.7\nSynthetic recovery.\n"
+        self.source = self.scope / "input.ccaes"
+        nonce = bytes(range(12))
+        self.source.write_bytes(b"CCAES1" + nonce + AESGCM(self.key).encrypt(nonce, self.plain, b"CCAES1"))
+        self.material = self.scope / "candidates.txt"
+        self.material.write_text((b"x"*32).hex()+"\n"+self.key.hex()+"\n")
+
+    def sessions(self):
+        from cyber_core.cryptanalysis.sessions import RecoverySessions
+        return RecoverySessions(self.core)
+
+    def start(self, **kw):
+        return self.sessions().start(self.case, self.source, self.material, **kw)
+
+    def test_default_is_24_hour_window_with_explicit_material_and_no_secret_export(self):
+        before = time.time()
+        item = self.start()
+        self.assertAlmostEqual(item["deadline"] - before, 86400, delta=10)
+        self.assertEqual(item["status"], "pending")
+        self.assertNotIn(self.key.hex(), json.dumps(item))
+        self.assertNotIn("material_commitment", item)
+
+    def test_progress_survives_new_process_and_authenticated_result_reaches_report(self):
+        job = self.start()["id"]
+        one = self.sessions().work(self.case, job, max_attempts=1, max_seconds=20)
+        self.assertEqual(one["attempts"], 1)
+        self.assertEqual(one["status"], "pending")
+        run = subprocess.run([sys.executable, "-m", "cyber_core", "--home", str(self.core.home),
+                              "recovery-session", "work", self.case, job, "--max-attempts", "1"],
+                             capture_output=True, text=True, timeout=60)
+        self.assertEqual(run.returncode, 0, run.stderr)
+        done = json.loads(run.stdout)
+        self.assertEqual(done["status"], "succeeded")
+        self.assertEqual(done["attempts"], 2)
+        self.assertEqual(Path(done["result"]["output"]).read_bytes(), self.plain)
+        report = self.core.report(self.case).read_text()
+        self.assertIn(job, report)
+        self.assertNotIn(self.key.hex(), report)
+        self.assertTrue(self.core.verify_audit(self.case))
+
+    def test_no_match_is_exhausted_not_success(self):
+        self.material.write_text((b"x"*32).hex()+"\n")
+        job = self.start()["id"]
+        item = self.sessions().work(self.case, job, max_attempts=10)
+        self.assertEqual(item["status"], "exhausted")
+        self.assertIsNone(item["result"])
+
+    def test_scope_and_recovery_authorization_are_required(self):
+        outside = self.root / "outside"
+        outside.write_text(self.key.hex())
+        with self.assertRaises(CoreError):
+            self.sessions().start(self.case, self.source, outside)
+        case = self.core.investigate("synthetic", "x", str(self.scope), "owner", "No recovery")
+        with self.assertRaises(CoreError):
+            self.sessions().start(case, self.source, self.material)
+
+    def test_session_pause_resume_and_cancel_are_durable(self):
+        manager = self.sessions()
+        job = self.start()["id"]
+        manager.pause(self.case, job)
+        self.assertEqual(manager.work(self.case, job)["status"], "paused")
+        manager.resume(self.case, job)
+        manager.cancel(self.case, job)
+        self.assertEqual(manager.work(self.case, job)["status"], "cancelled")
+        with self.assertRaises(CoreError):
+            manager.resume(self.case, job)
+
+    def test_case_pause_revoke_cancel_stop_new_attempts(self):
+        manager = self.sessions()
+        job = self.start()["id"]
+        self.core.pause(self.case)
+        with self.assertRaises(CoreError):
+            manager.work(self.case, job)
+        self.core.resume(self.case)
+        self.core.revoke(self.case)
+        with self.assertRaises(CoreError):
+            manager.work(self.case, job)
+        self.assertEqual(manager.get(self.case, job)["attempts"], 0)
+
+    def test_changed_material_cannot_silently_change_session_plan(self):
+        manager = self.sessions()
+        job = self.start()["id"]
+        self.material.write_text(self.key.hex()+"\n")
+        with self.assertRaises(CoreError):
+            manager.work(self.case, job)
+        self.assertEqual(manager.get(self.case, job)["attempts"], 0)
+
+    def test_priority_extension_requires_reason_and_is_audited(self):
+        manager = self.sessions()
+        job = self.start()["id"]
+        with self.assertRaises(CoreError):
+            manager.extend(self.case, job, hours=24, reason="", priority=True)
+        with self.assertRaises(CoreError):
+            manager.extend(self.case, job, hours=24, reason="Priority synthetic", priority=False)
+        before = manager.get(self.case, job)["deadline"]
+        item = manager.extend(self.case, job, hours=24, reason="Priority synthetic", priority=True)
+        self.assertEqual(item["deadline"], before + 86400)
+        self.assertTrue(any(r["event"] == "recovery_session_extended" for r in self.core.audit(self.case)))
+
+    def test_live_lease_prevents_duplicate_worker(self):
+        manager = self.sessions()
+        job = self.start()["id"]
+        with self.core.db:
+            self.core.db.execute("UPDATE recovery_sessions SET status='running',token='peer',lease_until=? WHERE id=?",
+                                 (time.time()+120, job))
+        with self.assertRaises(CoreError):
+            manager.work(self.case, job)
+        self.assertEqual(manager.get(self.case, job)["attempts"], 0)
+
+    def test_expired_lease_recovers_checkpoint_without_skipping_candidate(self):
+        manager = self.sessions()
+        job = self.start()["id"]
+        with self.core.db:
+            self.core.db.execute("UPDATE recovery_sessions SET status='running',token='00000000000000000000000000000000',lease_until=0 WHERE id=?", (job,))
+        item = manager.work(self.case, job, max_attempts=1)
+        self.assertEqual(item["attempts"], 1)
+        self.assertEqual(item["status"], "pending")
+
+    def test_encrypted_ssh_passphrase_is_validated_without_exporting_private_key(self):
+        key = ed25519.Ed25519PrivateKey.generate()
+        secret = key.private_bytes(serialization.Encoding.PEM, serialization.PrivateFormat.OpenSSH,
+                                   serialization.BestAvailableEncryption(b"synthetic-owner-passphrase"))
+        self.source.write_bytes(secret)
+        self.material.write_text("incorrect\nsynthetic-owner-passphrase\n")
+        job = self.start(mode="ssh-private")["id"]
+        result = self.sessions().work(self.case, job, max_attempts=4)
+        self.assertEqual(result["status"], "succeeded")
+        self.assertTrue(result["result"]["private_material_validated"])
+        report = self.core.report(self.case).read_text()
+        self.assertNotIn("synthetic-owner-passphrase", report)
+        self.assertNotIn(secret.decode().splitlines()[1], report)
+        self.assertNotIn("output", result["result"])
+
+    def test_invalid_mode_limits_and_oversized_material_are_rejected(self):
+        for kw in ({"mode":"zip"}, {"hours":0}, {"hours":float("nan")}, {"max_candidates":0}):
+            with self.subTest(kw=kw), self.assertRaises(CoreError):
+                self.start(**kw)
+        self.material.write_bytes(b"x"*(8*1024*1024+1))
+        with self.assertRaises(CoreError):
+            self.start()
+
+    def test_deadline_stops_before_trying_another_candidate(self):
+        manager = self.sessions()
+        job = self.start()["id"]
+        future = time.time() + 86410
+        with patch("cyber_core.cryptanalysis.sessions.time.time", return_value=future):
+            item = manager.work(self.case, job)
+        self.assertEqual(item["status"], "deadline")
+        self.assertEqual(item["attempts"], 0)
+
+    def test_tampered_evidence_or_plan_is_not_used(self):
+        manager = self.sessions()
+        job = self.start()["id"]
+        with self.core.db:
+            self.core.db.execute("UPDATE recovery_sessions SET mode='ssh-private' WHERE id=?", (job,))
+        with self.assertRaises(CoreError):
+            manager.work(self.case, job)
+        self.assertFalse(list(self.core.home.rglob("*.recovered")))
+
+
+    def test_show_list_and_report_reject_forged_state_or_result(self):
+        for field, value in (("status", "succeeded"), ("result", '{"authenticated":true}'), ("attempts", 9)):
+            with self.subTest(field=field):
+                manager = self.sessions()
+                job = self.start()["id"]
+                with self.core.db:
+                    self.core.db.execute("UPDATE recovery_sessions SET "+field+"=? WHERE id=?", (value, job))
+                for show in (lambda: manager.get(self.case,job), lambda: manager.jobs(self.case),
+                             lambda: self.core.report(self.case)):
+                    with self.assertRaises(CoreError):
+                        show()
+                # Restore only this synthetic adversarial row for the next subtest.
+                with self.core.db:
+                    self.core.db.execute("DELETE FROM recovery_sessions WHERE id=?", (job,))
+
+    def test_hard_interruption_never_publishes_uncommitted_plaintext(self):
+        self.material.write_text(self.key.hex()+"\n")
+        job = self.start()["id"]
+        code = (
+            "import os; from pathlib import Path; from cyber_core.service import Core; "
+            "import cyber_core.cryptanalysis.sessions as m; "
+            "core=Core("+repr(str(self.core.home))+"); original=m.run_bounded; "
+            "exec('def stop(*a,**k):\\n result=original(*a,**k)\\n os._exit(97)'); "
+            "m.run_bounded=stop; m.RecoverySessions(core).work("+repr(self.case)+","+repr(job)+")")
+        run = subprocess.run([sys.executable,"-c",code],capture_output=True,text=True,timeout=60)
+        self.assertEqual(run.returncode,97,run.stderr)
+        recovered = self.core.home/"cases"/self.case/"recovered"
+        self.assertFalse(list(recovered.glob("*.recovered")))
+        with self.core.db:
+            self.core.db.execute("UPDATE recovery_sessions SET lease_until=0 WHERE id=?", (job,))
+        done = self.sessions().work(self.case,job,max_attempts=1)
+        self.assertEqual(done["status"],"succeeded")
+        staging = self.core.home/"recovery-staging"
+        self.assertFalse(list(staging.rglob("*.pending")))
+
+    def test_case_cancellation_during_trial_discards_late_plaintext(self):
+        import cyber_core.cryptanalysis.sessions as module
+        self.material.write_text(self.key.hex()+"\n")
+        manager = self.sessions()
+        job = self.start()["id"]
+        original = module.run_bounded
+        def cancel_after_trial(*args,**kw):
+            response = original(*args,**kw)
+            self.core.cancel(self.case,reason="Synthetic in-flight cancellation")
+            return response
+        with patch.object(module,"run_bounded",side_effect=cancel_after_trial):
+            item = manager.work(self.case,job)
+        self.assertEqual(item["status"],"cancelled")
+        self.assertIsNone(item["result"])
+        self.assertFalse(list((self.core.home/"cases").rglob("*.recovered")))
+
+    def test_publication_interruption_is_reconciled_on_stop_boundaries(self):
+        for boundary in ("case_cancel","pause","deadline","revoke"):
+            with self.subTest(boundary=boundary):
+                self.case = self.core.investigate("synthetic","boundary",str(self.scope),"owner","Synthetic stop",recovery=True,valid_hours=72)
+                self.material.write_text(self.key.hex()+"\n")
+                job = self.start()["id"]
+                code = (
+                    "import os; from cyber_core.service import Core; "
+                    "import cyber_core.cryptanalysis.sessions as m; "
+                    "core=Core("+repr(str(self.core.home))+"); original=m.RecoverySessions._progress; "
+                    "exec('def stop(self,row):\\n if row[\"status\"]==\"succeeded\": os._exit(98)\\n return original(self,row)'); "
+                    "m.RecoverySessions._progress=stop; m.RecoverySessions(core).work("+repr(self.case)+","+repr(job)+")")
+                run = subprocess.run([sys.executable,"-c",code],capture_output=True,text=True,timeout=60)
+                self.assertEqual(run.returncode,98,run.stderr)
+                manager = self.sessions()
+                with self.core.db:
+                    self.core.db.execute("UPDATE recovery_sessions SET lease_until=0 WHERE id=?", (job,))
+                if boundary == "case_cancel":
+                    self.core.cancel(self.case,reason="Synthetic stop after interruption")
+                elif boundary == "pause":
+                    manager.pause(self.case,job)
+                elif boundary == "deadline":
+                    with patch("cyber_core.cryptanalysis.sessions.time.time",return_value=time.time()+86410):
+                        manager.work(self.case,job)
+                else:
+                    self.core.revoke(self.case)
+                    with self.assertRaises(CoreError):
+                        manager.work(self.case,job)
+                recovered = self.core.home/"cases"/self.case/"recovered"
+                self.assertFalse(list(recovered.glob("*.recovered")))
+                self.case = self.core.investigate("synthetic","next",str(self.scope),"owner","Synthetic",recovery=True,valid_hours=72)
+
+    def test_orphan_child_cannot_recreate_cancelled_staging_file(self):
+        self.material.write_text(self.key.hex()+"\n")
+        manager = self.sessions()
+        job = self.start()["id"]
+        ready,release,finished = (self.root/name for name in ("ready","release","finished"))
+        # Controlled child holds at the file-publication boundary. It is not an analyzed input.
+        child = ("from pathlib import Path; import time; "
+                 "release=Path("+repr(str(release))+"); output=Path(OUTPUT); "
+                 "exec('while not release.exists(): time.sleep(.01)'); "
+                 "exec('try:\\n output.write_bytes(b\"synthetic plaintext\")\\n state=\"created\"\\nexcept FileNotFoundError:\\n state=\"blocked\"'); "
+                 "Path("+repr(str(finished))+").write_text(state)")
+        worker = """import os,json,subprocess,sys
+from pathlib import Path
+from cyber_core.service import Core
+import cyber_core.cryptanalysis.sessions as m
+core = Core(STATE_PATH)
+def stop(command,prompt,**kw):
+    request = json.loads(prompt)
+    code = CHILD_TEMPLATE.replace("OUTPUT",repr(request["output"]))
+    subprocess.Popen([sys.executable,"-c",code],stdin=subprocess.DEVNULL,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
+    Path(READY_PATH).write_text("ready")
+    os._exit(99)
+m.run_bounded = stop
+m.RecoverySessions(core).work(CASE_ID,JOB_ID)
+""".replace("STATE_PATH",repr(str(self.core.home))).replace("CHILD_TEMPLATE",repr(child)).replace("READY_PATH",repr(str(ready))).replace("CASE_ID",repr(self.case)).replace("JOB_ID",repr(job))
+        run = subprocess.run([sys.executable,"-c",worker],capture_output=True,text=True,timeout=60)
+        self.assertEqual(run.returncode,99,run.stderr)
+        self.assertTrue(ready.exists())
+        manager.cancel(self.case,job)
+        release.write_text("release")
+        end = time.monotonic()+10
+        while not finished.exists() and time.monotonic()<end:
+            time.sleep(.01)
+        self.assertTrue(finished.exists())
+        self.assertEqual(finished.read_text(),"blocked")
+        self.assertFalse(list((self.core.home/"recovery-staging").rglob("*.pending")))
+
+    def test_trial_resource_failure_is_durable_and_not_automatically_retried(self):
+        import cyber_core.cryptanalysis.sessions as module
+        manager = self.sessions()
+        job = self.start()["id"]
+        with patch.object(module,"run_bounded",side_effect=CoreError("Agent timeout exceeded")):
+            item = manager.work(self.case,job)
+        self.assertEqual(item["status"],"resource_limited")
+        self.assertEqual(item["attempts"],1)
+        self.assertEqual(manager.work(self.case,job)["attempts"],1)
+
+
+    def test_case_pause_never_resurrects_cancelled_or_resource_limited_session(self):
+        import cyber_core.cryptanalysis.sessions as module
+        manager = self.sessions()
+        cancelled = self.start()["id"]
+        manager.cancel(self.case,cancelled)
+        limited = self.start()["id"]
+        with patch.object(module,"run_bounded",side_effect=CoreError("Agent timeout exceeded")):
+            manager.work(self.case,limited)
+        self.core.pause(self.case)
+        self.core.resume(self.case)
+        self.assertEqual(manager.get(self.case,cancelled)["status"],"cancelled")
+        self.assertEqual(manager.get(self.case,limited)["status"],"resource_limited")
+        with self.assertRaises(CoreError):
+            manager.resume(self.case,cancelled)
+        with self.assertRaises(CoreError):
+            manager.resume(self.case,limited)
+
+    def test_resume_retries_deferred_cleanup_before_forgetting_claim(self):
+        import cyber_core.cryptanalysis.sessions as module
+        self.material.write_text(self.key.hex()+"\n")
+        manager = self.sessions()
+        job = self.start()["id"]
+        code = (
+            "import os; from cyber_core.service import Core; import cyber_core.cryptanalysis.sessions as m; "
+            "core=Core("+repr(str(self.core.home))+"); original=m.run_bounded; "
+            "exec('def stop(*a,**k):\\n result=original(*a,**k)\\n os._exit(97)'); "
+            "m.run_bounded=stop; m.RecoverySessions(core).work("+repr(self.case)+","+repr(job)+")")
+        run = subprocess.run([sys.executable,"-c",code],capture_output=True,text=True,timeout=60)
+        self.assertEqual(run.returncode,97,run.stderr)
+        with patch.object(module,"_cleanup_claim",side_effect=OSError("Synthetic sharing violation")):
+            self.core.pause(self.case)
+        self.assertIsNotNone(self.core.db.execute("SELECT token FROM recovery_sessions WHERE id=?",(job,)).fetchone()[0])
+        self.core.resume(self.case)
+        manager.resume(self.case,job)
+        self.assertFalse(list((self.core.home/"recovery-staging").rglob("*.pending")))
+        self.assertIsNone(self.core.db.execute("SELECT token FROM recovery_sessions WHERE id=?",(job,)).fetchone()[0])
+
+if __name__ == "__main__":
+    unittest.main()

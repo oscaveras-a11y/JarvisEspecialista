@@ -43,7 +43,7 @@ jobs:
       PYTHONUNBUFFERED: "1"
       PIP_DISABLE_PIP_VERSION_CHECK: "1"
       CYBER_REQUIRE_CAPSTONE: "1"
-      CANDIDATE_SHA: 7f1ff4239a95b2a850e96e6c5a39bc191072f967
+      CANDIDATE_SHA: e22435d8919673a5d4f157b2fa529757d00aebe8
     defaults:
       run:
         shell: bash
@@ -57,7 +57,10 @@ jobs:
         id: combine
         run: |
           git cat-file -e "$CANDIDATE_SHA^{commit}"
-          git -c user.name="Integration validation" -c user.email="integration@example.invalid" merge --no-commit --no-ff "$CANDIDATE_SHA"
+          if ! git -c user.name="Integration validation" -c user.email="integration@example.invalid" merge --no-commit --no-ff "$CANDIDATE_SHA"; then
+            git diff --cc -- src/cyber_core/cli/__init__.py src/cyber_core/reporting/__init__.py
+            exit 1
+          fi
           git diff --check
           printf 'Candidate commit: %s\n' "$CANDIDATE_SHA" >> "$GITHUB_STEP_SUMMARY"
           printf 'Combination exists only in this disposable runner; no branch is pushed.\n' >> "$GITHUB_STEP_SUMMARY"

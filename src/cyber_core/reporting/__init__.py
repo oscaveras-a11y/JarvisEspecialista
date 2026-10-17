@@ -18,6 +18,14 @@ def write_report(core, case):
     from cyber_core.investigation.reasoning import snapshot_data
     data['reasoning'] = snapshot_data(core, case)
     # JSON is escaped so evidence-derived strings cannot terminate a Markdown code block.
+    from cyber_core.operations import saved_operations
+    data['operations'] = saved_operations(core, case)
+    if core.db.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='recovery_sessions'").fetchone():
+        from cyber_core.cryptanalysis.sessions import RecoverySessions
+        data['recovery_sessions'] = RecoverySessions(core).jobs(case)
+    if core.db.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='agent_jobs'").fetchone():
+        from cyber_core.orchestrator.broker import Broker
+        data['agent_jobs'] = Broker(core).jobs(case)
     payload = json.dumps(data, ensure_ascii=True, indent=2).replace('`', '\\u0060')
     text = '# CYBER CORE technical report\n\nStatus: ' + row['state'] + '\n\n'
     text += 'Static observations are reproducible experiments. Hypotheses remain unconfirmed.\n'

@@ -90,6 +90,8 @@ def parser():
         specialist.add_argument('case'); specialist.add_argument('path')
         specialist.add_argument('--compare-to', help='Second authorized input to compare without modification')
         specialist.add_argument('--queue-only', action='store_true')
+    from cyber_core.cli.operations import configure as configure_operations
+    configure_operations(sub)
     aes = sub.add_parser('recover-aes', help='Recover a CCAES1 AES-256-GCM envelope with supplied key')
     aes.add_argument('case')
     aes.add_argument('path')
@@ -165,7 +167,7 @@ def external_configuration(args):
 
 
 
-def main(argv=None):
+def _main(argv=None):
     core = None
     try:
         args = parser().parse_args(argv)
@@ -193,6 +195,9 @@ def main(argv=None):
             cmd = args.command
             if cmd in ('hypothesis', 'experiment', 'research', 'verify', 'history'):
                 from cyber_core.cli.science import execute
+                result = execute(core, args)
+            elif cmd in ('keys', 'inventory-disk', 'inventory-pcap', 'agent-jobs', 'recovery-session'):
+                from cyber_core.cli.operations import execute
                 result = execute(core, args)
             elif cmd == 'init':
                 result = {'initialized': True, 'home': str(core.home), 'schema': 8}
@@ -295,3 +300,21 @@ def main(argv=None):
     finally:
         if core is not None:
             core.close()
+
+
+def main(argv=None):
+    # Standalone metadata inspection does not create an operational database.
+    args = parser().parse_args(argv)
+    if args.command != "keys" or args.keys_action != "inspect":
+        return _main(argv)
+    try:
+        from cyber_core.recovery import inspect_key
+        result = inspect_key(args.path,max_bytes=args.key_max_bytes,timeout=args.timeout)
+        print(json.dumps(result,ensure_ascii=True,indent=2))
+        return 0
+    except (CoreError,OSError,ValueError) as exc:
+        message = str(exc) if isinstance(exc,CoreError) else "Invalid configuration or inaccessible local resource"
+        print("cyber: "+message,file=sys.stderr)
+        return 2
+    except KeyboardInterrupt:
+        return 130
