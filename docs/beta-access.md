@@ -1,71 +1,70 @@
-# Beta privado — controle exclusivo do proprietário
+# Beta pessoal — testes de funcionamento sem login
 
-**Escolha expressa do proprietário:** só ele usa e administra o beta;
-Codex e Claude continuam desenvolvendo e testando.
+**Orientação atual do proprietário:** o beta não precisa de login no momento.
+Primeiro ele quer testar e verificar o funcionamento. Essa orientação
+substitui a exigência anterior de autenticação antes do teste pessoal.
 
-**Estado atual: política registrada; autenticação e exclusividade operacional
-ainda não implementadas.** O projeto não oferece hoje um serviço hospedado
-com login. A CLI valida escopo e responsável declarado, mas isso não prova
-a identidade de quem a executa. Esta entrega não transforma esses campos
-em autenticação nem configura permissões externas.
+O uso e a administração do beta continuam reservados ao proprietário.
+Codex e Claude continuam desenvolvendo e testando nas tarefas autorizadas,
+sem pedir confirmação a cada execução de teste ou mudança já autorizada.
+
+## Escopo desta fase
+
+- Permitir o teste pessoal de funcionamento **sem criar login, senha, cadastro
+  ou sessão de autenticação**.
+- Não tratar a ausência de autenticação como bloqueio para esses testes.
+- Manter desenvolvimento e execução dos testes somente no GitHub, sem
+  instalar, clonar ou executar o produto no computador do proprietário.
+- Usar os testes e demonstrações com dados sintéticos/autorizados já
+  previstos no projeto; registrar o que funcionou, falhou e continua pendente.
+- Preservar a validação de escopo, limites de recursos, auditoria, integridade,
+  pausa, cancelamento e proteção dos resultados já implementados.
+- Manter Codex e Claude nos trabalhos de desenvolvimento e testes; não
+  conceder por isso operação de casos reais, administração do beta ou
+  autorização para convidar terceiros.
+- Não publicar um serviço nem ampliar acesso automaticamente. Qualquer
+  inclusão de usuários ou mudança para uso compartilhado exige nova decisão
+  do proprietário.
 
 ## Papéis
 
-| Papel | Identidade/escopo | Pode fazer |
+| Papel | Identidade/escopo | Pode fazer nesta fase |
 |---|---|---|
-| Proprietário do beta | GitHub user ID `329758463`, login atual `oscaveras-a11y` | Usar e administrar o beta quando o acesso autenticado estiver validado; decidir autorização de casos e acesso operacional |
-| Codex e Claude | Agentes de desenvolvimento, nas tarefas autorizadas | Implementar, revisar e testar amostras sintéticas em branches e runners GitHub |
-| Terceiros | Nenhuma concessão operacional definida | Sem uso/administração do beta; não abrir cadastro, convites ou compartilhamento automaticamente |
+| Proprietário do beta | `oscaveras-a11y`, GitHub user ID `329758463` | Testar o funcionamento e administrar o beta pessoal, sem login adicional da aplicação |
+| Codex e Claude | Agentes nas tarefas autorizadas | Implementar, revisar e executar testes sintéticos nos runners GitHub |
+| Terceiros | Sem concessão definida | Sem autorização de uso ou administração; nenhum cadastro ou convite automático |
 
-Permissões de repositório e permissões de aplicação são diferentes. Poder
-editar código ou executar CI não concede acesso a bancos, evidências,
-credenciais ou administração operacional do beta. Credenciais de operação
-devem permanecer separadas das credenciais de desenvolvimento.
+A reserva de uso ao proprietário é uma regra de operação. **Sem login da
+aplicação, ela não é uma garantia técnica de identidade ou de acesso
+exclusivo.** Isso não impede a fase pessoal de testes escolhida pelo
+proprietário. Autenticação fica fora do escopo atual e poderá ser retomada
+se ele solicitar posteriormente.
 
-O proprietário não escolheu aprovar cada execução de teste ou cada mudança
-de desenvolvimento. As autorizações de trabalho existentes continuam válidas.
-Publicação, inclusão de usuários e delegação administrativa não estão
-autorizadas por essa escolha.
+## Como verificar o funcionamento agora
 
-## Condições para liberar uso operacional
+No GitHub, consultar os resultados de **Actions / Offline validation** e
+os checks dos PRs. O workflow existente permite disparo manual pela
+interface do GitHub na branch padrão; isso usa o acesso normal à conta
+GitHub e não exige implementar login adicional no beta.
 
-1. Definir o ponto real de entrada e execução do beta. O repositório e os jobs
-   temporários de CI não são um serviço de investigação persistente.
-2. Autenticar o proprietário por uma identidade verificada. Validar o ID
-   permanente da conta, não nome digitado, parâmetro de CLI ou variável
-   de ambiente isolada. Não guardar senha/token em código, banco de casos,
-   logs ou artefatos.
-3. Aplicar a autorização exclusiva em todas as operações e leituras de dados
-   operacionais, inclusive administração, relatórios, memória e recuperação.
-   Ocultar botões ou confiar apenas no cliente não é suficiente.
-4. Negar acesso sem autenticação, com identidade diferente, sessão expirada
-   ou contexto inválido. Acesso de desenvolvimento não pode desativar a
-   verificação em um ambiente operacional.
-5. Preservar a restrição GitHub-only atual. Não instalar ferramentas ou
-   componentes no computador do proprietário; não levar dados reais de
-   clientes aos runners para testar o login.
-6. Validar casos positivos e negativos antes de declarar o beta exclusivo:
-   proprietário correto; outro usuário; mesmo nome com outro ID; ausência,
-   expiração e adulteração de credenciais; acesso direto a operações;
-   tentativa de usar perfil de testes para ler dados operacionais.
-7. Registrar evidência de validação e os limites reais do ambiente escolhido.
-   Não disponibilizar o beta a terceiros nem tratá-lo como serviço seguro
-   enquanto esses critérios estiverem pendentes.
+A validação existente instala o pacote somente no runner temporário,
+confere a CLI, executa a suíte e a demonstração sintética. Os resultados
+devem identificar o commit testado e as limitações. O repositório e os
+jobs de CI ainda não são um serviço persistente com painel interativo;
+não declarar que esse serviço já está disponível.
 
-Essas condições são requisitos da próxima implementação de controle de
-acesso; **não são testes já executados** nem garantias presentes.
+Bancos operacionais, evidências, segredos e dados reais de clientes
+continuam fora do Git e dos logs/artefatos de CI. A orientação de não
+instalar nada no computador permanece válida.
 
-## Verificação desta decisão
+## Referência de propriedade
 
-Em 2026-10-17, o conector autenticado do GitHub identificou o proprietário
-como `oscaveras-a11y` (ID `329758463`), confirmou sua permissão `admin` e
-a visibilidade `private` do repositório ID `1415716753`.
+Repositório atual: `oscaveras-a11y/JarvisEspecialista`, ID `1415716753`
+(o mesmo projeto antes chamado CyberCore). A consulta anterior do conector
+GitHub confirmou o proprietário `oscaveras-a11y` (ID `329758463`),
+permissão `admin` e visibilidade `private`; essa consulta não constitui
+login da aplicação nem inventário de todos os colaboradores.
 
-Isso confirma a identidade/permissão consultadas no GitHub, não exclusividade
-de administração de todos os colaboradores nem autenticação da aplicação.
-Não foram alterados colaboradores, visibilidade, proteção de branches,
-secrets, credenciais ou a branch do Claude.
-
-As regras para os dois agentes estão em [AGENTS.md](../AGENTS.md) e
-[CLAUDE.md](../CLAUDE.md). Nenhuma instalação ou execução do produto no
-computador do proprietário foi feita.
+As instruções para os dois agentes estão em [AGENTS.md](../AGENTS.md) e
+[CLAUDE.md](../CLAUDE.md). Esta atualização corrige a política e não remove
+autenticação de código: nenhum login da aplicação havia sido implementado.
