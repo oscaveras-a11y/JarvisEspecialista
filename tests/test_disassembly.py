@@ -137,5 +137,40 @@ class DisassemblyTests(unittest.TestCase):
         self.assertEqual(out.get("instructions", []), [])
 
 
+    def test_conflicting_elf_section_and_load_maps_are_not_guessed(self):
+        data = elf_fixture()
+        struct.pack_into("<Q", data, 0x180 + 64 + 24, 0x110)
+        data[0x110:0x114] = b"\xcc\xcc\xc3\x00"
+        out = self.parse(data)
+        self.assertEqual(out.get("status"), "conflicting_section_mapping")
+        self.assertEqual(out.get("instructions", []), [])
+
+    def test_section_cannot_turn_load_zero_fill_into_file_backed_code(self):
+        data = elf_fixture()
+        struct.pack_into("<Q", data, 24, 0x400108)
+        struct.pack_into("<Q", data, 0x180 + 64 + 16, 0x400108)
+        struct.pack_into("<Q", data, 0x180 + 64 + 24, 0x110)
+        struct.pack_into("<Q", data, 0x180 + 64 + 48, 1)
+        out = self.parse(data)
+        self.assertEqual(out.get("status"), "entry_not_file_backed")
+        self.assertEqual(out.get("instructions", []), [])
+
+    def test_non_load_segment_is_not_an_executable_image_map(self):
+        data = elf_fixture()
+        struct.pack_into("<I", data, 64, 4)
+        out = self.parse(data)
+        self.assertEqual(out.get("status"), "no_executable_load_map")
+        self.assertEqual(out.get("instructions", []), [])
+
+    def test_overlapping_pe_virtual_mappings_are_not_chosen_by_order(self):
+        data = pe_fixture()
+        table = 88 + 224
+        struct.pack_into("<IIII", data, table + 40 + 8, 4, 0x1000, 512, 0x400)
+        struct.pack_into("<I", data, table + 40 + 36, 0x60000020)
+        out = self.parse(data)
+        self.assertEqual(out.get("status"), "ambiguous_entry_mapping")
+        self.assertEqual(out.get("instructions", []), [])
+
+
 if __name__ == "__main__":
     unittest.main()
