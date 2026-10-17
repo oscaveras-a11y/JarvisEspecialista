@@ -17,7 +17,8 @@ O resultado mantém os campos antigos e acrescenta, em `firmware.metadata`:
   32/64 bits e ordens little/big endian. Permissões de segmento são separadas
   dos atributos de seção.
 - PE: base preferida da imagem, RVA e endereço preferido de entrada,
-  características, indicação DLL e seções PE32/PE32+.
+  características, indicação DLL e seções PE32/PE32+. RVA de entrada zero é
+  preservado como ausência: entry_point=null e has_entry_point=false.
 
 A seção ELF NOBITS pode declarar memória sem bytes armazenados. Não se lê
 nem se aloca sua extensão virtual. Segmentos LOAD também mantêm separados
@@ -39,7 +40,9 @@ confundidos com payloads de arquivo; regiões virtuais não são materializadas.
 
 Permanecem os limites anteriores de arquivo e supervisão. Numeração estendida
 ELF continua sem suporte. Tipos/flags desconhecidos são apresentados como
-valores, sem atribuir uma semântica inventada.
+valores, sem atribuir uma semântica inventada. SHF_COMPRESSED é rotulado;
+seu tamanho físico não é validado como múltiplo do tamanho lógico de entrada.
+Não há descompressão nem validação do cabeçalho/dados comprimidos neste incremento.
 
 ## Validação e pendências
 
@@ -57,6 +60,12 @@ Este incremento não conclui todo o item 6. Desmontagem, decompilação,
 importações/símbolos, formatos proprietários e integrações Ghidra/Capstone/
 Binwalk/equivalentes continuam separados. Strings do candidato Claude
 permanecem na branch dele; não foram copiadas nem integradas aqui.
+
+A revisão independente detectou entrada PE ausente tratada como base de imagem
+e validação de tamanho lógico sobre seção ELF comprimida. As duas regressões
+foram reproduzidas no run39037905810 (240 descobertos na combinação Linux,
+1 falha, 1 erro, 2 skips) antes das correções. São casos de compatibilidade,
+não provas de execução de DLL ou de descompressão.
 
 ## Referências primárias
 
