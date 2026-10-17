@@ -191,6 +191,32 @@ class BrokerTests(unittest.TestCase):
         self.assertEqual(out['status'], 'awaiting_resources')
         self.assertEqual(out['error'], 'authentication')
         self.assertIsNone(out['response'])
+    def test_malformed_adapter_usage_is_uncertain_without_unhandled_exception(self):
+        class Malformed(FixtureAgent):
+            def review(self, summary, workspace, *, should_stop=None):
+                return {'agent': 'codex', 'review': 'proposal',
+                        'independent_validation': False, 'usage': []}
+        self.broker = self.Broker(self.core, adapters={'codex': Malformed()})
+        job = self.enqueue()
+        self.assertEqual(self.broker.run_one(self.case, job)['status'], 'uncertain')
+    def test_schema_seven_is_not_downgraded_by_broker_initialization(self):
+        with self.core.db:
+            self.core.db.execute('PRAGMA user_version=7')
+        self.Broker(self.core)
+        self.assertEqual(self.core.db.execute('PRAGMA user_version').fetchone()[0], 7)
+    def test_pause_during_response_discards_proposal(self):
+        self.agent.action = lambda: self.core.pause(self.case)
+        job = self.enqueue()
+        self.assertEqual(self.broker.run_one(self.case, job)['status'], 'paused')
+        self.assertIsNone(self.broker.get(self.case, job)['response'])
+    def test_new_evidence_during_review_discards_proposal(self):
+        def more_evidence():
+            task = self.core.enqueue(self.case, self.sample)
+            self.core.run_one(self.case, task_id=task)
+        self.agent.action = more_evidence
+        job = self.enqueue()
+        self.assertEqual(self.broker.run_one(self.case, job)['status'], 'stale')
+        self.assertIsNone(self.broker.get(self.case, job)['response'])
     def test_no_evidence_cannot_be_reported_as_completed_review(self):
         empty = self.core.investigate('p', 'o', self.scope, 'owner', 'authorized')
         with self.assertRaises(CoreError):
