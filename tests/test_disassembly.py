@@ -1,0 +1,190 @@
+"""Capstone preview contracts over synthetic byte fixtures, never executed."""
+import importlib.util
+import os
+from pathlib import Path
+import struct
+import tempfile
+import unittest
+
+from cyber_core.firmware import analyze_firmware
+from cyber_core.service import Core
+from test_binary_structure import elf_fixture, pe_fixture
+
+
+class DisassemblyTests(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.root = Path(self.tmp.name)
+
+    def parse(self, data):
+        path = self.root / "input.bin"
+        path.write_bytes(data)
+        return analyze_firmware(path).get("code_preview", {})
+
+    def backend(self):
+        available = importlib.util.find_spec("capstone") is not None
+        if os.environ.get("CYBER_REQUIRE_CAPSTONE") == "1":
+            self.assertTrue(available, "The reverse-engineering CI job must install real Capstone")
+        return available
+
+    def test_optional_dependency_is_explicit_without_breaking_firmware(self):
+        preview = self.parse(elf_fixture())
+        if self.backend():
+            self.assertEqual(preview.get("status"), "decoded")
+            self.assertIn("backend_version", preview)
+        else:
+            self.assertEqual(preview.get("status"), "dependency_unavailable")
+
+    def test_opaque_binary_never_guesses_a_cpu(self):
+        preview = self.parse(b"\x90\x90\xc3")
+        self.assertEqual(preview.get("status"), "architecture_not_declared")
+        self.assertEqual(preview.get("instructions", []), [])
+
+    def test_real_x86_64_decoding_uses_file_backed_entry_bytes(self):
+        if not self.backend():
+            self.skipTest("Optional Capstone; required by the combined CI job")
+        data = elf_fixture()
+        data[0x100:0x104] = b"\x90\x90\xc3\x0f"
+        out = self.parse(data)
+        self.assertEqual([i["mnemonic"] for i in out["instructions"]], ["nop", "nop", "ret"])
+        self.assertEqual([i["address"] for i in out["instructions"]], [0x400100, 0x400101, 0x400102])
+        self.assertEqual(out["undecoded_bytes"], 1)
+        self.assertEqual(out["selection_basis"], "declared_entry_point")
+        self.assertIs(out["sample_truncated"], False)
+
+    def test_real_pe_preview_and_bounded_instruction_count(self):
+        if not self.backend():
+            self.skipTest("Optional Capstone; required by the combined CI job")
+        data = pe_fixture()
+        data[0x200:0x400] = b"\x90" * 512
+        struct.pack_into("<I", data, 88 + 224 + 8, 512)
+        out = self.parse(data)
+        self.assertEqual(len(out["instructions"]), 128)
+        self.assertTrue(out["instruction_limit_reached"])
+        self.assertEqual(out["instructions"][0]["address"], 0x401000)
+        self.assertEqual(out["source_file_offset"], 512)
+
+    def test_entry_in_zero_fill_memory_is_not_disassembled(self):
+        data = elf_fixture()
+        struct.pack_into("<Q", data, 24, 0x400108)
+        out = self.parse(data)
+        self.assertEqual(out.get("status"), "entry_not_file_backed")
+        self.assertEqual(out.get("instructions", []), [])
+
+    def test_preview_uses_real_child_and_persisted_copy(self):
+        if not self.backend():
+            self.skipTest("Optional Capstone; required by the combined CI job")
+        inputs = self.root / "inputs"
+        inputs.mkdir()
+        source = inputs / "sample.elf"
+        source.write_bytes(elf_fixture())
+        core = Core(self.root / "state")
+        self.addCleanup(core.close)
+        case = core.investigate("lab", "Disassembly control", inputs, "owner", "synthetic")
+        task = core.enqueue(case, source, tool="analyze-firmware")
+        result = core.run_one(case, task_id=task)
+        out = result["firmware"]["code_preview"]
+        self.assertEqual(out["instructions"][0]["mnemonic"], "nop")
+        self.assertTrue(result["copy_verified"])
+        self.assertEqual(core.results(case)[0]["firmware"]["code_preview"]["backend_version"], out["backend_version"])
+        self.assertIn("backend_version", core.report(case).read_text(encoding="utf-8"))
+
+
+    def test_invalid_first_opcode_does_not_claim_decoded_instructions(self):
+        if not self.backend():
+            self.skipTest("Optional Capstone; required by the combined CI job")
+        data = elf_fixture()
+        data[0x100] = 0x0f
+        struct.pack_into("<Q", data, 0x180 + 64 + 32, 1)
+        out = self.parse(data)
+        self.assertEqual(out["status"], "no_instructions_decoded")
+        self.assertEqual(out["instructions"], [])
+        self.assertEqual(out["undecoded_bytes"], 1)
+
+    def test_large_code_region_reports_sample_truncation(self):
+        if not self.backend():
+            self.skipTest("Optional Capstone; required by the combined CI job")
+        data = pe_fixture()
+        data.extend(bytes(0x2200 - len(data)))
+        data[0x200:0x2200] = b"\x90" * 8192
+        table = 88 + 224
+        struct.pack_into("<I", data, table + 8, 8192)
+        struct.pack_into("<I", data, table + 16, 8192)
+        struct.pack_into("<I", data, table + 40 + 12, 0x5000)
+        out = self.parse(data)
+        self.assertEqual(out["sample_bytes"], 4096)
+        self.assertTrue(out["sample_truncated"])
+        self.assertEqual(len(out["instructions"]), 128)
+
+
+    def test_real_aarch64_little_endian_instruction(self):
+        if not self.backend():
+            self.skipTest("Optional Capstone; required by the combined CI job")
+        data = elf_fixture(machine=183)
+        data[0x100:0x104] = b"\x1f\x20\x03\xd5"
+        out = self.parse(data)
+        self.assertEqual(out["architecture"], "aarch64")
+        self.assertEqual(out["instructions"][0]["mnemonic"], "nop")
+        self.assertEqual(out["decoded_bytes"], 4)
+        self.assertEqual(out["undecoded_bytes"], 0)
+
+    def test_aarch64_unaligned_entry_is_not_silently_rounded(self):
+        data = elf_fixture(machine=183)
+        struct.pack_into("<Q", data, 24, 0x400101)
+        out = self.parse(data)
+        self.assertEqual(out.get("status"), "unaligned_entry_point")
+        self.assertEqual(out.get("instructions", []), [])
+
+
+    def test_conflicting_elf_section_and_load_maps_are_not_guessed(self):
+        data = elf_fixture()
+        struct.pack_into("<Q", data, 0x180 + 64 + 24, 0x110)
+        data[0x110:0x114] = b"\xcc\xcc\xc3\x00"
+        out = self.parse(data)
+        self.assertEqual(out.get("status"), "conflicting_section_mapping")
+        self.assertEqual(out.get("instructions", []), [])
+
+    def test_section_cannot_turn_load_zero_fill_into_file_backed_code(self):
+        data = elf_fixture()
+        struct.pack_into("<Q", data, 24, 0x400108)
+        struct.pack_into("<Q", data, 0x180 + 64 + 16, 0x400108)
+        struct.pack_into("<Q", data, 0x180 + 64 + 24, 0x110)
+        struct.pack_into("<Q", data, 0x180 + 64 + 48, 1)
+        out = self.parse(data)
+        self.assertEqual(out.get("status"), "entry_not_file_backed")
+        self.assertEqual(out.get("instructions", []), [])
+
+    def test_non_load_segment_is_not_an_executable_image_map(self):
+        data = elf_fixture()
+        struct.pack_into("<I", data, 64, 4)
+        out = self.parse(data)
+        self.assertEqual(out.get("status"), "no_executable_load_map")
+        self.assertEqual(out.get("instructions", []), [])
+
+    def test_overlapping_pe_virtual_mappings_are_not_chosen_by_order(self):
+        data = pe_fixture()
+        table = 88 + 224
+        struct.pack_into("<IIII", data, table + 40 + 8, 4, 0x1000, 512, 0x400)
+        struct.pack_into("<I", data, table + 40 + 36, 0x60000020)
+        out = self.parse(data)
+        self.assertEqual(out.get("status"), "ambiguous_entry_mapping")
+        self.assertEqual(out.get("instructions", []), [])
+
+
+    def test_relocatable_elf_sections_keep_their_own_relative_address_context(self):
+        data = elf_fixture()
+        struct.pack_into("<H", data, 16, 1)
+        struct.pack_into("<Q", data, 24, 0)
+        struct.pack_into("<Q", data, 32, 0)
+        struct.pack_into("<H", data, 56, 0)
+        struct.pack_into("<Q", data, 0x180 + 64 + 16, 0)
+        struct.pack_into("<Q", data, 0x180 + 2 * 64 + 16, 0)
+        out = self.parse(data)
+        self.assertEqual(out.get("status"), "decoded" if self.backend() else "dependency_unavailable")
+        self.assertEqual(out.get("source_file_offset"), 256)
+        self.assertEqual(out.get("start_address"), 0)
+
+
+if __name__ == "__main__":
+    unittest.main()

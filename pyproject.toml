@@ -9,6 +9,9 @@ description = "Authorized local investigation engine"
 requires-python = ">=3.12"
 dependencies = ["cryptography>=50.0.2,<51"]
 
+[project.optional-dependencies]
+reverse = ["capstone>=5.0.9,<6"]
+
 [project.scripts]
 cyber = "cyber_core.cli:main"
 

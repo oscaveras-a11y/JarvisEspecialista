@@ -13,7 +13,7 @@ A orientação atual de ambiente prevalece sobre o plano local inicial: desenvol
 
 ## Controle do beta
 
-O proprietário é o único usuário e administrador previsto do beta; Codex e Claude continuam desenvolvendo e testando nas tarefas autorizadas, sem aprovação individual a cada execução. A [política de acesso](beta-access.md) distingue essa regra da autenticação ainda pendente. As instruções comuns estão em [AGENTS.md](../AGENTS.md).
+O proprietário é o único usuário e administrador previsto do beta; Codex e Claude continuam desenvolvendo e testando nas tarefas autorizadas, sem aprovação individual a cada execução. O proprietário decidiu testar o funcionamento primeiro, **sem login da aplicação nesta fase**. A [política de testes pessoais](beta-access.md) adia a autenticação e preserva o trabalho autorizado dos agentes. As instruções comuns estão em [AGENTS.md](../AGENTS.md).
 
 ## Entregas Codex
 

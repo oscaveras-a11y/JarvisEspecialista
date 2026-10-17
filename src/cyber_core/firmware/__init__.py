@@ -153,7 +153,10 @@ def _elf(data):
             _fail('ELF table outside input or invalid entry size')
     if shstr and shstr >= shnum:
         _fail('invalid ELF string table index')
-    return {'class_bits': bits, 'endian': endian, 'machine': machine, 'type': typ, 'entry_point': entry, 'validation_scope': 'ELF header and table bounds only'}
+    from cyber_core.firmware.structures import elf_details
+    details = elf_details(data, bits=bits, endian=endian, machine=machine,
+                          phoff=phoff, phnum=phnum, shoff=shoff, shnum=shnum, shstr=shstr)
+    return {'class_bits': bits, 'endian': endian, 'machine': machine, 'type': typ, 'entry_point': entry, **details}
 
 
 def _pe(data):
@@ -162,7 +165,7 @@ def _pe(data):
     offset = int.from_bytes(data[60:64], 'little')
     if offset < 64 or offset + 24 > len(data) or data[offset:offset + 4] != b'PE\0\0':
         _fail('invalid PE signature or COFF header bounds')
-    machine, sections, _, _, _, optional_size, _ = struct.unpack_from('<HHIIIHH', data, offset + 4)
+    machine, sections, _, _, _, optional_size, characteristics = struct.unpack_from('<HHIIIHH', data, offset + 4)
     optional = offset + 24
     end = optional + optional_size
     if optional_size < 2 or end + sections * 40 > len(data):
@@ -179,7 +182,10 @@ def _pe(data):
         raw_size, raw_offset = struct.unpack_from('<II', data, section + 16)
         if raw_size and (raw_offset < end + sections * 40 or raw_offset + raw_size > len(data)):
             _fail('PE section outside input')
-    return {'class_bits': 32 if magic == 0x10b else 64, 'endian': 'little', 'machine': machine, 'sections': sections, 'validation_scope': 'PE headers and raw section bounds only'}
+    from cyber_core.firmware.structures import pe_details
+    details = pe_details(data, machine=machine, optional=optional, optional_size=optional_size,
+                         sections=sections, magic=magic, characteristics=characteristics)
+    return {'class_bits': 32 if magic == 0x10b else 64, 'endian': 'little', 'machine': machine, 'sections': sections, **details}
 
 
 def _load(path, max_bytes, max_records, max_decoded_bytes):
@@ -205,6 +211,8 @@ def _load(path, max_bytes, max_records, max_decoded_bytes):
         result.update(address_min=min(memory), address_max=max(memory), address_space='absolute')
     else:
         result['address_space'] = 'file_offset'
+    from cyber_core.reverse_engineering.disassembly import preview
+    result['code_preview'] = preview(data, {**metadata, 'endian': metadata.get('endian', 'little')})
     return result, data if memory is None else memory
 
 
