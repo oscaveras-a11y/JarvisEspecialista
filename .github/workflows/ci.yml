@@ -2,9 +2,9 @@ name: Offline validation
 
 on:
   pull_request:
-    branches: [main]
+    branches: [main, 'claude/gifted-gates-kd07xv']
   push:
-    branches: [main, codex/github-validation]
+    branches: [main, codex/github-validation, codex/candidate-corrections]
   workflow_dispatch:
 
 permissions:
