@@ -86,6 +86,11 @@ def parser():
     aes.add_argument('--key-file', required=True, help='Local protected file containing exactly 32 raw bytes; never logged')
     aes.add_argument('--expected-sha256')
     aes.add_argument('--expected-format')
+    strings = sub.add_parser('strings', help='Extract bounded ASCII/UTF-16LE strings from an authorized file (static)')
+    strings.add_argument('case')
+    strings.add_argument('path')
+    strings.add_argument('--min-length', type=int, default=4)
+    strings.add_argument('--max-strings', type=int, default=1000)
     differ = sub.add_parser('differentiate', help='Statically differentiate encoding vs compression vs encryption vs structured')
     differ.add_argument('case')
     differ.add_argument('path')
@@ -158,6 +163,8 @@ def main(argv=None):
                 result = core.self_test_recovery(args.case, args.path, candidates, max_attempts=args.max_candidates, max_seconds=args.max_seconds)
             elif cmd == 'run':
                 result = core.run_one(args.case)
+            elif cmd == 'strings':
+                result = core.extract_strings(args.case, args.path, min_length=args.min_length, max_strings=args.max_strings)
             elif cmd == 'differentiate':
                 result = core.differentiate_content(args.case, args.path)
             elif cmd == 'assess-recovery':

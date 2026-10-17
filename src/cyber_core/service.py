@@ -473,6 +473,26 @@ class Core:
                     break
         return matches
 
+    def extract_strings(self, case, path, *, min_length=4, max_strings=1000, max_sample=1048576):
+        # Static string extraction (item 6) over a bounded prefix of an authorized file.
+        # Strings go to the operator; the audit records only counts, not evidence content.
+        if not isinstance(max_sample, int) or not 1 <= max_sample <= 16 * 1024 * 1024:
+            raise CoreError('Invalid string extraction sample limit')
+        self.authorize(case)
+        source = self.authorize(case, path)
+        if source.stat().st_size > self.max_bytes:
+            raise CoreError('File exceeds byte limit')
+        with source.open('rb') as handle:
+            sample = handle.read(max_sample)
+            truncated = bool(handle.read(1))
+        from cyber_core.reverse_engineering.strings import extract_strings
+        result = extract_strings(sample, min_length=min_length, max_strings=max_strings)
+        result['sample_truncated'] = truncated
+        with self.db:
+            self.authorize(case)
+            audit(self.db, case, 'strings_extracted', {'counts': result['counts'], 'min_length': min_length})
+        return result
+
     def differentiate_content(self, case, path, *, max_sample=65536):
         # Static differentiation (item 7): encoding vs compression vs encryption vs
         # structured, over a bounded prefix. Never asserts encryption from entropy alone.
