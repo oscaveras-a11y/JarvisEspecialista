@@ -150,6 +150,10 @@ class Reasoning:
 
     def rank(self, case):
         self.flow._ready(case)
+        return self._ranking(case)
+
+    def _ranking(self, case):
+        self.core.get(case)
         items = []
         for row in self.db.execute('SELECT * FROM reasoning_strategies WHERE case_id=? ORDER BY created,id', (case,)):
             strategy = dict(row)
@@ -248,6 +252,13 @@ class Reasoning:
                                                   (case, fingerprint)) if strategy is None or r['strategy_id'] == strategy]
             if matches:
                 cycle = dict(matches[0])
+                projection = next(r for r in current if r['id'] == cycle['strategy_id'])
+                if projection['revision'] != cycle['hypothesis_revision']:
+                    return self._finish(case, cycle, 'STALE', error='Hypothesis changed before resuming reserved task')
+                committed_run = self.db.execute('SELECT 1 FROM experiment_runs WHERE task_id=? AND experiment_id=? AND hypothesis_revision=?',
+                                                (cycle['task_id'], projection['experiment'], cycle['hypothesis_revision'])).fetchone()
+                if not projection['eligible'] and committed_run is None:
+                    return self._idle([projection])
             else:
                 selected = next((r for r in current if r['eligible'] and (strategy is None or r['id'] == strategy)), None)
                 if selected is None:
@@ -296,12 +307,16 @@ class Reasoning:
                               (plan['id'], cycle['task_id'], cycle['hypothesis_revision'])).fetchone()
         if run is None:
             try:
-                run = self.flow.evaluate(case, plan['id'], cycle['task_id'], operator=actor)
+                run = self.flow.evaluate(case, plan['id'], cycle['task_id'], operator=actor,
+                                         expected_revision=cycle['hypothesis_revision'])
             except (CoreError, sqlite3.IntegrityError):
                 # Concurrent resumers may observe the same committed evaluation.
                 run = self.db.execute('SELECT * FROM experiment_runs WHERE experiment_id=? AND task_id=? AND hypothesis_revision=?',
                                       (plan['id'], cycle['task_id'], cycle['hypothesis_revision'])).fetchone()
                 if run is None:
+                    current_hypothesis = self.flow._row('hypothesis_records', case, plan['hypothesis_id'])
+                    if current_hypothesis['revision'] != cycle['hypothesis_revision']:
+                        return self._finish(case, cycle, 'STALE', error='Hypothesis changed at evaluation boundary')
                     raise
         return self._finish(case, cycle, 'EVALUATED', run=dict(run))
 
@@ -336,12 +351,18 @@ class Reasoning:
         strategies = [dict(r) for r in self.db.execute('SELECT * FROM reasoning_strategies WHERE case_id=? ORDER BY created,id', (case,))]
         for strategy in strategies:
             strategy['evidence'], strategy['sources'] = json.loads(strategy['evidence']), json.loads(strategy['sources'])
+        priorities = self._ranking(case)
+        execution_allowed = not (row['paused'] or row['revoked'] or row['expires'] <= time.time() or row['state'] == 'CANCELADO')
+        if not execution_allowed:
+            for priority in priorities:
+                priority['eligible'] = False
+                priority['reasons'].append('Investigation is paused, cancelled, revoked or expired')
         return {'contract_version': 1, 'case': case, 'objective': row['objective'],
                 'facts': facts, 'technologies': sorted({f['format'] for f in facts}),
                 'hypotheses': science['hypotheses'], 'sources': science['sources'],
                 'inferences': [n for n in notes if n['kind'] == 'INFERENCE'],
                 'unknowns': [n for n in notes if n['kind'] == 'UNKNOWN'],
-                'strategies': strategies,
+                'strategies': strategies, 'priorities': priorities, 'execution_allowed': execution_allowed,
                 'blockers': [dict(r) for r in self.db.execute('SELECT * FROM reasoning_blockers WHERE case_id=? ORDER BY created,id', (case,))],
                 'cycles': [dict(r) for r in self.db.execute('SELECT * FROM reasoning_cycles WHERE case_id=? ORDER BY created,id', (case,))],
                 'validated_resolution': row['state'] == 'RESOLVIDO',
