@@ -70,12 +70,18 @@ def assess_recovery(core, case, path, *, max_files=100, recursive=False, queue_o
             tasks.append(task)
         audit(core.db, case, 'recovery_batch_queued', {'count': len(tasks), 'skipped': skipped, 'declared_bytes': total,
                                                    'max_files': max_files, 'max_total_bytes': max_total_bytes, 'recursive': recursive})
-    output = {'tasks': tasks, 'results': [], 'failures': [], 'pending_tasks': [], 'skipped': skipped,
+    output = {'tasks': tasks, 'results': [], 'failures': [], 'pending_tasks': [], 'cancelled_tasks': [], 'skipped': skipped,
               'status': 'queued' if queue_only else 'completed', 'recovery_demonstrated': False}
     if queue_only:
         return output
     started, processed_bytes = time.monotonic(), 0
     for index, task in enumerate(tasks):
+        if core.get(case)['state'] == 'CANCELADO':
+            remaining_ids = set(tasks[index:])
+            output['cancelled_tasks'] = [row['id'] for row in core.tasks(case)
+                                         if row['id'] in remaining_ids and row['status'] == 'cancelled']
+            output['status'] = 'cancelled'
+            break
         remaining = core.timeout - (time.monotonic() - started)
         if remaining <= 0 or processed_bytes >= max_total_bytes:
             output['pending_tasks'] = tasks[index:]
@@ -89,6 +95,12 @@ def assess_recovery(core, case, path, *, max_files=100, recursive=False, queue_o
                 output['results'].append(result)
                 processed_bytes += result['size']
         except CoreError as exc:
+            if core.get(case)['state'] == 'CANCELADO':
+                remaining_ids = set(tasks[index:])
+                output['cancelled_tasks'] = [row['id'] for row in core.tasks(case)
+                                             if row['id'] in remaining_ids and row['status'] == 'cancelled']
+                output['status'] = 'cancelled'
+                break
             durable = core.db.execute('SELECT status FROM tasks WHERE id=?', (task,)).fetchone()
             if durable['status'] in ('pending', 'running'):
                 # Pause/revocation/expiry may reject a claim without failing its durable task.
@@ -105,5 +117,6 @@ def assess_recovery(core, case, path, *, max_files=100, recursive=False, queue_o
     with core.db:
         audit(core.db, case, 'recovery_batch_checkpoint', {'completed': len(output['results']),
                                                        'failed': len(output['failures']), 'pending': len(output['pending_tasks']),
+                                                       'cancelled': len(output['cancelled_tasks']),
                                                        'status': output['status']})
     return output
