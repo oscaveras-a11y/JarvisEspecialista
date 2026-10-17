@@ -132,4 +132,26 @@ O que faltava, documentado na própria docstring de `analysis_process/__init__.p
 
 Validação: suíte completa **387 testes OK** (384 + 3), `compileall`, `demo.py` e `try-me.py` exit 0 — confirmando que as análises legítimas (que nunca precisaram de rede) continuam funcionando normalmente.
 
+## Item 18 (par do Codex) — testes obrigatórios: auditoria de cobertura
+
+Em vez de escrever testes novos sem necessidade real (o que violaria a diretriz de não adicionar trabalho sem lacuna concreta), auditei a suíte de **387 testes** já existente contra cada categoria exigida pelo item 18. Mapeamento (arquivo representativo de cada categoria; não exaustivo):
+
+- Inicialização do CORE — `tests/test_core.py`, `cmd == 'init'` na CLI.
+- Comunicação com Codex — `tests/test_agent_adapters.py`, `tests/test_agent_broker.py` (`CodexAdapter`).
+- Funcionamento sem Claude Code — `tests/test_agent_broker.py::test_missing_agent_waits_for_resources_and_local_analysis_still_works`: agente `claude` indisponível vira `awaiting_resources` (nunca erro fatal) e a análise local do arquivo continua funcionando no mesmo caso.
+- Persistência da memória — `tests/test_backup_restore.py`, `side_analyses` em `tests/test_forensics_protocols_service.py`/`test_implementation_audit.py`/etc.
+- Retomada de tarefas — `tests/test_orchestration_beta.py` (`test_expired_lease_is_resumed_by_cli_without_duplicate_result`, `test_pause_stops_between_tasks_and_resume_preserves_queue`).
+- Detecção de falhas — `test_failed_task_does_not_stop_other_authorized_work`, `test_exhausted` (lease/tentativas esgotadas).
+- Controle de permissões — `scoped_path`/`authorize` em praticamente todo arquivo de teste de análise; `_executable()` em `tests/test_agents.py`.
+- Análise de arquivos de exemplo — `scripts/demo.py`, `scripts/try-me.py`, `tests/test_core.py`.
+- Identificação de formatos — `tests/test_binary_structure.py`, `tests/test_firmware.py`, `tests/test_forensics_protocols.py` (MBR/GPT), `tests/test_forensics_protocols.py`/`protocols_pcap` (PCAP).
+- Cálculo de hashes — SHA-256 verificado em quase todo teste de análise (`result['sha256']`/`hashlib.sha256(raw).hexdigest()`).
+- Execução isolada de ferramentas — `tests/test_process_isolation.py`, `tests/test_process_contracts.py`.
+- Geração de relatórios — `tests/test_core.py` (relatório contém o sha256 do caso), `tests/test_cli.py::test_new_process_pause_resume_report`.
+- Cancelamento seguro — `tests/test_orchestration_beta.py` (`test_cancellation_is_idempotent_and_preserves_prior_evidence`, `test_cancelled_case_cannot_resume_enqueue_recover_or_finalize`).
+- Recuperação após interrupções — `test_interrupt_after_commit_preserves_committed_evidence`, `test_interruption_releases_claim_and_removes_partial_copy`.
+- Proteção contra comandos fora do escopo — `scoped_path` rejeitando caminho fora do escopo em `tests/test_core.py` e outros.
+
+**Resultado da auditoria: nenhuma lacuna real encontrada** nas categorias exigidas pelo item 18 — todas já têm teste correspondente com arquivo sintético/autorizado, sem afirmação de funcionamento de ferramenta externa sem teste real (Ghidra/Binwalk seguem declarados como não testados de ponta a ponta, item 6). Não escrevi testes redundantes só para "mostrar trabalho"; os únicos testes novos desta rodada (itens 8/10/12/14) cobrem lacunas reais que identifiquei, já documentadas nas seções correspondentes acima.
+
 **Honestidade sobre o que NÃO foi feito agora (item 6, Ghidra/Binwalk):** o PR #13 do Codex (`reverse_engineering/external.py::analyze_external`) adiciona adaptadores opcionais para Ghidra 12.1.4 e Binwalk 3.1.0, exigindo configuração explícita com caminhos absolutos (`ghidra.home`, `java_home`, `binwalk.executable`). Esse módulo foi mergeado (código presente, testado para degradar graciosamente sem fabricar resultado quando as ferramentas não existem — confirmado via `which ghidra`/`which binwalk`, ambos vazios neste sandbox), mas a integração ao `Core`/CLI **ainda não foi feita**. Motivo: essa integração exige supervisão real de processo externo (Ghidra/Binwalk de fato instalados, com os caminhos configurados) para ser validada de ponta a ponta sem fabricar sucesso — o que este sandbox não tem disponível. Fica como próxima etapa explícita, não escondida.
