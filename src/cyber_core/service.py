@@ -209,10 +209,12 @@ class Core:
             remaining = budget - (time.monotonic() - started)
             if remaining <= 0:
                 raise CoreError('Analysis time budget exhausted')
+            configured = getattr(self, 'external_tools', {})
+            external = {'external_tools': configured} if task['tool'] == 'analyze-firmware' and configured else {}
             result = analyze_in_process(source, output, byte_limit, remaining, tool=task['tool'],
                                         secondary_source=secondary_source, secondary_destination=secondary_output,
                                         secondary_max_bytes=self.max_bytes, should_stop=check_claim,
-                                        on_started=record_process)
+                                        on_started=record_process, **external)
             result.update(task_id=task['id'], tool=task['tool'])
             if time.monotonic() - started > budget:
                 raise CoreError('Analysis resource limit exceeded')
@@ -271,6 +273,12 @@ class Core:
     def run_queue(self, case, **limits):
         from cyber_core.orchestrator.worker import run_queue
         return run_queue(self, case, **limits)
+
+    def configure_external_tools(self, config):
+        from cyber_core.reverse_engineering.external import _config
+        parsed = _config(config)
+        self.external_tools = {name: {key: str(value) for key, value in fields.items()}
+                               for name, fields in parsed.items()}
 
     def cancel(self, case, *, reason):
         if not isinstance(reason, str) or not reason.strip() or len(reason) > 1024:
