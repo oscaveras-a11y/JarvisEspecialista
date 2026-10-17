@@ -68,10 +68,11 @@ def stop_case_sessions(core, case, *, state="cancelled"):
             _cleanup_claim(core,row)
         except (OSError,CoreError):
             deferred = True
+        desired = (row["status"] if state == "paused" and row["status"] in ("cancelled","resource_limited","deadline") else state)
         token = row["token"] if deferred else None
-        core.db.execute("UPDATE recovery_sessions SET status=?,token=?,lease_until=0 WHERE id=?",(state,token,row["id"]))
-        event = "recovery_session_paused" if state == "paused" else "recovery_session_cancelled"
-        payload = {"session":row["id"],"cleanup_deferred":deferred}
+        core.db.execute("UPDATE recovery_sessions SET status=?,token=?,lease_until=0 WHERE id=?",(desired,token,row["id"]))
+        event = "recovery_session_checkpoint"
+        payload = {"session":row["id"],"status":desired,"attempts":row["attempts"],"cleanup_deferred":deferred}
         core.db.execute("INSERT INTO checkpoints(case_id,event,data,created) VALUES(?,?,?,?)",(case,event,encoded(payload),utc()))
         audit(core.db,case,event,payload)
 
@@ -261,8 +262,9 @@ class RecoverySessions:
                     raise CoreError("Resource-limited trial requires an explicit retry reason")
             elif action == "resume" and row["status"] != "paused":
                 raise CoreError("Only paused recovery sessions can resume")
-            if action in ("cancel","pause"):
-                self._cleanup(row)
+            # Resume must finish any deferred cleanup before it can forget the
+            # old claim identity. A filesystem error leaves the paused row intact.
+            self._cleanup(row)
             self.db.execute("UPDATE recovery_sessions SET status=?,token=NULL,lease_until=0 WHERE id=?", (state,job))
             self._event(case,"recovery_session_"+{"pause":"paused","resume":"resumed","cancel":"cancelled"}[action],{"session":job})
         return self.get(case,job)

@@ -59,3 +59,7 @@ O sandbox do CLI é dependência externa. Nomes de revisores são declarações,
 - [Análise CAN](docs/can.md)
 
 Referências da automação: [actions/checkout](https://github.com/actions/checkout), [actions/setup-python](https://github.com/actions/setup-python) e [eventos do GitHub Actions](https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows).
+
+## Teste dos módulos de recuperação, perícia e agentes
+
+Consulte [o guia do beta e suas pendências externas](docs/pending-modules-beta.md) para os comandos, limites e teste pelo GitHub Actions. Os agentes só terão comunicação real validada após configuração das credenciais pelo proprietário e resposta efetiva dos provedores.
