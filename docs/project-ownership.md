@@ -11,6 +11,10 @@ A divisão atribui funcionalidades e revisão de contratos; não transforma um a
 
 A orientação atual de ambiente prevalece sobre o plano local inicial: desenvolvimento e testes desta entrega **somente no GitHub**, sem instalar ou executar o projeto no computador do proprietário. Usar somente entradas sintéticas/autorizadas nos testes; nenhum segredo ou evidência de cliente deve ir para o repositório ou CI.
 
+## Controle do beta
+
+O proprietário é o único usuário e administrador previsto do beta; Codex e Claude continuam desenvolvendo e testando nas tarefas autorizadas, sem aprovação individual a cada execução. A [política de acesso](beta-access.md) distingue essa regra da autenticação ainda pendente. As instruções comuns estão em [AGENTS.md](../AGENTS.md).
+
 ## Entregas Codex
 
 [PR #4](https://github.com/oscaveras-a11y/CyberCore/pull/4), integrado na main em `3d5329066e41fdb585520182abc8f3522410589f`: supervisão de processos de análise (seções 12 e 14), seus testes (18), documentação/entrega (16 e 20). Não acrescenta funcionalidades de criptografia, interface, memória ou pesquisa das seções ímpares.
