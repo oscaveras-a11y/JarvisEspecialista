@@ -350,5 +350,22 @@ class ReasoningTests(unittest.TestCase):
             self.engine.rank(self.case)
 
 
+    def test_failed_input_is_not_repeated_and_next_independent_strategy_can_run(self):
+        hypothesis = self.flow.add_hypothesis(self.case, 'Input contains a CAN capture', author='analyst')
+        experiment = self.flow.plan_experiment(self.case, hypothesis, 'Parse CAN', author='analyst',
+                                               criterion='A capture is parsed',
+                                               assertions=[{'field': 'can.frames', 'op': 'gt', 'value': 0}],
+                                               tool='analyze-can')
+        self.engine.register(self.case, experiment, actor='analyst', cost=0, rationale='Check a format hypothesis')
+        self.strategy(cost=5)
+        with self.assertRaises(CoreError):
+            self.engine.step(self.case, self.source, actor='operator')
+        self.assertEqual(self.core.tasks(self.case)[0]['status'], 'failed')
+        out = self.engine.step(self.case, self.source, actor='operator')
+        self.assertEqual(out['status'], 'evaluated')
+        self.assertEqual(out['run']['outcome'], 'supports')
+        self.assertEqual(len(self.core.tasks(self.case)), 2)
+
+
 if __name__ == '__main__':
     unittest.main()
