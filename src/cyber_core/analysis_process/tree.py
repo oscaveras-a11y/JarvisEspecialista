@@ -54,6 +54,13 @@ class WindowsTree:
         self.api.QueryInformationJobObject.restype = wintypes.BOOL
         self.api.WaitForSingleObject.argtypes = [wintypes.HANDLE, wintypes.DWORD]
         self.api.WaitForSingleObject.restype = wintypes.DWORD
+        self.api.CreateIoCompletionPort.argtypes = [wintypes.HANDLE, wintypes.HANDLE, ctypes.c_size_t, wintypes.DWORD]
+        self.api.CreateIoCompletionPort.restype = wintypes.HANDLE
+        self.api.GetQueuedCompletionStatus.argtypes = [wintypes.HANDLE, ctypes.POINTER(wintypes.DWORD),
+                                                       ctypes.POINTER(ctypes.c_size_t), ctypes.POINTER(ctypes.c_void_p),
+                                                       wintypes.DWORD]
+        self.api.GetQueuedCompletionStatus.restype = wintypes.BOOL
+        self.port, self.assigned = None, False
         self.api.CloseHandle.argtypes = [wintypes.HANDLE]
         self.api.CloseHandle.restype = wintypes.BOOL
         self.handle = self.api.CreateJobObjectW(None, None)
@@ -64,12 +71,23 @@ class WindowsTree:
             info.BasicLimitInformation.LimitFlags = 0x2000  # KILL_ON_JOB_CLOSE, no breakaway
             if not self.api.SetInformationJobObject(self.handle, 9, ctypes.byref(info), ctypes.sizeof(info)):
                 raise ctypes.WinError(ctypes.get_last_error())
+            # Associate while the job is empty, so shutdown notifications include
+            # members born after our handle snapshot.
+            self.port = self.api.CreateIoCompletionPort(wintypes.HANDLE(-1), None, 0, 1)
+            if not self.port:
+                raise ctypes.WinError(ctypes.get_last_error())
+            class Association(ctypes.Structure):
+                _fields_ = [('CompletionKey', ctypes.c_void_p), ('CompletionPort', wintypes.HANDLE)]
+            association = Association(1, self.port)
+            if not self.api.SetInformationJobObject(self.handle, 7, ctypes.byref(association), ctypes.sizeof(association)):
+                raise ctypes.WinError(ctypes.get_last_error())
             handle = self.api.OpenProcess(0x0100 | 0x0001, False, process.pid)  # SET_QUOTA | TERMINATE
             if not handle:
                 raise ctypes.WinError(ctypes.get_last_error())
             try:
                 if not self.api.AssignProcessToJobObject(self.handle, handle):
                     raise ctypes.WinError(ctypes.get_last_error())
+                self.assigned = True
             finally:
                 self.api.CloseHandle(handle)
         except BaseException:
@@ -114,11 +132,30 @@ class WindowsTree:
                     raise OSError('Analysis process termination did not finish in time')
                 if outcome != 0:
                     raise ctypes.WinError(ctypes.get_last_error())
+            for member in members:
+                self.api.CloseHandle(member)
+            members.clear()
+            if self.assigned and self.port:
+                from ctypes import wintypes
+                message, key, overlapped = wintypes.DWORD(), ctypes.c_size_t(), ctypes.c_void_p()
+                while True:
+                    remaining_ms = max(0, int((deadline - time.monotonic()) * 1000))
+                    if remaining_ms == 0:
+                        raise OSError('Analysis job termination could not be confirmed')
+                    received = self.api.GetQueuedCompletionStatus(self.port, ctypes.byref(message),
+                                ctypes.byref(key), ctypes.byref(overlapped), remaining_ms)
+                    if not received:
+                        raise ctypes.WinError(ctypes.get_last_error())
+                    if key.value == 1 and message.value == 4:  # ACTIVE_PROCESS_ZERO
+                        break
         finally:
             for member in members:
                 self.api.CloseHandle(member)
             # KILL_ON_JOB_CLOSE is retained even if enumeration/wait fails.
             self.api.CloseHandle(handle)
+            if self.port:
+                self.api.CloseHandle(self.port)
+                self.port = None
 
 
 def attach(process):
