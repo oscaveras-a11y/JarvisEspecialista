@@ -55,6 +55,14 @@ def execute(request):
         result['can'] = analyze_can(output, max_bytes=min(maximum, 16777216))
         if secondary:
             result['can_comparison'] = compare_can(output, secondary, max_bytes=min(request['secondary_max_bytes'], 16777216))
+    if tool == 'analyze-firmware' and request.get('external_tools'):
+        from cyber_core.reverse_engineering.external import analyze_external
+        remaining = timeout - (time.monotonic() - started)
+        if remaining <= 0:
+            raise CoreError('Analysis time budget exhausted before external tools')
+        result['firmware']['external_analysis'] = analyze_external(
+            output, {'format': result['firmware']['format']},
+            request['external_tools'], min(remaining, 3600))
     return result
 
 

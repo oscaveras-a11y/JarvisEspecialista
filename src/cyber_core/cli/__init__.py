@@ -22,6 +22,9 @@ def parser():
                    help='Per-task time budget in seconds; a single task may run for hours or days')
     p.add_argument('--max-attempts', type=int, default=int(os.environ.get('CYBER_MAX_ATTEMPTS', defaults['max_attempts'])))
     p.add_argument('--agent-calls-per-case', type=int, default=int(os.environ.get('CYBER_AGENT_CALLS', defaults['agent_calls_per_case'])))
+    p.add_argument('--ghidra-home', help='Trusted absolute Ghidra 12.1.4 path on the runner')
+    p.add_argument('--java-home', help='Trusted absolute JDK path; required with --ghidra-home')
+    p.add_argument('--binwalk-executable', help='Trusted absolute Binwalk 3.1.0 executable path on the runner')
     sub = p.add_subparsers(dest='command', required=True)
     sub.add_parser('init', help='Initialize local SQLite storage')
     sub.add_parser('doctor', help='Diagnose runtime and optional CLIs')
@@ -150,6 +153,17 @@ def parser():
     return p
 
 
+def external_configuration(args):
+    if bool(args.ghidra_home) != bool(args.java_home):
+        raise CoreError('--ghidra-home and --java-home must be provided together')
+    config = {}
+    if args.ghidra_home:
+        config['ghidra'] = {'home': args.ghidra_home, 'java_home': args.java_home}
+    if args.binwalk_executable:
+        config['binwalk'] = {'executable': args.binwalk_executable}
+    return config
+
+
 def main(argv=None):
     core = None
     try:
@@ -174,7 +188,8 @@ def main(argv=None):
                 restored.close()
         else:
             core = Core(args.home, max_bytes=args.max_bytes, timeout=args.timeout,
-                        max_attempts=args.max_attempts, agent_calls_per_case=args.agent_calls_per_case)
+                        max_attempts=args.max_attempts, agent_calls_per_case=args.agent_calls_per_case,
+                        external_tools=external_configuration(args))
             cmd = args.command
             if cmd in ('hypothesis', 'experiment', 'research', 'verify', 'history'):
                 from cyber_core.cli.science import execute

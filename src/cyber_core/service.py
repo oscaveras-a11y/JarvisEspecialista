@@ -17,11 +17,15 @@ class Core:
     # or overflowing values, never cuts a legitimate long investigation short.
     MAX_TIMEOUT = 365 * 24 * 3600
 
-    def __init__(self, home, *, max_bytes=64 * 1024 * 1024, timeout=60, max_attempts=3, agent_calls_per_case=5):
+    def __init__(self, home, *, max_bytes=64 * 1024 * 1024, timeout=60, max_attempts=3, agent_calls_per_case=5, external_tools=None):
         if not 1 <= max_bytes <= 256 * 1024 * 1024 or not 0 < timeout <= self.MAX_TIMEOUT:
             raise CoreError('Invalid resource limits')
         if not 1 <= max_attempts <= 100 or not 0 <= agent_calls_per_case <= 100:
             raise CoreError('Invalid attempt or agent-call limits')
+        from cyber_core.reverse_engineering.external import _config
+        configured = _config(external_tools)
+        self.external_tools = {name: {key: str(value) for key, value in fields.items()}
+                               for name, fields in configured.items()}
         self.home = storage_root(home)
         self.max_bytes, self.timeout = max_bytes, timeout
         self.max_attempts, self.agent_calls_per_case = max_attempts, agent_calls_per_case
@@ -209,10 +213,12 @@ class Core:
             remaining = budget - (time.monotonic() - started)
             if remaining <= 0:
                 raise CoreError('Analysis time budget exhausted')
+            external = ({'external_tools': self.external_tools}
+                        if task['tool'] == 'analyze-firmware' and self.external_tools else {})
             result = analyze_in_process(source, output, byte_limit, remaining, tool=task['tool'],
                                         secondary_source=secondary_source, secondary_destination=secondary_output,
                                         secondary_max_bytes=self.max_bytes, should_stop=check_claim,
-                                        on_started=record_process)
+                                        on_started=record_process, **external)
             result.update(task_id=task['id'], tool=task['tool'])
             if time.monotonic() - started > budget:
                 raise CoreError('Analysis resource limit exceeded')
