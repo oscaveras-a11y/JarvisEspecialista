@@ -293,6 +293,7 @@ class Core:
 
     def classify(self, case):
         row = self.authorize(case)
+        self._ensure_not_paused(case, row)
         observed = None
         first = self.db.execute('SELECT data FROM results WHERE case_id=? ORDER BY created LIMIT 1', (case,)).fetchone()
         if first is not None:
@@ -310,7 +311,8 @@ class Core:
         return result
 
     def plan(self, case):
-        self.authorize(case)
+        row = self.authorize(case)
+        self._ensure_not_paused(case, row)
         stored = self.db.execute('SELECT type FROM investigation_type WHERE case_id=?', (case,)).fetchone()
         investigation_type = stored['type'] if stored is not None else self.classify(case)['type']
         from cyber_core.planning import build_plan
@@ -342,7 +344,8 @@ class Core:
         return 'core', 'Local tool execution within the CORE; agents act only on review of derived metadata'
 
     def decompose(self, case, path, *, second_path=None, tool=None):
-        self.authorize(case)
+        row = self.authorize(case)
+        self._ensure_not_paused(case, row)
         plan_row = self.db.execute('SELECT id,investigation_type FROM plans WHERE case_id=? ORDER BY created DESC LIMIT 1', (case,)).fetchone()
         if plan_row is None:
             created = self.plan(case)
@@ -361,7 +364,8 @@ class Core:
         return {'plan': plan_id, 'type': investigation_type, 'tasks': [{'task': task, 'tool': chosen, 'executor': executor}]}
 
     def assign(self, case, task_id):
-        self.authorize(case)
+        case_row = self.authorize(case)
+        self._ensure_not_paused(case, case_row)
         row = self.db.execute('SELECT id,tool FROM tasks WHERE id=? AND case_id=?', (task_id, case)).fetchone()
         if row is None:
             raise CoreError('Unknown task in this investigation')
@@ -397,7 +401,8 @@ class Core:
         return dict(row) if row is not None else None
 
     def self_test_recovery(self, case, path, candidates, *, max_attempts=10000, max_seconds=30):
-        self.authorize(case)
+        row = self.authorize(case)
+        self._ensure_not_paused(case, row)
         basis = self.db.execute('SELECT kind FROM authorization_basis WHERE case_id=?', (case,)).fetchone()
         if basis is None or basis['kind'] != 'owner_consent':
             raise CoreError('Self-test requires an owner_consent authorization basis on your own file')
@@ -422,6 +427,7 @@ class Core:
         # Create a CCPW1 lab target on the operator's OWN scope, to exercise the
         # recovery self-test end to end. Requires owner_consent; passphrase not logged.
         row = self.authorize(case)
+        self._ensure_not_paused(case, row)
         basis = self.db.execute('SELECT kind FROM authorization_basis WHERE case_id=?', (case,)).fetchone()
         if basis is None or basis['kind'] != 'owner_consent':
             raise CoreError('Creating a lab envelope requires an owner_consent authorization basis')
@@ -473,12 +479,46 @@ class Core:
                     break
         return matches
 
+    def _ensure_not_paused(self, case, row=None):
+        # Matches the existing convention (cryptanalysis/intake.py, orchestrator/
+        # __init__.py, CLI analyze-* handlers): new analytical work must not run
+        # while an investigation is paused, even though authorize() itself allows
+        # paused reads (status/logs/resume/revoke). Fix for a reviewed gap where
+        # new side-analysis routes ignored pause.
+        if (row if row is not None else self.get(case))['paused']:
+            raise CoreError('Investigation is paused')
+
+    def _persist_side_analysis(self, case, kind, path, result):
+        # Persists the full (already-redacted-where-applicable) result so it is
+        # reconstructable from normal case history, not only from audit-trail
+        # counts. Fix for a reviewed gap (side analyses were audit-only).
+        record_id = uuid4().hex
+        with self.db:
+            self.authorize(case)
+            self.db.execute('INSERT INTO side_analyses(id,case_id,kind,path,data,created) VALUES(?,?,?,?,?,?)',
+                            (record_id, case, kind, str(path), encoded(result), utc()))
+        return record_id
+
+    def side_analyses(self, case, *, kind=None):
+        self.get(case)
+        if kind is None:
+            rows = self.db.execute('SELECT * FROM side_analyses WHERE case_id=? ORDER BY created', (case,))
+        else:
+            rows = self.db.execute('SELECT * FROM side_analyses WHERE case_id=? AND kind=? ORDER BY created', (case, kind))
+        out = []
+        for row in rows:
+            entry = dict(row)
+            entry['data'] = json.loads(entry['data'])
+            out.append(entry)
+        return out
+
     def extract_strings(self, case, path, *, min_length=4, max_strings=1000, max_sample=1048576):
         # Static string extraction (item 6) over a bounded prefix of an authorized file.
-        # Strings go to the operator; the audit records only counts, not evidence content.
+        # Strings go to the operator; persisted in side_analyses for later reconstruction.
         if not isinstance(max_sample, int) or not 1 <= max_sample <= 16 * 1024 * 1024:
             raise CoreError('Invalid string extraction sample limit')
-        self.authorize(case)
+        row = self.authorize(case)
+        self._ensure_not_paused(case, row)
         source = self.authorize(case, path)
         if source.stat().st_size > self.max_bytes:
             raise CoreError('File exceeds byte limit')
@@ -488,6 +528,7 @@ class Core:
         from cyber_core.reverse_engineering.strings import extract_strings
         result = extract_strings(sample, min_length=min_length, max_strings=max_strings)
         result['sample_truncated'] = truncated
+        self._persist_side_analysis(case, 'strings', source, result)
         with self.db:
             self.authorize(case)
             audit(self.db, case, 'strings_extracted', {'counts': result['counts'], 'min_length': min_length})
@@ -516,22 +557,37 @@ class Core:
         # never opens a bus/device/socket. Optional comparison with a second capture.
         if not isinstance(max_sample, int) or not 1 <= max_sample <= 16 * 1024 * 1024:
             raise CoreError('Invalid capture sample limit')
-        self.authorize(case)
+        row = self.authorize(case)
+        self._ensure_not_paused(case, row)
         source = self.authorize(case, path)
         if source.stat().st_size > self.max_bytes:
             raise CoreError('File exceeds byte limit')
-        text = source.read_bytes()[:max_sample].decode('utf-8', errors='replace')
+        # Read only up to the sample cap plus a one-byte peek, instead of reading the
+        # whole file before slicing: fix for a reviewed gap where a large file was
+        # read entirely and byte-level truncation was never reported.
+        with source.open('rb') as handle:
+            raw = handle.read(max_sample)
+            byte_truncated = bool(handle.read(1))
+        text = raw.decode('utf-8', errors='replace')
         from cyber_core.protocol import analyze_capture, compare_captures
         if second_path is not None:
             other = self.authorize(case, second_path)
             if other.stat().st_size > self.max_bytes:
                 raise CoreError('Second file exceeds byte limit')
-            other_text = other.read_bytes()[:max_sample].decode('utf-8', errors='replace')
+            with other.open('rb') as handle:
+                other_raw = handle.read(max_sample)
+                byte_truncated = byte_truncated or bool(handle.read(1))
+            other_text = other_raw.decode('utf-8', errors='replace')
             result = compare_captures(text, other_text)
+            result['first']['truncated'] = result['first']['truncated'] or byte_truncated
+            result['second']['truncated'] = result['second']['truncated'] or byte_truncated
             event = {'messages': result['first']['messages'], 'second_messages': result['second']['messages']}
         else:
             result = analyze_capture(text)
+            result['truncated'] = result['truncated'] or byte_truncated
             event = {'messages': result['messages'], 'unique_payloads': result['unique_payloads']}
+        result['sample_truncated'] = byte_truncated
+        self._persist_side_analysis(case, 'capture', source, result)
         with self.db:
             self.authorize(case)
             audit(self.db, case, 'capture_analyzed', event)
@@ -539,10 +595,12 @@ class Core:
 
     def audit_config(self, case, path, *, max_sample=1048576):
         # Static, authorized configuration/exposure audit (item 9). No active scan,
-        # no network. Findings are redacted; the audit records only counts by severity.
+        # no network. Findings are redacted; persisted so they are reconstructable
+        # from case history (not only from audit-trail counts).
         if not isinstance(max_sample, int) or not 1 <= max_sample <= 16 * 1024 * 1024:
             raise CoreError('Invalid audit sample limit')
-        self.authorize(case)
+        row = self.authorize(case)
+        self._ensure_not_paused(case, row)
         source = self.authorize(case, path)
         if source.stat().st_size > self.max_bytes:
             raise CoreError('File exceeds byte limit')
@@ -552,6 +610,7 @@ class Core:
         from cyber_core.vulnerability import audit_config
         result = audit_config(sample.decode('utf-8', errors='replace'))
         result['sample_truncated'] = truncated
+        self._persist_side_analysis(case, 'config_audit', source, result)
         with self.db:
             self.authorize(case)
             audit(self.db, case, 'config_audited', {'summary': result['summary'], 'findings': len(result['findings'])})
@@ -585,7 +644,8 @@ class Core:
         # structured, over a bounded prefix. Never asserts encryption from entropy alone.
         if not isinstance(max_sample, int) or not 1 <= max_sample <= 262144:
             raise CoreError('Invalid differentiation sample limit')
-        self.authorize(case)
+        row = self.authorize(case)
+        self._ensure_not_paused(case, row)
         source = self.authorize(case, path)
         if source.stat().st_size > self.max_bytes:
             raise CoreError('File exceeds byte limit')
@@ -594,6 +654,7 @@ class Core:
             truncated = bool(handle.read(1))
         from cyber_core.cryptanalysis.differentiate import differentiate
         result = differentiate(sample, sample_truncated=truncated)
+        self._persist_side_analysis(case, 'differentiate', source, result)
         with self.db:
             self.authorize(case)
             audit(self.db, case, 'content_differentiated', {'content_class': result['content_class'], 'label': result['label']})

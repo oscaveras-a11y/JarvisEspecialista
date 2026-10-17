@@ -119,6 +119,9 @@ def parser():
     classify_src.add_argument('--url', required=True)
     sources = sub.add_parser('sources', help='List registered technical sources for a case with authority heuristic')
     sources.add_argument('case')
+    side = sub.add_parser('side-analyses', help='List persisted side analyses (strings/differentiate/audit-config/capture) for a case')
+    side.add_argument('case')
+    side.add_argument('--kind', help='Filter by kind: strings, differentiate, config_audit, capture')
     recall = sub.add_parser('recall', help='Recall prior knowledge by evidence SHA-256 or by investigation type')
     recall.add_argument('--sha256', help='Find prior investigations that analyzed this exact evidence hash')
     recall.add_argument('--type', dest='recall_type', help='List prior investigations of this type')
@@ -144,7 +147,7 @@ def main(argv=None):
                 from cyber_core.cli.science import execute
                 result = execute(core, args)
             elif cmd == 'init':
-                result = {'initialized': True, 'home': str(core.home), 'schema': 7}
+                result = {'initialized': True, 'home': str(core.home), 'schema': 8}
             elif cmd == 'investigate':
                 result = {'id': core.investigate(args.project, args.objective, args.scope, args.owner, args.authorization, recovery=args.allow_recovery, valid_hours=args.valid_hours)}
             elif cmd == 'status':
@@ -211,6 +214,8 @@ def main(argv=None):
                 result = core.classify_source(args.url)
             elif cmd == 'sources':
                 result = core.sources(args.case)
+            elif cmd == 'side-analyses':
+                result = core.side_analyses(args.case, kind=args.kind)
             elif cmd == 'recall':
                 if args.sha256:
                     result = {'matches': core.recall_by_hash(args.sha256, limit=max(1, min(args.limit, 1000)))}

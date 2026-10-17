@@ -11,8 +11,8 @@ def write_report(core, case):
     output = folder / (uuid4().hex + '.md')
     data = {'investigation': row, 'generated_utc': utc(), 'results': core.results(case),
             'analysis_notes': core.analysis_notes(case), 'tasks': core.tasks(case),
-            'checkpoints': core.checkpoints(case), 'audit_chain_valid': core.verify_audit(case),
-            'audit': core.audit(case)}
+            'side_analyses': core.side_analyses(case), 'checkpoints': core.checkpoints(case),
+            'audit_chain_valid': core.verify_audit(case), 'audit': core.audit(case)}
     from cyber_core.investigation.workflow import Workflow
     data['scientific_workflow'] = Workflow(core).snapshot(case)
     from cyber_core.investigation.reasoning import snapshot_data

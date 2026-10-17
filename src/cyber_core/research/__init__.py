@@ -18,7 +18,17 @@ COMMUNITY = ('github.com', 'gitlab.com', 'stackoverflow.com', 'stackexchange.com
 
 
 def _matches(host, markers):
-    return any(host == marker.lstrip('.') or host.endswith(marker) for marker in markers)
+    # A category marker starting with '.' (e.g. '.gov') already carries its own dot
+    # boundary. A full-domain marker (e.g. 'ietf.org') must match exactly or as a
+    # dot-delimited subdomain — a bare endswith would also match an unrelated host
+    # like 'unrelated-ietf.org' (regression for the domain-similarity leak).
+    for marker in markers:
+        if marker.startswith('.'):
+            if host.endswith(marker):
+                return True
+        elif host == marker or host.endswith('.' + marker):
+            return True
+    return False
 
 
 def classify_source(url):

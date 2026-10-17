@@ -20,6 +20,17 @@ class ResearchUnitTests(unittest.TestCase):
         with self.assertRaises(CoreError):
             classify_source('')
 
+    def test_similar_domain_is_not_misclassified(self):
+        # Regression: a bare-suffix check (host.endswith('ietf.org')) would wrongly
+        # label an unrelated host official just for sharing a text suffix.
+        self.assertEqual(classify_source('https://unrelated-ietf.org/x')['category'], 'unknown')
+        self.assertEqual(classify_source('https://notietf.org/x')['category'], 'unknown')
+
+    def test_real_subdomain_still_matches(self):
+        # A genuine subdomain of a full-domain marker must still match.
+        self.assertEqual(classify_source('https://www.ietf.org/x')['category'], 'official')
+        self.assertEqual(classify_source('https://docs.nist.gov/x')['category'], 'official')
+
 
 class ResearchServiceTests(unittest.TestCase):
     def setUp(self):
