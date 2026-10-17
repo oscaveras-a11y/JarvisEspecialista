@@ -97,7 +97,7 @@ test('mobile navigation hides closed links, restores focus and adapts to desktop
  await toggle.click();
  await expect(sidebar).toBeVisible();
  await expect(page.getByRole('link',{name:'CYBER CORE, início'})).toBeFocused();
- await page.keyboard.press('Shift+Tab');await expect(toggle).toBeFocused();
+ await page.keyboard.press('Shift+Tab');await expect(sidebar.getByRole('button',{name:'Fechar menu',exact:true})).toBeFocused();
  await page.keyboard.press('Tab');await expect(page.getByRole('link',{name:'CYBER CORE, início'})).toBeFocused();
  await page.getByRole('navigation',{name:'Navegação principal'}).getByRole('button',{name:'Ferramentas',exact:true}).click();
  await expect(page.locator('#view-tools')).toBeVisible();
