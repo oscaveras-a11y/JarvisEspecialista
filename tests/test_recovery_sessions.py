@@ -236,6 +236,68 @@ class RecoverySessionTests(unittest.TestCase):
         self.assertIsNone(item["result"])
         self.assertFalse(list((self.core.home/"cases").rglob("*.recovered")))
 
+    def test_publication_interruption_is_reconciled_on_stop_boundaries(self):
+        for boundary in ("case_cancel","pause","deadline","revoke"):
+            with self.subTest(boundary=boundary):
+                self.material.write_text(self.key.hex()+"\n")
+                job = self.start()["id"]
+                code = (
+                    "import os; from cyber_core.service import Core; "
+                    "import cyber_core.cryptanalysis.sessions as m; "
+                    "core=Core("+repr(str(self.core.home))+"); original=m.RecoverySessions._progress; "
+                    "exec('def stop(self,row):\\n if row[\"status\"]==\"succeeded\": os._exit(98)\\n return original(self,row)'); "
+                    "m.RecoverySessions._progress=stop; m.RecoverySessions(core).work("+repr(self.case)+","+repr(job)+")")
+                run = subprocess.run([sys.executable,"-c",code],capture_output=True,text=True,timeout=60)
+                self.assertEqual(run.returncode,98,run.stderr)
+                manager = self.sessions()
+                with self.core.db:
+                    self.core.db.execute("UPDATE recovery_sessions SET lease_until=0 WHERE id=?", (job,))
+                if boundary == "case_cancel":
+                    self.core.cancel(self.case,reason="Synthetic stop after interruption")
+                elif boundary == "pause":
+                    manager.pause(self.case,job)
+                elif boundary == "deadline":
+                    with patch("cyber_core.cryptanalysis.sessions.time.time",return_value=time.time()+86410):
+                        manager.work(self.case,job)
+                else:
+                    self.core.revoke(self.case)
+                    with self.assertRaises(CoreError):
+                        manager.work(self.case,job)
+                recovered = self.core.home/"cases"/self.case/"recovered"
+                self.assertFalse(list(recovered.glob("*.recovered")))
+                self.case = self.core.investigate("synthetic","next",str(self.scope),"owner","Synthetic",recovery=True,valid_hours=72)
+
+    def test_orphan_child_cannot_recreate_cancelled_staging_file(self):
+        self.material.write_text(self.key.hex()+"\n")
+        manager = self.sessions()
+        job = self.start()["id"]
+        ready,release,finished = (self.root/name for name in ("ready","release","finished"))
+        # Controlled child holds at the file-publication boundary. It is not an analyzed input.
+        child = ("from pathlib import Path; import time; "
+                 "release=Path("+repr(str(release))+"); output=Path(OUTPUT); "
+                 "exec('while not release.exists(): time.sleep(.01)'); "
+                 "exec('try:\\n output.write_bytes(b\"synthetic plaintext\")\\n state=\"created\"\\nexcept FileNotFoundError:\\n state=\"blocked\"'); "
+                 "Path("+repr(str(finished))+").write_text(state)")
+        worker = (
+            "import os,json,subprocess,sys; from pathlib import Path; from cyber_core.service import Core; "
+            "import cyber_core.cryptanalysis.sessions as m; core=Core("+repr(str(self.core.home))+"); "
+            "exec('def stop(command,prompt,**kw):\\n request=json.loads(prompt)\\n "
+            "code="+repr(child)+" .replace(\"OUTPUT\",repr(request[\"output\"]))\\n "
+            "subprocess.Popen([sys.executable,\"-c\",code],stdin=subprocess.DEVNULL,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)\\n "
+            "Path("+repr(str(ready))+").write_text(\"ready\")\\n os._exit(99)'); "
+            "m.run_bounded=stop; m.RecoverySessions(core).work("+repr(self.case)+","+repr(job)+")")
+        run = subprocess.run([sys.executable,"-c",worker],capture_output=True,text=True,timeout=60)
+        self.assertEqual(run.returncode,99,run.stderr)
+        self.assertTrue(ready.exists())
+        manager.cancel(self.case,job)
+        release.write_text("release")
+        end = time.monotonic()+10
+        while not finished.exists() and time.monotonic()<end:
+            time.sleep(.01)
+        self.assertTrue(finished.exists())
+        self.assertEqual(finished.read_text(),"blocked")
+        self.assertFalse(list((self.core.home/"recovery-staging").rglob("*.pending")))
+
     def test_trial_resource_failure_is_durable_and_not_automatically_retried(self):
         import cyber_core.cryptanalysis.sessions as module
         manager = self.sessions()

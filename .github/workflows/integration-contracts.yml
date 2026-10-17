@@ -57,7 +57,10 @@ jobs:
         id: combine
         run: |
           git cat-file -e "$CANDIDATE_SHA^{commit}"
-          git -c user.name="Integration validation" -c user.email="integration@example.invalid" merge --no-commit --no-ff "$CANDIDATE_SHA"
+          if ! git -c user.name="Integration validation" -c user.email="integration@example.invalid" merge --no-commit --no-ff "$CANDIDATE_SHA"; then
+            git diff --cc -- src/cyber_core/cli/__init__.py src/cyber_core/reporting/__init__.py
+            exit 1
+          fi
           git diff --check
           printf 'Candidate commit: %s\n' "$CANDIDATE_SHA" >> "$GITHUB_STEP_SUMMARY"
           printf 'Combination exists only in this disposable runner; no branch is pushed.\n' >> "$GITHUB_STEP_SUMMARY"
