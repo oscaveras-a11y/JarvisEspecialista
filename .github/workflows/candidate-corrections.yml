@@ -1,7 +1,5 @@
 name: Candidate corrections combined validation
 on:
-  push:
-    branches: [codex/candidate-corrections]
   pull_request:
     branches: ['claude/gifted-gates-kd07xv']
     paths:

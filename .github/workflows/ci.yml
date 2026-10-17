@@ -4,7 +4,7 @@ on:
   pull_request:
     branches: [main, 'claude/gifted-gates-kd07xv']
   push:
-    branches: [main, codex/github-validation, codex/candidate-corrections]
+    branches: [main, codex/github-validation]
   workflow_dispatch:
 
 permissions:
