@@ -285,5 +285,58 @@ class ReasoningTests(unittest.TestCase):
         self.assertEqual(json.loads(run.stdout)['steps'][0]['status'], 'evaluated')
 
 
+    def test_new_blocker_prevents_reserved_task_from_starting_after_restart(self):
+        strategy, _, _ = self.strategy()
+        with patch.object(self.core, 'run_one', side_effect=KeyboardInterrupt):
+            with self.assertRaises(KeyboardInterrupt):
+                self.engine.step(self.case, self.source, actor='operator')
+        blocker = self.engine.block(self.case, strategy, kind='hardware', detail='Required fixture missing', actor='analyst')
+        out = Reasoning(self.core).step(self.case, self.source, actor='operator')
+        self.assertEqual(out['status'], 'blocked')
+        self.assertFalse(self.core.results(self.case))
+        self.assertEqual(self.core.tasks(self.case)[0]['status'], 'pending')
+        self.engine.unblock(self.case, blocker, actor='analyst', reason='Fixture supplied')
+        self.assertEqual(self.engine.step(self.case, self.source, actor='operator')['status'], 'evaluated')
+        self.assertEqual(len(self.core.tasks(self.case)), 1)
+
+    def test_revision_changed_at_evaluation_boundary_never_crosses_cycle_revision(self):
+        _, hypothesis, _ = self.strategy()
+        other = Core(self.home)
+        self.addCleanup(other.close)
+        real = self.engine.flow.evaluate
+        def concurrent_revision(*args, **kwargs):
+            Workflow(other).revise_hypothesis(self.case, hypothesis, author='analyst',
+                                              plausibility=.8, reason='Concurrent revision at evaluation boundary')
+            return real(*args, **kwargs)
+        with patch.object(self.engine.flow, 'evaluate', side_effect=concurrent_revision):
+            out = self.engine.step(self.case, self.source, actor='operator')
+        self.assertEqual(out['status'], 'stale')
+        self.assertFalse(self.flow.snapshot(self.case)['runs'])
+        self.assertEqual(self.engine.snapshot(self.case)['cycles'][0]['hypothesis_revision'], 1)
+
+    def test_snapshot_exposes_priorities_and_remains_readable_after_cancellation(self):
+        self.strategy()
+        snap = self.engine.snapshot(self.case)
+        self.assertEqual(len(snap['priorities']), 1)
+        self.assertTrue(snap['priorities'][0]['eligible'])
+        self.core.cancel(self.case, reason='Preserve report')
+        report = self.core.report(self.case).read_text(encoding='utf-8')
+        self.assertIn('priorities', report)
+        self.assertIn('CANCELADO', report)
+        self.assertFalse(self.core.tasks(self.case))
+
+    def test_changed_input_after_reservation_is_not_evaluated_under_old_fingerprint(self):
+        self.strategy()
+        real = self.core.run_one
+        def changed(*args, **kwargs):
+            self.source.write_bytes(b'changed')
+            return real(*args, **kwargs)
+        with patch.object(self.core, 'run_one', side_effect=changed):
+            out = self.engine.step(self.case, self.source, actor='operator')
+        self.assertEqual(out['status'], 'stale')
+        self.assertFalse(self.flow.snapshot(self.case)['runs'])
+        self.assertEqual(len(self.core.results(self.case)), 1)
+
+
 if __name__ == '__main__':
     unittest.main()
