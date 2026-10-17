@@ -78,6 +78,45 @@ nesta entrega; os exemplos documentam a API testada em runners GitHub.
 
 A autorização de execução continua sendo a registrada no `investigate`: escopo, responsável, motivo, validade e revogação, além da permissão específica de recuperação quando aplicável. `authorization_basis` do candidato Claude mantém seu contrato próprio; resolver um bloqueio do motor não cria nem altera essa base.
 
-Resultado final e versão exata do candidato serão registrados após o CI.
+## Resultado da entrega
+
+**Item 4 concluído no contrato operacional descrito acima.** Código revisado
+independentemente no head `9886c42f4a56a80672d5b26752647ae497fe0292`, sem
+novos achados acionáveis após as correções. Revisão estática pelo GitHub;
+execução comprovada no GitHub Actions.
+
+| Conjunto | Plataforma | Descobertos | Executados | Skips | Resultado |
+|---|---|---:|---:|---:|---|
+| Base própria | Windows | 161 | 161 | 0 | OK em 112.943s |
+| Combinação com Claude | Windows | 194 | 194 | 0 | OK em 99.383s |
+| Combinação com Claude | Linux | 194 | 192 | 2 | OK em 18.802s |
+| Sondas adicionais de prazo/tentativas | Windows | 3 | 3 | 0 | OK em 1.590s |
+| Sondas adicionais de prazo/tentativas | Linux | 3 | 3 | 0 | OK em 0.145s |
+
+[Run da base](https://github.com/oscaveras-a11y/CyberCore/actions/runs/39030452687)
+e [run combinado](https://github.com/oscaveras-a11y/CyberCore/actions/runs/39030452614).
+Todos os passos de instalação no runner, dependências, compilação, CLI,
+suíte e demonstração foram aprovados. Os dois skips Linux são testes
+específicos de Job Objects executados com sucesso no Windows.
+
+A demonstração dos itens 4 e 5 passou nos dois sistemas: duas estratégias,
+refutação revisada seguida de alternativa suportada/revisada, conclusão
+validada do controle sintético, relatório, reabertura e recall. Conservou
+`PRAGMA user_version=7` e o contrato de raciocínio 1.
+
+Candidato Claude testado: `00adab4ccc187f517ee8272a29e285087b54e347`.
+Combinação feita somente no runner; a branch/PR do Claude não foi editada
+nem integrada por esta entrega. O item 5 pode usar o módulo da main após
+integrar a atualização na própria branch.
+
+Além das regressões de concorrência já descritas, foram reproduzidas e
+corrigidas conclusões armazenadas incompatíveis com critérios
+(run39030013043), seleção parada em entrada já fracassada mesmo com outro
+experimento disponível (run39030156272), e reserva bloqueada impedindo
+trabalho independente (run39030359143). Há 29 testes novos do motor.
+
 Essa validação cobre o contrato operacional do item 4; não conclui os módulos
-especializados dos itens 6, 8, 10 ou a plataforma inteira.
+especializados dos itens 6, 8, 10 ou a plataforma inteira. As estimativas
+de prioridade não são probabilidades científicas calibradas; identidades de
+revisores permanecem declarações locais conforme o contrato existente.
+
