@@ -113,6 +113,10 @@ def parser():
     review = sub.add_parser('review', help='Ask Codex to review derived metadata; cloud approval required')
     review.add_argument('case')
     review.add_argument('--allow-cloud-summary', action='store_true')
+    classify_src = sub.add_parser('classify-source', help='Classify a source URL authority (official/academic/community) offline')
+    classify_src.add_argument('--url', required=True)
+    sources = sub.add_parser('sources', help='List registered technical sources for a case with authority heuristic')
+    sources.add_argument('case')
     recall = sub.add_parser('recall', help='Recall prior knowledge by evidence SHA-256 or by investigation type')
     recall.add_argument('--sha256', help='Find prior investigations that analyzed this exact evidence hash')
     recall.add_argument('--type', dest='recall_type', help='List prior investigations of this type')
@@ -199,6 +203,10 @@ def main(argv=None):
             elif cmd == 'review':
                 from cyber_core.orchestrator import review_summary
                 result = review_summary(core, args.case, allow_cloud=args.allow_cloud_summary)
+            elif cmd == 'classify-source':
+                result = core.classify_source(args.url)
+            elif cmd == 'sources':
+                result = core.sources(args.case)
             elif cmd == 'recall':
                 if args.sha256:
                     result = {'matches': core.recall_by_hash(args.sha256, limit=max(1, min(args.limit, 1000)))}

@@ -493,6 +493,24 @@ class Core:
             audit(self.db, case, 'strings_extracted', {'counts': result['counts'], 'min_length': min_length})
         return result
 
+    def classify_source(self, url):
+        # Offline source-authority heuristic (item 11); stateless, no web retrieval.
+        from cyber_core.research import classify_source
+        return classify_source(url)
+
+    def sources(self, case):
+        self.get(case)
+        rows = self.db.execute('SELECT * FROM source_records WHERE case_id=? ORDER BY retrieved', (case,))
+        out = []
+        for row in rows:
+            entry = dict(row)
+            try:
+                entry['authority'] = self.classify_source(entry['url'])['category']
+            except CoreError:
+                entry['authority'] = 'unknown'
+            out.append(entry)
+        return out
+
     def analyze_capture(self, case, path, *, second_path=None, max_sample=4194304):
         # Passive generic protocol-capture analysis (item 10). Static text capture;
         # never opens a bus/device/socket. Optional comparison with a second capture.

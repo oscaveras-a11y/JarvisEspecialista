@@ -27,3 +27,8 @@ a `main` conforme ele entrega. Log atualizado por item.
 - **[FATO]** `automotive` analisa/compara logs CAN clássicos (passivo).
 - **[LACUNA→feito]** Analisador **genérico e passivo** de capturas: `protocol/analyze_capture`/`compare_captures` (`Core.analyze_capture`, CLI `analyze-capture` com `--compare-to`). Captura textual, uma mensagem por linha em hex (separadores espaço/":"/","/"-"; id opcional antes de '#'/'|'); reporta contagem, pulados, payloads únicos, histogramas de tamanho e id, e diff entre capturas. Passivo: nunca abre barramento/dispositivo/socket.
 - **[PENDENTE]** USB/UART/SPI/I2C e integração python-can/cantools/SavvyCAN/Wireshark — exigem hardware/ferramentas externas, declarado pendente.
+
+## Item 11 — Motor de pesquisa técnica (ímpar; Claude) — verificado + 1 lacuna preenchida
+- **[FATO]** registro de fontes (`research` / `Workflow.add_source`): título, url, versão, proveniência, autor; sem busca web implícita (coerente com o escopo).
+- **[LACUNA→feito]** diferenciação de **autoridade da fonte**: `research/classify_source` (`Core.classify_source`, CLI `classify-source`) rotula oficial/acadêmica/comunidade/desconhecida por heurística de domínio, offline; `Core.sources` (CLI `sources`) lista as fontes do caso já com a autoridade. Honesto: heurística a confirmar, nenhuma requisição de rede.
+- **[PENDENTE]** Consulta automática a bases/documentação quando houver conectividade autorizada — fora do modo offline atual; declarado pendente.
