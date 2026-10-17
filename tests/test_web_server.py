@@ -78,7 +78,8 @@ class WebServerTests(unittest.TestCase):
         self.assertEqual(self.request("/api/state")[1]["cases"], [])
         case = self.case()
         raw = b"%PDF-1.7\nSynthetic authorized document\n"
-        self.assertEqual(self.upload(case, raw)[0], 202)
+        status, reply = self.upload(case, raw)
+        self.assertEqual(status, 202, reply)
         state = self.settled()
         self.assertEqual(state["tasks"][0]["status"], "done")
         self.assertEqual(state["results"][case][0]["sha256"], hashlib.sha256(raw).hexdigest())
@@ -92,6 +93,7 @@ class WebServerTests(unittest.TestCase):
         self.assertEqual(reopened["cases"][0]["id"], case)
         self.assertEqual(reopened["tasks"][0]["status"], "done")
         self.assertTrue(reopened["audit_valid"][case])
+        self.assertEqual(len(reopened["reports"]), 1)
 
     def test_pause_cancel_and_unknown_case_are_enforced_by_server(self):
         case = self.case()
@@ -126,7 +128,8 @@ class WebServerTests(unittest.TestCase):
         import struct
         raw = struct.pack("<IHHIIII", 0xa1b2c3d4, 2, 4, 0, 0, 65535, 1)
         case = self.case()
-        self.assertEqual(self.upload(case, raw, tool="inventory-pcap", name="empty.pcap")[0], 202)
+        status, reply = self.upload(case, raw, tool="inventory-pcap", name="empty.pcap")
+        self.assertEqual(status, 202, reply)
         state = self.settled()
         self.assertIsNone(state["last_error"])
         self.assertEqual(state["operations"][case][0]["kind"], "pcap_inventory")
@@ -135,9 +138,34 @@ class WebServerTests(unittest.TestCase):
     def test_recovery_assessment_uses_core_without_claiming_decryption(self):
         case = self.case()
         raw = b"CCAES1" + bytes(range(12)) + b"x" * 32
-        self.assertEqual(self.upload(case, raw, tool="assess-recovery", name="sample.ccaes")[0], 202)
+        status, reply = self.upload(case, raw, tool="assess-recovery", name="sample.ccaes")
+        self.assertEqual(status, 202, reply)
         state = self.settled()
         assessment = state["results"][case][0]["recovery_assessment"]
         self.assertEqual(assessment["format_id"], "ccaes1")
         self.assertFalse(assessment["recovery_demonstrated"])
         self.assertTrue(state["audit_valid"][case])
+
+    def test_modified_result_or_evidence_is_not_presented_as_verified(self):
+        from cyber_core.service import Core
+        case = self.case()
+        status, reply = self.upload(case, b"%PDF-1.7\nSynthetic integrity test\n")
+        self.assertEqual(status, 202, reply)
+        state = self.settled()
+        result = state["results"][case][0]
+        Path(result["copy"]).write_bytes(b"modified")
+        changed = self.request("/api/state")[1]
+        self.assertEqual(changed["results"][case], [])
+        self.assertIn(case, changed["result_errors"])
+        self.assertEqual(self.request("/api/cases/" + case + "/report", {})[0], 409)
+        Path(result["copy"]).write_bytes(b"%PDF-1.7\nSynthetic integrity test\n")
+        core = Core(self.home / "core")
+        try:
+            with core.db:
+                altered = dict(result, sha256="0" * 64)
+                core.db.execute("UPDATE results SET data=? WHERE case_id=?", (json.dumps(altered), case))
+        finally:
+            core.close()
+        changed = self.request("/api/state")[1]
+        self.assertEqual(changed["results"][case], [])
+        self.assertIn(case, changed["result_errors"])

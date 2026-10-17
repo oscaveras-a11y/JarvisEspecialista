@@ -33,3 +33,13 @@ test('the approved panel sends a file to CORE and downloads its real report',asy
  await row.getByRole('button',{name:'cancelar',exact:true}).click();await expect(row).toContainText('cancelado');
  expect(errors).toEqual([]);
 });
+
+test('operational startup never loads demonstration data when health is unavailable',async({page})=>{
+ await page.route('**/api/health',route=>route.fulfill({status:503,body:'unavailable'}));
+ await page.goto('/');
+ await expect(page.locator('body')).toHaveAttribute('data-engine','unavailable');
+ await expect(page.locator('#demo-notice')).toContainText('Conexão interrompida');
+ await expect(page.locator('#stat-total')).toHaveText('0');
+ await page.getByRole('button',{name:'Nova investigação',exact:true}).first().click();
+ await expect(page.locator('#view-new')).toBeHidden();
+});
