@@ -1,6 +1,8 @@
 """Regressions for the five observed candidate gaps; synthetic input only."""
 import json
 import tempfile
+import subprocess
+import sys
 import unittest
 from pathlib import Path
 from unittest.mock import patch
@@ -26,6 +28,17 @@ class BoundaryUnitTests(unittest.TestCase):
         result = audit_config('DEBUG=true opaque_key="SYNTHETIC_UNRECOGNIZED_VALUE"')
         self.assertEqual(result["summary"]["medium"], 1)
         self.assertNotIn("SYNTHETIC_UNRECOGNIZED_VALUE", json.dumps(result))
+
+    def test_every_rule_omits_arbitrary_source_values(self):
+        triggers = ("DEBUG=true", "verify=false", "PermitRootLogin yes",
+                    "http://example.test", "md5", "AKIAABCDEFGHIJKLMNOP",
+                    "-----BEGIN PRIVATE KEY-----")
+        for trigger in triggers:
+            with self.subTest(trigger=trigger):
+                result = audit_config(trigger + ' unrelated="SYNTHETIC_PRIVATE_VALUE" password=x')
+                self.assertTrue(result["findings"])
+                self.assertNotIn("SYNTHETIC_PRIVATE_VALUE", json.dumps(result))
+                self.assertNotIn(trigger, json.dumps([f["excerpt"] for f in result["findings"]]))
 
     def test_domain_matches_require_dns_boundaries(self):
         for host in ("unrelated-ietf.org", "fakegithub.com", "unrelatedarxiv.org", "ietf.org.example.test"):
@@ -152,6 +165,45 @@ class ServiceBoundaryTests(unittest.TestCase):
         with self.assertRaisesRegex(CoreError, "revoked"):
             self.core.audit_config(self.case, path)
         self.assertEqual(self.core.results(self.case), [])
+
+    def test_cli_does_not_echo_configuration_secrets(self):
+        path = self.file("config.txt", b"DEBUG=true password=SYNTHETIC_CLI_SECRET")
+        call = subprocess.run([sys.executable, "-m", "cyber_core", "--home", str(self.root / "state"),
+            "audit-config", self.case, str(path)], capture_output=True, text=True, timeout=60)
+        self.assertEqual(call.returncode, 0, call.stderr)
+        self.assertTrue(json.loads(call.stdout)["findings"])
+        self.assertNotIn("SYNTHETIC_CLI_SECRET", call.stdout + call.stderr)
+
+    def test_late_cancel_discards_specialist_result_and_partial_copy(self):
+        path = self.file("config.txt", b"DEBUG=true")
+        from cyber_core.analysis_process import analyze_in_process as real_analysis
+        def cancel_after_analysis(*args, **kwargs):
+            result = real_analysis(*args, **kwargs)
+            self.core.cancel(self.case, reason="Synthetic concurrent cancel")
+            return result
+        with patch("cyber_core.service.analyze_in_process", side_effect=cancel_after_analysis):
+            with self.assertRaisesRegex(CoreError, "cancelled"):
+                self.core.audit_config(self.case, path)
+        self.assertEqual(self.core.results(self.case), [])
+        self.assertEqual(self.core.tasks(self.case)[0]["status"], "cancelled")
+        self.assertEqual(list((self.core.home / "cases" / self.case / "evidence").iterdir()), [])
+
+    def test_queued_specialist_retains_sample_options_after_restart(self):
+        path = self.file("cap.txt", b"01\n02\n")
+        original = self.core.run_one
+        def pause_before_claim(*args, **kwargs):
+            self.core.pause(self.case)
+            return original(*args, **kwargs)
+        with patch.object(self.core, "run_one", side_effect=pause_before_claim):
+            with self.assertRaisesRegex(CoreError, "paused"):
+                self.core.analyze_capture(self.case, path, max_sample=3)
+        self.core.close()
+        self.core = Core(self.root / "state")
+        self.core.resume(self.case)
+        result = self.core.run_one(self.case)
+        self.assertEqual(result["capture"]["messages"], 1)
+        self.assertTrue(result["capture"]["sample_truncated"])
+        self.assertEqual(len(self.core.results(self.case)), 1)
 
     def test_completed_specialist_survives_reopen(self):
         path = self.file("config.txt", b"DEBUG=true")
