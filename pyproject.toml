@@ -17,3 +17,6 @@ cyber = "cyber_core.cli:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.setuptools.package-data]
+"cyber_core.reverse_engineering" = ["ghidra_scripts/*.java"]
