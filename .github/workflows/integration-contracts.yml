@@ -15,6 +15,9 @@ on:
       - 'src/cyber_core/reporting/**'
       - 'tests/test_reasoning.py'
       - 'scripts/check-reasoning-handoff.py'
+      - 'src/cyber_core/firmware/**'
+      - 'tests/test_binary_structure.py'
+      - 'tests/test_firmware.py'
 
 permissions:
   contents: read
@@ -36,7 +39,7 @@ jobs:
       PYTHONUTF8: "1"
       PYTHONUNBUFFERED: "1"
       PIP_DISABLE_PIP_VERSION_CHECK: "1"
-      CANDIDATE_SHA: 00adab4ccc187f517ee8272a29e285087b54e347
+      CANDIDATE_SHA: 70deac283947e2245af59e2a8709c5e525d3f7de
     defaults:
       run:
         shell: bash

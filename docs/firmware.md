@@ -21,11 +21,14 @@ reports false and does not infer architecture or loading address.
   whitespace within records, multiple blocks and vendor extensions are rejected.
 - ELF reports class, endian, numeric machine/type and entry point. Validation
   covers the header and program/section table bounds. Extended table numbering
-  is explicitly unsupported. Section contents and executable semantics are not
-  validated.
+  is explicitly unsupported. Section contents and executable semantics are not fully validated. The
+  [structural extension](item-6-binary-structure.md) lists bounded section/segment
+  metadata, validates payload bounds/names and separates stored bytes from memory.
 - PE reports class, numeric machine and section count. Validation covers DOS,
   COFF, optional-header/directory-table bounds and raw section bounds. This is
   not a Windows loader, authenticity check or complete executable validator.
+  The structural extension also reports sections, preferred image/entry addresses
+  and declared architecture; a zero DLL entry RVA is represented as absent.
 
 `compare_firmware(first, second, *, max_bytes=67108864,
 max_decoded_bytes=1048576)` compares decoded
