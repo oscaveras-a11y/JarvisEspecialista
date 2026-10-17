@@ -1,7 +1,7 @@
 name: Real external backends
 on:
   pull_request:
-    branches: [main, 'claude/gifted-gates-kd07xv']
+    branches: [main]
     paths:
       - 'src/cyber_core/reverse_engineering/**'
       - 'tests/test_external_backends.py'

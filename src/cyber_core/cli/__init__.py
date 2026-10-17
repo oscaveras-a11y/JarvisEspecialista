@@ -14,6 +14,9 @@ from cyber_core.service import Core
 def parser():
     p = argparse.ArgumentParser(prog='cyber', description='CYBER CORE: authorized local investigations')
     default = Path(os.environ.get('LOCALAPPDATA', Path.home())) / 'CyberCore'
+    p.add_argument('--ghidra-home', help='Trusted absolute Ghidra 12.1.4 path on the runner')
+    p.add_argument('--java-home', help='Trusted absolute JDK path; required with --ghidra-home')
+    p.add_argument('--binwalk-executable', help='Trusted absolute Binwalk 3.1.0 executable path on the runner')
     p.add_argument('--home', default=os.environ.get('CYBER_HOME', str(default)), help='Protected storage outside the repository')
     p.add_argument('--max-bytes', type=int, default=int(os.environ.get('CYBER_MAX_BYTES', 67108864)))
     p.add_argument('--timeout', type=float, default=float(os.environ.get('CYBER_TIMEOUT', 60)))
@@ -70,6 +73,18 @@ def parser():
     return p
 
 
+def external_configuration(args):
+    if bool(args.ghidra_home) != bool(args.java_home):
+        raise CoreError('--ghidra-home and --java-home must be provided together')
+    config = {}
+    if args.ghidra_home:
+        config['ghidra'] = {'home': args.ghidra_home, 'java_home': args.java_home}
+    if args.binwalk_executable:
+        config['binwalk'] = {'executable': args.binwalk_executable}
+    return config
+
+
+
 def main(argv=None):
     core = None
     try:
@@ -93,9 +108,11 @@ def main(argv=None):
             elif cmd in ('analyze-file', 'analyze-firmware', 'analyze-can'):
                 if core.get(args.case)['paused']:
                     raise CoreError('Investigation is paused')
+                core.configure_external_tools(external_configuration(args))
                 task = core.enqueue(args.case, args.path, tool=cmd, second_path=getattr(args, 'compare_to', None))
                 result = {'task': task} if args.queue_only else core.run_one(args.case, task_id=task)
             elif cmd == 'worker':
+                core.configure_external_tools(external_configuration(args))
                 result = core.run_queue(args.case, max_tasks=args.max_tasks, max_seconds=args.max_seconds,
                                         poll_interval=args.poll_interval, idle_timeout=args.idle_timeout)
             elif cmd == 'cancel':
