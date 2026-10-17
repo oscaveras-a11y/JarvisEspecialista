@@ -1,0 +1,28 @@
+name: Forensics and PCAP contracts
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [codex/forensics-protocols]
+permissions:
+  contents: read
+concurrency:
+  group: forensics-protocols-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  synthetic:
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    env:
+      PYTHONPATH: src
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Bounded synthetic inventory tests (no providers)
+        run: python -m unittest discover -s tests -p test_forensics_protocols.py -v
