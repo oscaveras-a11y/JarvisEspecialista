@@ -86,7 +86,7 @@ class ExternalTests(unittest.TestCase):
         self.assertLess(time.monotonic()-started, 3)
 
     def test_json_read_cannot_grow_past_budget_after_stat(self):
-        oversized = b\'"\' + b"x" * (self.api.MAX_JSON - 1) + b\'"\'
+        oversized = bytes([34]) + b"x" * (self.api.MAX_JSON - 1) + bytes([34])
         fake = SimpleNamespace(is_symlink=lambda: False, is_file=lambda: True,
                                stat=lambda: SimpleNamespace(st_size=1),
                                open=lambda mode: io.BytesIO(oversized), read_bytes=lambda: oversized)
