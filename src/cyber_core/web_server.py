@@ -51,7 +51,7 @@ def only(data, fields):
 class Application:
     def __init__(self, home, web_root):
         self.home = storage_root(home)
-        self.uploads = storage_root(self.home / "uploads")
+        self.uploads = storage_root(self.home / "uploads").resolve()
         self.web_root = Path(web_root).resolve(strict=True)
         if not (self.web_root / "index.html").is_file():
             raise ValueError("Web assets are missing")
@@ -91,6 +91,7 @@ class Application:
     def snapshot(self):
         from cyber_core.operations import saved_operations
         cases, tasks, events, results, operations, valid, reports = [], [], [], {}, {}, {}, []
+        result_errors = {}
         with self.core() as core:
             for row in core.db.execute("SELECT id FROM investigations ORDER BY created DESC,id LIMIT 100").fetchall():
                 case = core.get(row["id"])
@@ -100,13 +101,25 @@ class Application:
                 cases.append(case)
                 tasks.extend(core.tasks(identifier))
                 events.extend(core.audit(identifier))
-                results[identifier] = core.results(identifier) if valid[identifier] else []
-                operations[identifier] = saved_operations(core, identifier) if valid[identifier] else []
-                if (core.home / "cases" / identifier / "report.md").is_file():
-                    reports.append({"case_id": identifier})
+                try:
+                    results[identifier] = self.verified_results(core, identifier)
+                    operations[identifier] = saved_operations(core, identifier)
+                except CoreError:
+                    results[identifier], operations[identifier] = [], []
+                    result_errors[identifier] = "Integridade do resultado ou da cópia não confirmada. Não use estes dados como verificados."
+                report_folder = core.home / "cases" / identifier / "reports"
+                if report_folder.is_dir():
+                    reports.extend({"case_id": identifier} for file in report_folder.glob("*.md") if file.is_file())
         return dict(cases=cases, tasks=tasks, audit=events, results=results,
                     operations=operations, audit_valid=valid, reports=reports,
-                    activeCase=None, busy=self.job_lock.locked(), last_error=self.last_error)
+                    activeCase=None, busy=self.job_lock.locked(), last_error=self.last_error, result_errors=result_errors)
+
+    def verified_results(self, core, identifier):
+        from cyber_core.verification.artifacts import verified_result
+        if not core.verify_audit(identifier):
+            raise CoreError("Audit integrity failed")
+        rows = core.db.execute("SELECT task_id FROM results WHERE case_id=? ORDER BY created", (identifier,)).fetchall()
+        return [verified_result(core, identifier, row["task_id"])[0] for row in rows]
 
     def require_case(self, core, identifier, *, active=False):
         try:
@@ -204,6 +217,7 @@ class Application:
         with self.core() as core:
             case = self.require_case(core, identifier)
             if action == "report":
+                self.verified_results(core, identifier)
                 report = core.report(identifier).read_text(encoding="utf-8")
                 return 200, {"text": report, "filename": "relatorio-core-" + identifier[:8] + ".md"}
             if case["state"] == "CANCELADO":
@@ -263,7 +277,7 @@ class Handler(BaseHTTPRequestHandler):
         origin = self.headers.get("Origin")
         if origin:
             parsed = urlsplit(origin)
-            if parsed.scheme not in {"http", "https"} or parsed.netloc.lower() != host:
+            if parsed.scheme not in {"http", "https"} or parsed.netloc.lower() not in self.server.allowed_hosts:
                 raise HTTPFault(403, "Origem não permitida")
         if mutation or urlsplit(self.path).path == "/api/state":
             token = self.headers.get("X-Cyber-Request", "")
@@ -289,7 +303,10 @@ class Handler(BaseHTTPRequestHandler):
                 if not file.is_file() or file.is_symlink():
                     raise HTTPFault(404, "Página não encontrada")
                 mime = mimetypes.guess_type(file.name)[0] or "application/octet-stream"
-                return self.send(200, file.read_bytes(), mime + ("; charset=utf-8" if mime.startswith("text/") else ""))
+                content = file.read_bytes()
+                if asset == "index.html":
+                    content = content.replace(b"</head>", b'<meta name="cyber-engine" content="required"></head>')
+                return self.send(200, content, mime + ("; charset=utf-8" if mime.startswith("text/") else ""))
             if self.headers.get("Content-Type", "").split(";")[0].strip() != "application/json":
                 raise HTTPFault(415, "Use conteúdo JSON")
             if self.headers.get("Transfer-Encoding"):
