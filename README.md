@@ -26,7 +26,8 @@ GitHub Actions valida o software em ambientes temporários; a plataforma ainda n
 - SQLite com migrações, checkpoints, histórico e trilha de auditoria.
 - Cópias verificadas, SHA-256, entropia, identificação de assinaturas e triagem de recuperação por arquivo ou lote, sem exigir chave fornecida.
 - Hipóteses versionadas, experimentos com critérios declarados, avaliação de resultados auditados e revisão independente declarada.
-- Análise e comparação offline de BIN, Intel HEX, S-record e cabeçalhos ELF/PE, com limites documentados.
+- Análise e comparação offline de BIN, Intel HEX, S-record e estruturas ELF/PE: arquitetura declarada, seções e segmentos, com limites documentados.
+- Prévia opcional de instruções com Capstone para arquiteturas declaradas compatíveis, limitada a bytes respaldados pelo arquivo; nunca executa o binário.
 - Análise e comparação de logs CAN clássicos, sem acesso a barramentos ou transmissão.
 - Recuperação autenticada AES-GCM somente do envelope sintético de laboratório `CCAES1`, quando material legítimo está disponível.
 
@@ -36,11 +37,15 @@ Uma assinatura não comprova validade integral do formato; alta entropia não co
 
 O núcleo funciona sem agentes. O adaptador Codex e a chamada real sintética têm um registro histórico em [validação](docs/validation.md); esse registro não comprova autenticação ou funcionamento no runner atual. O envio de resumo exige autorização explícita. Claude permanece opcional e bloqueado até validação do contrato.
 
-O sandbox do CLI é dependência externa. Nomes de revisores são declarações, não identidades autenticadas. A [orquestração beta](docs/orchestration-beta.md) acrescenta worker com limites, checkpoints e cancelamento persistente, validada em amostras sintéticas pelo GitHub Actions. O comando `run` continua processando uma tarefa. Serviços de boot, isolamento de análise, worktrees por tarefa, revisão cruzada automática e ferramentas profissionais externas continuam pendentes.
+O sandbox do CLI é dependência externa. Nomes de revisores são declarações, não identidades autenticadas. A [orquestração beta](docs/orchestration-beta.md) acrescenta worker com limites, checkpoints e cancelamento persistente, validada em amostras sintéticas pelo GitHub Actions. O comando `run` continua processando uma tarefa. As quatro análises permitidas já usam processo monitorado; isso controla seu ciclo de vida, sem sandbox de privilégios/rede. Serviços de boot, worktrees por tarefa, revisão cruzada automática e integrações profissionais adicionais continuam pendentes.
 
 **A plataforma completa ainda não foi entregue.** Testes aprovados comprovam apenas o comportamento coberto, não a prontidão de módulos profissionais ou ensaios com hardware.
 
 ## Documentação
+
+- [Revisão das 21 seções e pendências, com versões examinadas](docs/2026-10-17-project-status-report.md)
+- [Item 6: estruturas ELF/PE](docs/item-6-binary-structure.md)
+- [Item 6: prévia opcional Capstone](docs/item-6-capstone.md)
 
 - [Referência técnica da CLI para uso futuro](docs/cli-reference.md)
 - [Orquestração beta: worker, pausa, cancelamento e limites](docs/orchestration-beta.md)
