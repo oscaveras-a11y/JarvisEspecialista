@@ -7,6 +7,7 @@ import time
 # -I ignores PYTHONPATH/cwd. Insert only our own trusted package installation/source root.
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from cyber_core.errors import CoreError
+from cyber_core.analysis_process.limits import MAX_TIMEOUT_SECONDS
 from cyber_core.reverse_engineering import analyze
 
 
@@ -18,7 +19,7 @@ def execute(request):
     maximum, timeout = request['max_bytes'], request['timeout']
     if type(maximum) is not int or not 0 <= maximum <= 268435456:
         raise CoreError('Invalid analysis byte limit')
-    if type(timeout) not in (int, float) or not 0 < timeout <= 3600:
+    if type(timeout) not in (int, float) or not 0 < timeout <= MAX_TIMEOUT_SECONDS:
         raise CoreError('Invalid analysis time limit')
     if not source.is_absolute() or not output.is_absolute():
         raise CoreError('Analysis requires absolute paths')

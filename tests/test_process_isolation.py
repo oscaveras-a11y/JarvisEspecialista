@@ -240,7 +240,11 @@ class ProcessIsolationTests(unittest.TestCase):
         )
         result = self.run_fixture(body, timeout=15)
         descendant = int(Path(str(self.marker)+'.descendant').read_text())
-        self.assertFalse(alive(descendant), 'Descendant still running when supervisor returned')
+        if os.name == 'nt':
+            self.assertFalse(alive(descendant), 'Descendant still running when supervisor returned')
+        else:
+            # POSIX sends SIGKILL asynchronously; only Windows waits for job exit.
+            self.assert_dead(descendant)
         destination.unlink()
         self.assertEqual(result['value'], 1)
 
