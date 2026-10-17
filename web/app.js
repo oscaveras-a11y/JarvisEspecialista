@@ -1,8 +1,9 @@
 // CYBER CORE — approved visual evolution of the existing browser prototype.
 // State key and demonstration flows are compatible with Claude's web prototype.
-// This interface never invokes CORE, reads evidence or calls provider services.
+// Static demonstration or same-origin private CORE connection. No provider credentials.
 'use strict';
 const STORE_KEY='cybercore.ui.v1';
+let liveClient=null;
 const DEFAULT_STATE={cases:[],tasks:[],audit:[],reports:[],activeCase:null};
 const VIEWS=['dashboard','new','investigations','tasks','logs','reports','recovery','forensics','tools','agents'];
 const VIEW_TITLES={dashboard:'Visão geral',new:'Nova investigação',investigations:'Investigações',tasks:'Tarefas e progresso',logs:'Registros',reports:'Relatórios',recovery:'Recuperação',forensics:'Perícia digital',tools:'Ferramentas',agents:'Agentes'};
@@ -26,7 +27,7 @@ let search='',currentView='dashboard',auditQueue=Promise.resolve(),actionQueue=P
 const mobileMenu=window.matchMedia('(max-width:760px)');
 function uid(){return crypto.randomUUID().replaceAll('-','');}
 function nowIso(){return new Date().toISOString();}
-function saveState(){localStorage.setItem(STORE_KEY,JSON.stringify(state));}
+function saveState(){if(liveClient)return;localStorage.setItem(STORE_KEY,JSON.stringify(state));}
 function escapeHtml(value){return String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
 function icon(name){return '<svg class="icon" aria-hidden="true"><use href="assets/icons.svg#'+name+'"></use></svg>';}
 function getCase(id){return state.cases.find(c=>c.id===id)||null;}
@@ -44,6 +45,7 @@ async function sha256Hex(text){
  return Array.from(new Uint8Array(digest)).map(n=>n.toString(16).padStart(2,'0')).join('');
 }
 function appendAudit(caseId,event,data){
+ if(liveClient)return Promise.reject(Error('Os registros reais são gravados somente pelo CORE.'));
  const task=auditQueue.catch(()=>{}).then(async()=>{
   const chain=state.audit.filter(e=>e?.case_id===caseId),previous=chain.length?chain[chain.length-1].digest:'0'.repeat(64);
   const created=nowIso(),payload=JSON.stringify(data??{});
@@ -53,6 +55,7 @@ function appendAudit(caseId,event,data){
  auditQueue=task;return task;
 }
 async function verifyChain(caseId){
+ if(liveClient)return state.audit_valid?.[caseId]===true;
  let previous='0'.repeat(64);
  for(const e of state.audit.filter(item=>item?.case_id===caseId)){
   if(e.previous!==previous||typeof e.data!=='string'||typeof e.event!=='string'||typeof e.created!=='string')return false;
@@ -129,14 +132,20 @@ function renderDashboard(){
  document.getElementById('dashboard-recent').innerHTML=cases.length?'<table><thead><tr><th>Investigação</th><th>Etapa</th><th>Status</th></tr></thead><tbody>'+cases.map(c=>{
   const task=state.tasks.filter(t=>t.case_id===c.id).at(-1),stage=task?(TOOL_LABELS[task.tool]||'Análise demonstrativa'):'Planejamento';
   return '<tr><td><button class="project-link" data-case-select="'+escapeHtml(c.id)+'">'+escapeHtml(c.project)+'</button></td><td>'+escapeHtml(stage)+'</td><td>'+stateBadge(c)+'</td></tr>';
- }).join('')+'</tbody></table>':'<div class="empty">'+(search?'Nenhuma investigação encontrada.':'Nenhuma investigação ainda. Crie a primeira demonstração.')+'</div>';
+ }).join('')+'</tbody></table>':'<div class="empty">'+(search?'Nenhuma investigação encontrada.':(liveClient?'Nenhuma investigação ainda. Crie a primeira.':'Nenhuma investigação ainda. Crie a primeira demonstração.'))+'</div>';
 }
 function renderInvestigations(){
  const cases=filteredCases();
  document.getElementById('investigations-table').innerHTML=cases.length?'<div class="table-scroll"><table><thead><tr><th>Projeto</th><th>Estado</th><th>Responsável</th><th>Ações</th></tr></thead><tbody>'+cases.map(c=>'<tr data-id="'+escapeHtml(c.id)+'"'+(c.id===state.activeCase?' class="is-selected"':'')+'><td><strong>'+escapeHtml(c.project)+'</strong><span class="item-sub">'+escapeHtml(c.id.slice(0,8))+'</span></td><td>'+stateBadge(c)+'</td><td>'+escapeHtml(c.owner)+'</td><td class="actions"><button class="btn btn-sm" data-act="select">selecionar</button>'+(c.state!=='CANCELADO'?(c.paused?'<button class="btn btn-sm" data-act="resume">retomar</button>':'<button class="btn btn-sm" data-act="pause">pausar</button>')+'<button class="btn btn-sm btn-danger" data-act="cancel">cancelar</button>':'')+'</td></tr>').join('')+'</tbody></table></div>':'<div class="empty">'+(search?'Nenhuma investigação encontrada.':'Nenhuma investigação criada ainda.')+'</div>';
 }
-function canOrganize(c){return Boolean(c&&c.state!=='CANCELADO'&&!c.paused);}
+function canOrganize(c){return Boolean(c&&c.state!=='CANCELADO'&&!c.paused&&(!liveClient||(liveClient.online&&!state.busy)));}
 function renderTasks(){
+ if(liveClient){
+  const c=getCase(state.activeCase);document.querySelector('#form-new-task button[type=submit]').disabled=!canOrganize(c);
+  const tasks=state.tasks.filter(t=>t.case_id===c?.id),labels={done:'concluída',running:'em análise',pending:'pendente',failed:'falhou',cancelled:'cancelada'};
+  document.getElementById('tasks-list').innerHTML=tasks.length?tasks.map(t=>'<div class="item"><div><strong>'+escapeHtml(TOOL_LABELS[t.tool]||t.tool)+'</strong><p>'+escapeHtml(String(t.path).split(/[\\\\/]/).pop())+'</p>'+(t.error?'<p role="alert">'+escapeHtml(t.error)+'</p>':'')+'</div><span class="badge">'+escapeHtml(labels[t.status]||t.status)+'</span></div>').join(''):'<p>Escolha um arquivo autorizado para iniciar a análise.</p>';
+  renderEngineResults();return;
+ }
  const c=getCase(state.activeCase),list=document.getElementById('tasks-list');
  document.querySelector('#form-new-task button[type=submit]').disabled=!canOrganize(c);
  if(!c){list.innerHTML='<div class="empty">Selecione uma investigação acima.</div>';return;}
@@ -145,7 +154,7 @@ function renderTasks(){
 }
 function renderRecovery(){
  const c=getCase(state.activeCase),eligible=Boolean(c&&c.allowRecovery&&c.state!=='CANCELADO');
- document.getElementById('recovery-case-label').textContent=eligible?c.project+' • demonstração local':'Selecione uma investigação com recuperação autorizada.';
+ document.getElementById('recovery-case-label').textContent=eligible?c.project+(liveClient?' • avaliação no CORE':' • demonstração local'):'Selecione uma investigação com recuperação autorizada.';
  const progress=eligible&&typeof c.illustrativeProgress==='number'?Math.max(0,Math.min(100,c.illustrativeProgress)):0;
  document.getElementById('recovery-percent').textContent=progress+'%';document.getElementById('recovery-progress').style.width=progress+'%';
  document.querySelector('[data-recovery-act=pause]').disabled=!eligible||c.paused;
@@ -159,7 +168,7 @@ async function renderLogs(version){
  const chain=state.audit.filter(e=>e?.case_id===id);
  list.innerHTML=chain.length?[...chain].reverse().map(e=>'<div class="item"><div class="item-main"><div class="item-title">'+escapeHtml(e.event)+'</div><span class="item-sub">'+escapeHtml(dateText(e.created))+' • '+escapeHtml(String(e.digest).slice(0,16))+'…</span></div></div>').join(''):'<div class="empty">Nenhum registro local nesta investigação.</div>';
  const valid=await verifyChain(id);if(version!==renderVersion||id!==state.activeCase)return;
- status.textContent=chain.length?(valid?'Cadeia de registros demonstrativos íntegra':'A cadeia de registros foi alterada'):'Sem registros para verificar.';
+ status.textContent=chain.length?(valid?(liveClient?'Auditoria do CORE íntegra':'Cadeia de registros demonstrativos íntegra'):'A cadeia de registros foi alterada'):'Sem registros para verificar.';
  status.className='chain-status '+(chain.length?(valid?'ok':'bad'):'');
 }
 function buildReportMarkdown(c){
@@ -172,6 +181,7 @@ function buildReportMarkdown(c){
  'Este arquivo não substitui o relatório técnico emitido pelo CORE.',''].join('\n');
 }
 function renderReports(){
+ if(liveClient){const c=getCase(state.activeCase);document.getElementById('report-preview').textContent=c?(liveClient.reportCache.get(c.id)||'Clique em gerar para obter o relatório técnico do CORE.'):'Selecione uma investigação.';document.getElementById('gen-report').disabled=!c||!liveClient.online;return;}
  const c=getCase(state.activeCase);document.getElementById('report-preview').textContent=c?buildReportMarkdown(c):'Selecione uma investigação para pré-visualizar o relatório de demonstração.';
  document.getElementById('gen-report').disabled=!c;
 }
@@ -184,19 +194,22 @@ async function render(){
 }
 function requiredCase(id){const c=getCase(id);if(!c)throw Error('Selecione uma investigação.');return c;}
 async function createCase(fields){
+ if(liveClient){const {project,objective,owner,authorization,validHours,allowRecovery}=fields;const result=await liveClient.request('/cases',{project,objective,owner,authorization,validHours,allowRecovery});await refreshEngine();state.activeCase=result.id;return getCase(result.id);}
  if(!['project','objective','scope','owner','authorization'].every(k=>typeof fields[k]==='string'&&fields[k].trim()))throw Error('Preencha os dados da investigação.');
  if(!Number.isFinite(fields.validHours)||fields.validHours<1||fields.validHours>8760)throw Error('Informe uma validade entre 1 e 8760 horas.');
  const c={id:uid(),...fields,state:'EM INVESTIGACAO',paused:false,created:nowIso()};
  state.cases.push(c);state.activeCase=c.id;
  await appendAudit(c.id,'investigation_created',{project:c.project,owner:c.owner,demonstration:true});return c;
 }
-async function pauseCase(id){const c=requiredCase(id);if(c.state==='CANCELADO')throw Error('A investigação está cancelada.');if(c.paused)return;c.paused=true;await appendAudit(id,'investigation_paused',{});}
-async function resumeCase(id){const c=requiredCase(id);if(c.state==='CANCELADO')throw Error('Uma investigação cancelada não pode ser retomada.');if(!c.paused)return;c.paused=false;await appendAudit(id,'investigation_resumed',{});}
+async function pauseCase(id){if(liveClient)return liveAction(id,'pause');const c=requiredCase(id);if(c.state==='CANCELADO')throw Error('A investigação está cancelada.');if(c.paused)return;c.paused=true;await appendAudit(id,'investigation_paused',{});}
+async function resumeCase(id){if(liveClient)return liveAction(id,'resume');const c=requiredCase(id);if(c.state==='CANCELADO')throw Error('Uma investigação cancelada não pode ser retomada.');if(!c.paused)return;c.paused=false;await appendAudit(id,'investigation_resumed',{});}
 async function cancelCase(id,reason){
+ if(liveClient)return liveAction(id,'cancel',{reason});
  const c=requiredCase(id);if(c.state==='CANCELADO')return;if(!reason?.trim())throw Error('Informe o motivo do cancelamento.');
  c.state='CANCELADO';c.paused=true;await appendAudit(id,'investigation_cancelled',{reason:reason.trim()});
 }
 async function enqueueTask(caseId,tool,path){
+ if(liveClient)return sendEngineFile(caseId,tool);
  const c=requiredCase(caseId);if(!canOrganize(c))throw Error('Retome uma investigação ativa antes de organizar tarefas.');
  if(!Object.hasOwn(TOOL_LABELS,tool)||!path.trim())throw Error('Selecione uma análise e um caminho demonstrativo.');
  const t={id:uid(),case_id:caseId,tool,path,status:'pending',created:nowIso()};state.tasks.push(t);await appendAudit(caseId,'task_enqueued',{tool,path,demonstration:true});return t;
@@ -241,7 +254,7 @@ document.addEventListener('DOMContentLoaded',async()=>{
    else if(action.dataset.act==='resume')await resumeCase(id);
    else if(action.dataset.act==='cancel'){
     const reason=prompt('Motivo do cancelamento (obrigatório):');if(!reason?.trim()){toast('Cancelamento requer um motivo.','danger');return;}
-    if(!confirm('Cancelar esta investigação demonstrativa? Essa ação não pode ser desfeita.'))return;
+    if(!confirm(liveClient?'Cancelar esta investigação no CORE? Essa ação não pode ser desfeita.':'Cancelar esta investigação demonstrativa? Essa ação não pode ser desfeita.'))return;
     await cancelCase(id,reason);
    }
    await render();
@@ -253,20 +266,22 @@ document.addEventListener('DOMContentLoaded',async()=>{
    const fields={};for(const key of ['project','objective','scope','owner','authorization'])fields[key]=document.getElementById('f-'+key).value.trim();
    fields.validHours=Number(document.getElementById('f-valid-hours').value);fields.allowRecovery=document.getElementById('f-recovery').checked;
    await createCase(fields);form.reset();document.getElementById('f-valid-hours').value=72;search='';document.getElementById('case-search').value='';
-   toast('Investigação demonstrativa criada.');await showView('investigations');
+   toast(liveClient?'Investigação criada no CORE.':'Investigação demonstrativa criada.');await showView('investigations');
   });
  });
  document.getElementById('form-new-task').addEventListener('submit',event=>{
   event.preventDefault();schedule(async()=>{await enqueueTask(state.activeCase,document.getElementById('task-tool').value,document.getElementById('task-path').value.trim());
-   document.getElementById('task-path').value='';toast('Tarefa demonstrativa organizada. Nenhuma análise foi executada.');await render();});
+   document.getElementById('task-path').value='';toast(liveClient?'Arquivo enviado. Acompanhe o resultado do CORE abaixo.':'Tarefa demonstrativa organizada. Nenhuma análise foi executada.');await render();});
  });
- document.getElementById('verify-chain').addEventListener('click',()=>schedule(async()=>{requiredCase(state.activeCase);await render();toast('Conferência dos registros locais concluída.');}));
+ document.getElementById('verify-chain').addEventListener('click',()=>schedule(async()=>{requiredCase(state.activeCase);if(liveClient)await refreshEngine();await render();toast(liveClient?'Auditoria consultada no CORE.':'Conferência dos registros locais concluída.');}));
  document.getElementById('gen-report').addEventListener('click',()=>schedule(async()=>{
-  const c=requiredCase(state.activeCase);await appendAudit(c.id,'demonstration_report_generated',{demonstration:true});
+  const c=requiredCase(state.activeCase);
+  if(liveClient){const report=await liveClient.request('/cases/'+c.id+'/report',{});liveClient.reportCache.set(c.id,report.text);downloadText(report.filename,report.text);await refreshEngine();await render();return;}
+  await appendAudit(c.id,'demonstration_report_generated',{demonstration:true});
   state.reports.push({case_id:c.id,created:nowIso(),demonstration:true});saveState();
   downloadText('relatorio-demonstrativo-'+c.id.slice(0,8)+'.md',buildReportMarkdown(c));await render();
  }));
- try{if(firstVisit)await seedExamples();await render();if(storageIssue)toast('Não foi possível carregar os dados anteriores deste navegador.','danger');}
- catch{toast('Não foi possível iniciar a demonstração neste navegador.','danger');}
+ try{liveClient=await CoreConnection.open();if(liveClient){await refreshEngine();prepareEngineUI();}else{document.body.dataset.engine='demonstration';if(firstVisit)await seedExamples();}await render();if(storageIssue&&!liveClient)toast('Não foi possível carregar os dados anteriores deste navegador.','danger');}
+ catch{toast('Não foi possível iniciar o painel. Reabra o ambiente e tente novamente.','danger');}
  document.body.dataset.ready='true';
 });
