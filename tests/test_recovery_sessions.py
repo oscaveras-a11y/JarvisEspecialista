@@ -239,6 +239,7 @@ class RecoverySessionTests(unittest.TestCase):
     def test_publication_interruption_is_reconciled_on_stop_boundaries(self):
         for boundary in ("case_cancel","pause","deadline","revoke"):
             with self.subTest(boundary=boundary):
+                self.case = self.core.investigate("synthetic","boundary",str(self.scope),"owner","Synthetic stop",recovery=True,valid_hours=72)
                 self.material.write_text(self.key.hex()+"\n")
                 job = self.start()["id"]
                 code = (
@@ -278,14 +279,20 @@ class RecoverySessionTests(unittest.TestCase):
                  "exec('while not release.exists(): time.sleep(.01)'); "
                  "exec('try:\\n output.write_bytes(b\"synthetic plaintext\")\\n state=\"created\"\\nexcept FileNotFoundError:\\n state=\"blocked\"'); "
                  "Path("+repr(str(finished))+").write_text(state)")
-        worker = (
-            "import os,json,subprocess,sys; from pathlib import Path; from cyber_core.service import Core; "
-            "import cyber_core.cryptanalysis.sessions as m; core=Core("+repr(str(self.core.home))+"); "
-            "exec('def stop(command,prompt,**kw):\\n request=json.loads(prompt)\\n "
-            "code="+repr(child)+" .replace(\"OUTPUT\",repr(request[\"output\"]))\\n "
-            "subprocess.Popen([sys.executable,\"-c\",code],stdin=subprocess.DEVNULL,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)\\n "
-            "Path("+repr(str(ready))+").write_text(\"ready\")\\n os._exit(99)'); "
-            "m.run_bounded=stop; m.RecoverySessions(core).work("+repr(self.case)+","+repr(job)+")")
+        worker = """import os,json,subprocess,sys
+from pathlib import Path
+from cyber_core.service import Core
+import cyber_core.cryptanalysis.sessions as m
+core = Core(STATE_PATH)
+def stop(command,prompt,**kw):
+    request = json.loads(prompt)
+    code = CHILD_TEMPLATE.replace("OUTPUT",repr(request["output"]))
+    subprocess.Popen([sys.executable,"-c",code],stdin=subprocess.DEVNULL,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
+    Path(READY_PATH).write_text("ready")
+    os._exit(99)
+m.run_bounded = stop
+m.RecoverySessions(core).work(CASE_ID,JOB_ID)
+""".replace("STATE_PATH",repr(str(self.core.home))).replace("CHILD_TEMPLATE",repr(child)).replace("READY_PATH",repr(str(ready))).replace("CASE_ID",repr(self.case)).replace("JOB_ID",repr(job))
         run = subprocess.run([sys.executable,"-c",worker],capture_output=True,text=True,timeout=60)
         self.assertEqual(run.returncode,99,run.stderr)
         self.assertTrue(ready.exists())

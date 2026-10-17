@@ -1,5 +1,6 @@
 name: Pending modules validation
 on:
+  workflow_dispatch:
   push:
     branches: [codex/finish-pending-modules]
   pull_request:

@@ -52,6 +52,8 @@ def parser():
         specialist.add_argument('case'); specialist.add_argument('path')
         specialist.add_argument('--compare-to', help='Second authorized input to compare without modification')
         specialist.add_argument('--queue-only', action='store_true')
+    from cyber_core.cli.operations import configure as configure_operations
+    configure_operations(sub)
     aes = sub.add_parser('recover-aes', help='Recover a CCAES1 AES-256-GCM envelope with supplied key')
     aes.add_argument('case')
     aes.add_argument('path')
@@ -68,8 +70,6 @@ def parser():
     review = sub.add_parser('review', help='Ask Codex to review derived metadata; cloud approval required')
     review.add_argument('case')
     review.add_argument('--allow-cloud-summary', action='store_true')
-    from cyber_core.cli.operations import configure as configure_operations
-    configure_operations(sub)
     from cyber_core.cli.science import configure
     configure(sub)
     return p
