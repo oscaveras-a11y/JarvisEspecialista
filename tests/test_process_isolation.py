@@ -217,3 +217,29 @@ class ProcessIsolationTests(unittest.TestCase):
         self.assertEqual(result['size'], 3)
         self.assertEqual(len(self.core.results(self.case)), 1)
         self.assertEqual(self.core.tasks(self.case)[0]['attempts'], 2)
+
+    def test_redirected_descendant_has_exited_before_evidence_cleanup(self):
+        supervisor = self.supervisor()
+        destination = self.root / 'held-copy.bin'
+        ready = self.root / 'held-copy.ready'
+        child_code = (
+            "import sys,time;from pathlib import Path;"
+            "handle=open(sys.argv[1],'wb');handle.write(b'partial');handle.flush();"
+            "Path(sys.argv[2]).write_text('ready');time.sleep(60)"
+        )
+        body = (
+            "child=subprocess.Popen([sys.executable,'-c'," + repr(child_code) + "," +
+            repr(str(destination)) + "," + repr(str(ready)) +
+            "],stdin=subprocess.DEVNULL,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)\n"
+            "Path(request['marker']+'.descendant').write_text(str(child.pid))\n"
+            "deadline=time.monotonic()+10\n"
+            "while not Path(" + repr(str(ready)) + ").exists():\n"
+            " if time.monotonic()>deadline: raise RuntimeError('child not ready')\n"
+            " time.sleep(.01)\n"
+            "print(json.dumps({'ok':True,'result':{'value':1}}),flush=True)\n"
+        )
+        result = self.run_fixture(body, timeout=15)
+        descendant = int(Path(str(self.marker)+'.descendant').read_text())
+        self.assertFalse(alive(descendant), 'Descendant still running when supervisor returned')
+        destination.unlink()
+        self.assertEqual(result['value'], 1)
