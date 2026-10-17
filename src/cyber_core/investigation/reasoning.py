@@ -263,14 +263,23 @@ class Reasoning:
                 if not projection['eligible'] and committed_run is None:
                     return self._idle([projection])
             else:
-                selected = next((r for r in current if r['eligible'] and (strategy is None or r['id'] == strategy)), None)
+                selected, duplicates = None, []
+                for candidate in current:
+                    if not candidate['eligible'] or (strategy is not None and candidate['id'] != strategy):
+                        continue
+                    duplicate = self.db.execute('SELECT id FROM reasoning_cycles WHERE strategy_id=? AND hypothesis_revision=? AND input_fingerprint=?',
+                                                 (candidate['id'], candidate['revision'], fingerprint)).fetchone()
+                    if duplicate:
+                        duplicates.append((candidate, duplicate))
+                        continue
+                    selected = candidate
+                    break
                 if selected is None:
+                    if duplicates:
+                        candidate, duplicate = duplicates[0]
+                        audit(self.db, case, 'reasoning_repeat_rejected', {'strategy': candidate['id'], 'cycle': duplicate['id']})
+                        return {'status': 'repeated', 'cycle': duplicate['id']}
                     return self._idle(current)
-                duplicate = self.db.execute('SELECT id FROM reasoning_cycles WHERE strategy_id=? AND hypothesis_revision=? AND input_fingerprint=?',
-                                             (selected['id'], selected['revision'], fingerprint)).fetchone()
-                if duplicate:
-                    audit(self.db, case, 'reasoning_repeat_rejected', {'strategy': selected['id'], 'cycle': duplicate['id']})
-                    return {'status': 'repeated', 'cycle': duplicate['id']}
                 record = self._row('reasoning_strategies', case, selected['id'])
                 plan = self.flow._row('experiments', case, record['experiment_id'])
                 if plan['tool'] not in TOOLS:
