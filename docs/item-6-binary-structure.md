@@ -67,6 +67,21 @@ foram reproduzidas no run39037905810 (240 descobertos na combinação Linux,
 1 falha, 1 erro, 2 skips) antes das correções. São casos de compatibilidade,
 não provas de execução de DLL ou de descompressão.
 
+## Recibo da implementação
+
+Head de código/documentação: `dc22e0c6430a1493d45085005c97688a8b9dc383`.
+
+| Conjunto | Resultado |
+|---|---|
+| [Base Windows](https://github.com/oscaveras-a11y/JarvisEspecialista/actions/runs/39038008467) | 174 testes executados, OK em 74,759 s. |
+| [Combinação Windows](https://github.com/oscaveras-a11y/JarvisEspecialista/actions/runs/39038008327) | 240 testes executados, OK em 119,402 s; mais 3 sondas, handoff e demo aprovados. |
+| Combinação Linux, mesmo run | 240 descobertos, 238 executados e 2 skips específicos de Windows, OK em 21,581 s; mais 3 sondas, handoff e demo aprovados. |
+
+O candidato Claude fixado é `70deac283947e2245af59e2a8709c5e525d3f7de`;
+a combinação não foi publicada em nenhuma branch. As duas regressões da
+revisão passaram após as correções. Há 13 testes novos neste incremento.
+Isso não corrige os cinco achados do candidato registrados na revisão geral.
+
 ## Referências primárias
 
 - [ELF 4.2 — seções](https://gabi.xinuos.com/v42/elf/03-sheader.html)
