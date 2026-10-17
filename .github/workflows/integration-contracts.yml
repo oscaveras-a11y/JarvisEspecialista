@@ -36,7 +36,7 @@ jobs:
       PYTHONUTF8: "1"
       PYTHONUNBUFFERED: "1"
       PIP_DISABLE_PIP_VERSION_CHECK: "1"
-      CANDIDATE_SHA: 5f87ca3ca374ad1bba910ab1d7062e2c4ec4b2f9
+      CANDIDATE_SHA: 00adab4ccc187f517ee8272a29e285087b54e347
     defaults:
       run:
         shell: bash
