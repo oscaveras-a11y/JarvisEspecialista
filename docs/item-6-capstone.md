@@ -74,6 +74,31 @@ filho → SQLite → relatório. O CI combinado exige a presença da dependênci
 real; não pode declarar a integração aprovada por pular seus testes.
 A suíte base conserva o teste de funcionamento sem a dependência opcional.
 
+### Validação positiva
+
+No commit `cc292348046ba51fea219d2d52ee3cbce8a69453`, combinado pelo GitHub
+com main `76ab1d4109f1366da404ed0dee25aeb945784b9d`:
+
+- [Suíte base Windows, run 39039550942](https://github.com/oscaveras-a11y/JarvisEspecialista/actions/runs/39039550942):
+  189 testes descobertos, 183 executados e 6 pulados por ausência intencional
+  do backend opcional; aprovação em 71,871 s.
+- [Contratos combinados, run 39039550875](https://github.com/oscaveras-a11y/JarvisEspecialista/actions/runs/39039550875):
+  Capstone real 5.0.9 instalado em ambos os runners; Windows executou 255
+  testes em 151,818 s; Linux descobriu 255, executou 253 e pulou os 2 testes
+  específicos de Windows, em 25,581 s. Todos os executados passaram.
+  Os três probes adicionais, demonstração e passagem item 4 → item 5
+  também passaram nos dois sistemas.
+- A combinação usa exclusivamente o candidato Claude imutável
+  `70deac283947e2245af59e2a8709c5e525d3f7de` no runner descartável;
+  não integra nem edita a branch Claude. As pendências F1–F5 do relatório
+  geral continuam pertencendo à revisão desse candidato.
+- A revisão independente de código do head cc292348 não encontrou novos
+  pontos acionáveis após as correções de mapeamento. Foi revisão estática;
+  a evidência de execução é dos workflows acima.
+
+Esta seção registra o head validado antes desta atualização documental.
+A atualização de recibos não altera o código validado.
+
 Este incremento é uma prévia limitada. Não oferece desmontagem completa,
 grafo de fluxo, símbolos/importações, decompilação Ghidra ou varredura
 Binwalk; o item 6 integral permanece em andamento.
