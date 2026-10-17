@@ -68,6 +68,8 @@ def parser():
     review = sub.add_parser('review', help='Ask Codex to review derived metadata; cloud approval required')
     review.add_argument('case')
     review.add_argument('--allow-cloud-summary', action='store_true')
+    from cyber_core.cli.operations import configure as configure_operations
+    configure_operations(sub)
     from cyber_core.cli.science import configure
     configure(sub)
     return p
@@ -89,7 +91,10 @@ def main(argv=None):
     core = None
     try:
         args = parser().parse_args(argv)
-        if args.command in ('doctor', 'agents'):
+        if args.command == 'keys' and args.keys_action == 'inspect':
+            from cyber_core.recovery import inspect_key
+            result = inspect_key(args.path, max_bytes=args.key_max_bytes)
+        elif args.command in ('doctor', 'agents'):
             result = doctor()
             if args.command == 'agents':
                 result = result['agents']
@@ -98,6 +103,9 @@ def main(argv=None):
             cmd = args.command
             if cmd in ('hypothesis', 'experiment', 'research', 'verify', 'history'):
                 from cyber_core.cli.science import execute
+                result = execute(core, args)
+            elif cmd in ('keys', 'inventory-disk', 'inventory-pcap', 'agent-jobs', 'recovery-session'):
+                from cyber_core.cli.operations import execute
                 result = execute(core, args)
             elif cmd == 'init':
                 result = {'initialized': True, 'home': str(core.home), 'schema': 3}
