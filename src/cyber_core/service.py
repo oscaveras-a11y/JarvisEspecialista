@@ -288,3 +288,47 @@ class Core:
     def assess_recovery(self, case, path, **limits):
         from cyber_core.cryptanalysis.intake import assess_recovery
         return assess_recovery(self, case, path, **limits)
+
+    def classify(self, case):
+        row = self.authorize(case)
+        observed = None
+        first = self.db.execute('SELECT data FROM results WHERE case_id=? ORDER BY created LIMIT 1', (case,)).fetchone()
+        if first is not None:
+            try:
+                observed = json.loads(first['data']).get('format')
+            except (ValueError, TypeError):
+                observed = None
+        from cyber_core.planning import classify_investigation
+        result = classify_investigation(row['objective'], observed_format=observed)
+        with self.db:
+            self.authorize(case)
+            self.db.execute('INSERT OR REPLACE INTO investigation_type(case_id,type,confidence,rationale,signals,created) VALUES(?,?,?,?,?,?)',
+                            (case, result['type'], result['confidence'], result['rationale'], encoded(result['signals']), utc()))
+            audit(self.db, case, 'investigation_classified', {'type': result['type'], 'confidence': result['confidence']})
+        return result
+
+    def plan(self, case):
+        self.authorize(case)
+        stored = self.db.execute('SELECT type FROM investigation_type WHERE case_id=?', (case,)).fetchone()
+        investigation_type = stored['type'] if stored is not None else self.classify(case)['type']
+        from cyber_core.planning import build_plan
+        steps = build_plan(investigation_type)
+        plan_id = uuid4().hex
+        with self.db:
+            self.authorize(case)
+            self.db.execute('INSERT INTO plans(id,case_id,investigation_type,author,created) VALUES(?,?,?,?,?)',
+                            (plan_id, case, investigation_type, 'core', utc()))
+            for ordinal, step in enumerate(steps):
+                self.db.execute('INSERT INTO plan_steps(id,plan_id,case_id,ordinal,goal,candidate_tool,success_criterion,created) VALUES(?,?,?,?,?,?,?,?)',
+                                (uuid4().hex, plan_id, case, ordinal, step['goal'], step['candidate_tool'], step['success_criterion'], utc()))
+            self.reopen(case, reason='Execution plan created')
+            audit(self.db, case, 'plan_created', {'plan': plan_id, 'type': investigation_type, 'steps': len(steps)})
+        return {'plan': plan_id, 'type': investigation_type, 'steps': steps}
+
+    def plans(self, case):
+        self.get(case)
+        out = []
+        for row in self.db.execute('SELECT * FROM plans WHERE case_id=? ORDER BY created', (case,)):
+            steps = [dict(s) for s in self.db.execute('SELECT * FROM plan_steps WHERE plan_id=? ORDER BY ordinal', (row['id'],))]
+            out.append({**dict(row), 'steps': steps})
+        return out

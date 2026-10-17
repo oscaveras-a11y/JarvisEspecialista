@@ -72,6 +72,20 @@ CREATE TABLE IF NOT EXISTS analysis_notes(
  id TEXT PRIMARY KEY, case_id TEXT NOT NULL REFERENCES investigations(id),
  task_id TEXT NOT NULL REFERENCES tasks(id), statement TEXT NOT NULL,
  basis TEXT NOT NULL, created TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS investigation_type(
+ case_id TEXT PRIMARY KEY REFERENCES investigations(id),
+ type TEXT NOT NULL, confidence REAL NOT NULL, rationale TEXT NOT NULL,
+ signals TEXT NOT NULL, created TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS plans(
+ id TEXT PRIMARY KEY, case_id TEXT NOT NULL REFERENCES investigations(id),
+ investigation_type TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'OPEN',
+ author TEXT NOT NULL, created TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS plan_steps(
+ id TEXT PRIMARY KEY, plan_id TEXT NOT NULL REFERENCES plans(id),
+ case_id TEXT NOT NULL REFERENCES investigations(id), ordinal INTEGER NOT NULL,
+ goal TEXT NOT NULL, candidate_tool TEXT NOT NULL, success_criterion TEXT NOT NULL,
+ status TEXT NOT NULL DEFAULT 'pending', created TEXT NOT NULL,
+ UNIQUE(plan_id, ordinal));
 '''
 
 
@@ -81,7 +95,7 @@ def connect(path):
     db.execute('PRAGMA foreign_keys=ON')
     db.execute('PRAGMA busy_timeout=10000')
     version = db.execute('PRAGMA user_version').fetchone()[0]
-    if version not in (0, 1, 2, 3, 4):
+    if version not in (0, 1, 2, 3, 4, 5):
         db.close()
         raise CoreError('Unsupported database version')
     db.executescript(SCHEMA)
@@ -89,7 +103,8 @@ def connect(path):
     # Schema 4 unifies "hypothesis" on the scientific records; automatic entropy
     # heuristics move to analysis_notes. A legacy hypotheses table from an older
     # database is left untouched and simply no longer written to or reported.
-    db.execute('PRAGMA user_version=4')
+    # Schema 5 adds CORE planning: investigation_type, plans and plan_steps.
+    db.execute('PRAGMA user_version=5')
     db.commit()
     return db
 

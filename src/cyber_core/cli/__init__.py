@@ -45,6 +45,11 @@ def parser():
     cancel = sub.add_parser('cancel', help='Permanently stop a case, preserving committed evidence')
     cancel.add_argument('case')
     cancel.add_argument('--reason', required=True)
+    for name in ('classify', 'plan', 'plans'):
+        cmd = sub.add_parser(name, help={'classify': 'Classify the investigation type from its objective',
+                                         'plan': 'Create an ordered execution plan for the case',
+                                         'plans': 'List execution plans and steps for the case'}[name])
+        cmd.add_argument('case')
     analyze = sub.add_parser('analyze-file', help='Acquire verified copy and analyze statically')
     analyze.add_argument('case')
     analyze.add_argument('path')
@@ -91,7 +96,7 @@ def main(argv=None):
                 from cyber_core.cli.science import execute
                 result = execute(core, args)
             elif cmd == 'init':
-                result = {'initialized': True, 'home': str(core.home), 'schema': 4}
+                result = {'initialized': True, 'home': str(core.home), 'schema': 5}
             elif cmd == 'investigate':
                 result = {'id': core.investigate(args.project, args.objective, args.scope, args.owner, args.authorization, recovery=args.allow_recovery, valid_hours=args.valid_hours)}
             elif cmd == 'status':
@@ -106,6 +111,8 @@ def main(argv=None):
                                         poll_interval=args.poll_interval, idle_timeout=args.idle_timeout)
             elif cmd == 'cancel':
                 result = core.cancel(args.case, reason=args.reason)
+            elif cmd in ('classify', 'plan', 'plans'):
+                result = getattr(core, cmd)(args.case)
             elif cmd == 'run':
                 result = core.run_one(args.case)
             elif cmd == 'assess-recovery':
