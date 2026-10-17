@@ -138,7 +138,7 @@ class RecoverySessionTests(unittest.TestCase):
         manager = self.sessions()
         job = self.start()["id"]
         with self.core.db:
-            self.core.db.execute("UPDATE recovery_sessions SET status='running',token='old',lease_until=0 WHERE id=?", (job,))
+            self.core.db.execute("UPDATE recovery_sessions SET status='running',token='00000000000000000000000000000000',lease_until=0 WHERE id=?", (job,))
         item = manager.work(self.case, job, max_attempts=1)
         self.assertEqual(item["attempts"], 1)
         self.assertEqual(item["status"], "pending")
@@ -314,6 +314,44 @@ m.RecoverySessions(core).work(CASE_ID,JOB_ID)
         self.assertEqual(item["status"],"resource_limited")
         self.assertEqual(item["attempts"],1)
         self.assertEqual(manager.work(self.case,job)["attempts"],1)
+
+
+    def test_case_pause_never_resurrects_cancelled_or_resource_limited_session(self):
+        import cyber_core.cryptanalysis.sessions as module
+        manager = self.sessions()
+        cancelled = self.start()["id"]
+        manager.cancel(self.case,cancelled)
+        limited = self.start()["id"]
+        with patch.object(module,"run_bounded",side_effect=CoreError("Agent timeout exceeded")):
+            manager.work(self.case,limited)
+        self.core.pause(self.case)
+        self.core.resume(self.case)
+        self.assertEqual(manager.get(self.case,cancelled)["status"],"cancelled")
+        self.assertEqual(manager.get(self.case,limited)["status"],"resource_limited")
+        with self.assertRaises(CoreError):
+            manager.resume(self.case,cancelled)
+        with self.assertRaises(CoreError):
+            manager.resume(self.case,limited)
+
+    def test_resume_retries_deferred_cleanup_before_forgetting_claim(self):
+        import cyber_core.cryptanalysis.sessions as module
+        self.material.write_text(self.key.hex()+"\n")
+        manager = self.sessions()
+        job = self.start()["id"]
+        code = (
+            "import os; from cyber_core.service import Core; import cyber_core.cryptanalysis.sessions as m; "
+            "core=Core("+repr(str(self.core.home))+"); original=m.run_bounded; "
+            "exec('def stop(*a,**k):\\n result=original(*a,**k)\\n os._exit(97)'); "
+            "m.run_bounded=stop; m.RecoverySessions(core).work("+repr(self.case)+","+repr(job)+")")
+        run = subprocess.run([sys.executable,"-c",code],capture_output=True,text=True,timeout=60)
+        self.assertEqual(run.returncode,97,run.stderr)
+        with patch.object(module,"_cleanup_claim",side_effect=OSError("Synthetic sharing violation")):
+            self.core.pause(self.case)
+        self.assertIsNotNone(self.core.db.execute("SELECT token FROM recovery_sessions WHERE id=?",(job,)).fetchone()[0])
+        self.core.resume(self.case)
+        manager.resume(self.case,job)
+        self.assertFalse(list((self.core.home/"recovery-staging").rglob("*.pending")))
+        self.assertIsNone(self.core.db.execute("SELECT token FROM recovery_sessions WHERE id=?",(job,)).fetchone()[0])
 
 if __name__ == "__main__":
     unittest.main()

@@ -370,6 +370,8 @@ class RecoverySessions:
                         self.db.execute("UPDATE recovery_sessions SET status='resource_limited',attempts=? WHERE id=?", (row["attempts"],job))
                         self._progress(row)
                     break
+                if self._stop(case,job,token):
+                    break
                 result = json.loads(response["stdout"])
                 if type(result.get("matched")) is not bool or any(k not in
                     ("matched","authenticated","sha256","size","algorithm","private_material_validated") for k in result):
