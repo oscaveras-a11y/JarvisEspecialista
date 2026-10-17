@@ -71,10 +71,12 @@ class ExternalTests(unittest.TestCase):
         with self.assertRaises(CoreError):
             self.api.normalize_binwalk(raw, self.input, self.input.stat().st_size)
 
+    @unittest.skipUnless(sys.platform == "linux", "Linux runtime launcher")
     def test_process_output_is_bounded(self):
         with self.assertRaises(CoreError):
             self.api._run([sys.executable, "-c", "print('x'*300000)"], self.root, {}, time.monotonic()+5)
 
+    @unittest.skipUnless(sys.platform == "linux", "Linux runtime launcher")
     def test_process_deadline_is_enforced(self):
         started = time.monotonic()
         with self.assertRaises(CoreError):
