@@ -7,9 +7,10 @@ continuam desenvolvendo e testando**.
 
 Proprietário verificado pelo GitHub em 2026-10-17:
 `oscaveras-a11y`, user ID `329758463`.
-Repositório: `oscaveras-a11y/CyberCore`, repository ID `1415716753`.
+Repositório: `oscaveras-a11y/JarvisEspecialista`, repository ID `1415716753`.
 
-- Uso operacional e administração do beta pertencem exclusivamente ao proprietário.
+- Uso e administração do beta pertencem ao proprietário. Ele escolheu testar
+  primeiro o funcionamento **sem login adicional da aplicação nesta fase**.
 - Acesso ao código, revisão, CI ou credenciais de desenvolvimento não concede
   papel de operador/admin do beta.
 - Codex e Claude podem continuar implementações, correções, revisões e testes
@@ -19,10 +20,13 @@ Repositório: `oscaveras-a11y/CyberCore`, repository ID `1415716753`.
   o beta a terceiros ou alterar permissões operacionais por decisão dos agentes.
 - Não criar credenciais ou operar o beta em nome do proprietário por autorização
   implícita. Uma identidade declarada em texto não é identidade autenticada.
-- A política está registrada, mas o aplicativo atual ainda não implementa login
-  exclusivo. Não declarar a exclusividade tecnicamente garantida nem liberar uso
-  operacional até validar autenticação e autorização do proprietário.
-- Requisitos e critérios de liberação: [docs/beta-access.md](docs/beta-access.md).
+- Não criar login, senha, cadastro ou sessão nem exigir autenticação da
+  aplicação como condição para o teste pessoal atual. Essa orientação expressa
+  substitui a exigência anterior de login antes dos testes do proprietário.
+- Sem login, não declarar que há garantia técnica de identidade ou exclusividade.
+  Autenticação fica adiada; manter os controles de escopo, auditoria, integridade
+  e cancelamento existentes. Não ampliar o uso para terceiros automaticamente.
+- Política e critérios dos testes: [docs/beta-access.md](docs/beta-access.md).
 
 ## Ambiente autorizado
 
