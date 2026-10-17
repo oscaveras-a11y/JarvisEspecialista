@@ -34,10 +34,11 @@ O item 4 está entregue **no contrato operacional beta documentado**, com 29 tes
 
 | Evidência | Resultado lido nos logs |
 |---|---|
+| [Main após PR #8, run 39036676866](https://github.com/oscaveras-a11y/JarvisEspecialista/actions/runs/39036676866) | Windows/Python 3.12: 161 testes executados, OK em 69,929 s; demais etapas e demonstração aprovadas. |
 | [PR #8, run 39036388279](https://github.com/oscaveras-a11y/JarvisEspecialista/actions/runs/39036388279) | Windows/Python 3.12: 161 testes executados, OK em 62,058 s; dependências, compilação, CLI e demo aprovadas. |
 | [Candidato Claude, run 39035800054](https://github.com/oscaveras-a11y/JarvisEspecialista/actions/runs/39035800054) | Windows: 227 executados, OK em 110,233 s. Linux: 227 descobertos, 225 executados e 2 skips específicos de Windows, OK em 19,886 s. |
 | [Contratos do candidato, run 39035800031](https://github.com/oscaveras-a11y/JarvisEspecialista/actions/runs/39035800031) | Suíte, 3 sondas de prazo/tentativas, demo e passagem item 4 → memória item 5 aprovadas nos dois sistemas; esquema global 7 preservado. O merge do candidato antigo foi “Already up to date”, pois já era ancestral. |
-| [Reprodução independente desta revisão, run 39036837456](https://github.com/oscaveras-a11y/JarvisEspecialista/actions/runs/39036837456) | Combinação da main examinada com Claude 70deac… apenas no runner. Linux: 227 descobertos, 225 executados, 2 skips, OK em 19,894 s; 3 sondas e handoff aprovados. As cinco observações abaixo foram reproduzidas. |
+| [Reprodução independente desta revisão, run 39036837456](https://github.com/oscaveras-a11y/JarvisEspecialista/actions/runs/39036837456) | Combinação da main examinada com Claude 70deac… apenas no runner. Windows: 227 executados, OK em 128,377 s. Linux: 227 descobertos, 225 executados, 2 skips, OK em 19,894 s. Mais 3 sondas, handoff e demo aprovados nos dois sistemas. As cinco observações abaixo foram reproduzidas nos dois sistemas. |
 
 O workflow de diagnóstico termina com sucesso quando consegue executar as sondas. Seu JSON declara `release_approval: false`: **um check verde não transforma os problemas observados em comportamento aprovado**. Não houve chamada real aos provedores, varredura de rede, dispositivo, dado de cliente ou segredo real. A integração Codex real citada em `docs/validation.md` é histórica; os runners atuais não a repetem. O adaptador Claude do produto ainda recusa execução por falta de validação.
 
