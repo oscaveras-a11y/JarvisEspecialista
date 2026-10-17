@@ -56,6 +56,20 @@ def _choose(regions, entry):
 def _region(metadata):
     sections = [r for r in metadata.get("section_headers", []) if not r.get("ignored")]
     if "segments" in metadata:
+        if metadata.get("type") == 1:
+            # ET_REL addresses belong to individual sections, not one loaded image.
+            executable = [r for r in sections if r.get("executable") and
+                          _file_span(r) and not r.get("compressed")]
+            if not executable:
+                return None, "no_executable_file_bytes"
+            choice, error = _choose([executable[0]], None)
+            if choice:
+                choice["basis"] = "first_executable_relocatable_section"
+                choice["address_basis"] = "Section-relative declared address; relocations are not applied"
+                choice["section_index"] = executable[0]["index"]
+            return choice, error
+        if metadata.get("type") not in (2, 3):
+            return None, "unsupported_elf_object_type"
         loads = [r for r in metadata["segments"] if r.get("type") == 1]
         if loads:
             choice, error = _choose(loads, metadata.get("entry_point"))
@@ -102,7 +116,8 @@ def preview(data, metadata):
     common = {"architecture": architecture, "source_file_offset": offset,
               "start_address": address, "selection_basis": basis,
               "mapping_truncated": chosen["mapping_truncated"],
-              "address_basis": "Declared header addresses; relocations are not applied"}
+              "address_basis": chosen.get("address_basis", "Declared header addresses; relocations are not applied"),
+              "source_section_index": chosen.get("section_index")}
     try:
         capstone = import_module("capstone")
     except (ImportError, OSError):
