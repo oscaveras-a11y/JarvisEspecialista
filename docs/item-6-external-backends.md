@@ -1,8 +1,9 @@
 # Item 6: optional real external backend adapters
 
 This increment provides analyze_external(verified_path, metadata, config, timeout).
-It deliberately does not change CORE acquisition, authorization, firmware dispatch,
-SQLite publication or reports. Those connections require a separate integration.
+The initial adapter increment was standalone. The current [CORE integration](real-tools-core.md)
+connects explicit host configuration to verified acquisition, monitored execution,
+SQLite publication and reports.
 The caller supplies an already verified absolute file and metadata containing
 format=elf or format=pe for Ghidra. Without config no external tool is started.
 
@@ -70,8 +71,8 @@ disposable Linux runner. It builds but never executes a synthetic ELF returning
 42, requires real Ghidra decompilation, and requires real Binwalk identification
 of synthetic gzip at offset 256. Neither backend check can pass by skipping.
 Unit dummies cover failure behavior only; they are not real integration proof.
-Current positive runs must be inspected per commit. CORE-to-SQLite/report
-integration is not covered by this standalone adapter acceptance.
+Current positive runs must be inspected per commit. The current acceptance script additionally requires CORE-to-SQLite/report
+integration and the actual Binwalk CLI route; see [current contract](real-tools-core.md).
 
 ## Primary references
 

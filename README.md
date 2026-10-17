@@ -27,6 +27,7 @@ GitHub Actions valida o software em ambientes temporários; a plataforma ainda n
 - Cópias verificadas, SHA-256, entropia, identificação de assinaturas e triagem de recuperação por arquivo ou lote, sem exigir chave fornecida.
 - Hipóteses versionadas, experimentos com critérios declarados, avaliação de resultados auditados e revisão independente declarada.
 - Análise e comparação offline de BIN, Intel HEX, S-record e estruturas ELF/PE: arquitetura declarada, seções e segmentos, com limites documentados.
+- Integração opcional de Ghidra/Binwalk reais ao CORE e relatório, com [ensaios somente no GitHub](docs/real-tools-core.md).
 - Prévia opcional de instruções com Capstone para arquiteturas declaradas compatíveis, limitada a bytes respaldados pelo arquivo; nunca executa o binário.
 - Análise e comparação de logs CAN clássicos, sem acesso a barramentos ou transmissão.
 - Recuperação autenticada AES-GCM somente do envelope sintético de laboratório `CCAES1`, quando material legítimo está disponível.
