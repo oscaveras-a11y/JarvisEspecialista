@@ -55,6 +55,17 @@ def parser():
     decompose.add_argument('case')
     decompose.add_argument('path')
     decompose.add_argument('--compare-to', help='Second authorized input for paired firmware/CAN comparison')
+    basis = sub.add_parser('authorize-basis', help='Record the authorization basis (owner consent or legal authority)')
+    basis.add_argument('case')
+    basis.add_argument('--kind', choices=('owner_consent', 'legal_authority'), required=True)
+    for name in ('authority', 'reference', 'examiner', 'scope-note'):
+        basis.add_argument('--' + name, required=True)
+    selftest = sub.add_parser('self-test-recovery', help='Authorized recovery self-test on your own CCPW1 lab file')
+    selftest.add_argument('case')
+    selftest.add_argument('path')
+    selftest.add_argument('--wordlist', required=True, help='Local file with one candidate passphrase per line')
+    selftest.add_argument('--max-candidates', type=int, default=10000, help='Maximum candidate passphrases to try')
+    selftest.add_argument('--max-seconds', type=float, default=30)
     analyze = sub.add_parser('analyze-file', help='Acquire verified copy and analyze statically')
     analyze.add_argument('case')
     analyze.add_argument('path')
@@ -101,7 +112,7 @@ def main(argv=None):
                 from cyber_core.cli.science import execute
                 result = execute(core, args)
             elif cmd == 'init':
-                result = {'initialized': True, 'home': str(core.home), 'schema': 6}
+                result = {'initialized': True, 'home': str(core.home), 'schema': 7}
             elif cmd == 'investigate':
                 result = {'id': core.investigate(args.project, args.objective, args.scope, args.owner, args.authorization, recovery=args.allow_recovery, valid_hours=args.valid_hours)}
             elif cmd == 'status':
@@ -120,6 +131,13 @@ def main(argv=None):
                 result = getattr(core, cmd)(args.case)
             elif cmd == 'decompose':
                 result = core.decompose(args.case, args.path, second_path=args.compare_to)
+            elif cmd == 'authorize-basis':
+                result = core.set_authorization_basis(args.case, kind=args.kind, authority=args.authority,
+                                                      reference=args.reference, examiner=args.examiner, scope_note=args.scope_note)
+            elif cmd == 'self-test-recovery':
+                wordlist = local_path(args.wordlist)
+                candidates = [line for line in wordlist.read_text(encoding='utf-8', errors='replace').splitlines() if line]
+                result = core.self_test_recovery(args.case, args.path, candidates, max_attempts=args.max_candidates, max_seconds=args.max_seconds)
             elif cmd == 'run':
                 result = core.run_one(args.case)
             elif cmd == 'assess-recovery':

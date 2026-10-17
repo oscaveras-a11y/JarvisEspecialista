@@ -131,7 +131,7 @@ class CoreTests(unittest.TestCase):
         self.core.db.commit()
         upgraded = Core(self.root / 'state')
         self.addCleanup(upgraded.close)
-        self.assertEqual(upgraded.db.execute('PRAGMA user_version').fetchone()[0], 6)
+        self.assertEqual(upgraded.db.execute('PRAGMA user_version').fetchone()[0], 7)
         self.assertEqual(upgraded.results(self.case)[0]['sha256'], result['sha256'])
         self.assertTrue(upgraded.verify_audit(self.case))
 

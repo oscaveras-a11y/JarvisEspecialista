@@ -373,3 +373,45 @@ class Core:
     def assignments(self, case):
         self.get(case)
         return [dict(r) for r in self.db.execute('SELECT * FROM task_assignments WHERE case_id=? ORDER BY created', (case,))]
+
+    def set_authorization_basis(self, case, *, kind, authority, reference, examiner, scope_note):
+        self.authorize(case)
+        if kind not in ('owner_consent', 'legal_authority'):
+            raise CoreError('Authorization basis kind must be owner_consent or legal_authority')
+        values = {'authority': authority, 'reference': reference, 'examiner': examiner, 'scope_note': scope_note}
+        for name, value in values.items():
+            if not isinstance(value, str) or not value.strip():
+                raise CoreError('Authorization basis requires a non-empty ' + name)
+        with self.db:
+            self.authorize(case)
+            self.db.execute('INSERT OR REPLACE INTO authorization_basis(case_id,kind,authority,reference,examiner,scope_note,created) VALUES(?,?,?,?,?,?,?)',
+                            (case, kind, authority.strip(), reference.strip(), examiner.strip(), scope_note.strip(), utc()))
+            audit(self.db, case, 'authorization_basis_set', {'kind': kind, 'authority': authority.strip(), 'reference': reference.strip(), 'examiner': examiner.strip()})
+        return {'case': case, 'kind': kind}
+
+    def authorization_basis(self, case):
+        self.get(case)
+        row = self.db.execute('SELECT * FROM authorization_basis WHERE case_id=?', (case,)).fetchone()
+        return dict(row) if row is not None else None
+
+    def self_test_recovery(self, case, path, candidates, *, max_attempts=10000, max_seconds=30):
+        self.authorize(case)
+        basis = self.db.execute('SELECT kind FROM authorization_basis WHERE case_id=?', (case,)).fetchone()
+        if basis is None or basis['kind'] != 'owner_consent':
+            raise CoreError('Self-test requires an owner_consent authorization basis on your own file')
+        if not isinstance(candidates, (list, tuple)) or not 1 <= len(candidates) <= 100000:
+            raise CoreError('Provide between 1 and 100000 candidate passphrases')
+        if not 0 < max_attempts <= 100000 or not 0 < max_seconds <= 3600:
+            raise CoreError('Invalid self-test limits')
+        source = self.authorize(case, path)
+        if source.stat().st_size > self.max_bytes:
+            raise CoreError('Self-test file exceeds byte limit')
+        envelope = source.read_bytes()
+        from cyber_core.cryptanalysis.selftest import attempt
+        result = attempt(envelope, candidates, max_attempts=max_attempts, deadline=time.monotonic() + max_seconds)
+        result['recovery_demonstrated'] = result['recovered']
+        # Audit records only the outcome, never the passphrase or the plaintext.
+        with self.db:
+            self.authorize(case)
+            audit(self.db, case, 'self_test_recovery', {'recovered': result['recovered'], 'attempts': result['attempts'], 'status': result['status']})
+        return result

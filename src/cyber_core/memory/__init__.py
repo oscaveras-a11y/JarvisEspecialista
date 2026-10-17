@@ -92,6 +92,10 @@ CREATE TABLE IF NOT EXISTS plan_tasks(
 CREATE TABLE IF NOT EXISTS task_assignments(
  task_id TEXT PRIMARY KEY REFERENCES tasks(id), case_id TEXT NOT NULL REFERENCES investigations(id),
  executor TEXT NOT NULL, reason TEXT NOT NULL, created TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS authorization_basis(
+ case_id TEXT PRIMARY KEY REFERENCES investigations(id),
+ kind TEXT NOT NULL, authority TEXT NOT NULL, reference TEXT NOT NULL,
+ examiner TEXT NOT NULL, scope_note TEXT NOT NULL, created TEXT NOT NULL);
 '''
 
 
@@ -101,7 +105,7 @@ def connect(path):
     db.execute('PRAGMA foreign_keys=ON')
     db.execute('PRAGMA busy_timeout=10000')
     version = db.execute('PRAGMA user_version').fetchone()[0]
-    if version not in (0, 1, 2, 3, 4, 5, 6):
+    if version not in (0, 1, 2, 3, 4, 5, 6, 7):
         db.close()
         raise CoreError('Unsupported database version')
     db.executescript(SCHEMA)
@@ -111,7 +115,8 @@ def connect(path):
     # database is left untouched and simply no longer written to or reported.
     # Schema 5 adds CORE planning: investigation_type, plans and plan_steps.
     # Schema 6 adds decomposition/distribution: plan_tasks and task_assignments.
-    db.execute('PRAGMA user_version=6')
+    # Schema 7 adds authorization_basis (owner consent / legal authority).
+    db.execute('PRAGMA user_version=7')
     db.commit()
     return db
 
