@@ -155,3 +155,19 @@ Em vez de escrever testes novos sem necessidade real (o que violaria a diretriz 
 **Resultado da auditoria: nenhuma lacuna real encontrada** nas categorias exigidas pelo item 18 — todas já têm teste correspondente com arquivo sintético/autorizado, sem afirmação de funcionamento de ferramenta externa sem teste real (Ghidra/Binwalk seguem declarados como não testados de ponta a ponta, item 6). Não escrevi testes redundantes só para "mostrar trabalho"; os únicos testes novos desta rodada (itens 8/10/12/14) cobrem lacunas reais que identifiquei, já documentadas nas seções correspondentes acima.
 
 **Honestidade sobre o que NÃO foi feito agora (item 6, Ghidra/Binwalk):** o PR #13 do Codex (`reverse_engineering/external.py::analyze_external`) adiciona adaptadores opcionais para Ghidra 12.1.4 e Binwalk 3.1.0, exigindo configuração explícita com caminhos absolutos (`ghidra.home`, `java_home`, `binwalk.executable`). Esse módulo foi mergeado (código presente, testado para degradar graciosamente sem fabricar resultado quando as ferramentas não existem — confirmado via `which ghidra`/`which binwalk`, ambos vazios neste sandbox), mas a integração ao `Core`/CLI **ainda não foi feita**. Motivo: essa integração exige supervisão real de processo externo (Ghidra/Binwalk de fato instalados, com os caminhos configurados) para ser validada de ponta a ponta sem fabricar sucesso — o que este sandbox não tem disponível. Fica como próxima etapa explícita, não escondida.
+
+### Tentativa real de instalar Binwalk 3.1.0 nesta sessão e por que parou
+
+A pedido do proprietário, tentei de fato instalar as ferramentas reais para destravar o item 6:
+
+1. Java 21 (`openjdk-21-jdk`) já estava presente — suficiente para o Ghidra.
+2. Clonei o repositório oficial `ReFirmLabs/binwalk` (leitura anônima, sem credenciais) e fiz checkout exato na tag `v3.1.0` — a mesma versão que `external.py` exige (`BINWALK_VERSION = "3.1.0"`, com verificação estrita da string de versão).
+3. Tentei compilar com `cargo build --release` (Rust 1.97 disponível no ambiente).
+
+O próprio classificador de modo automático do Claude Code **recusou a execução do `cargo build`**, com o motivo explícito `[Code from External]` — compilar/executar código-fonte de terceiros baixado da internet é bloqueado por política de segurança do ambiente de execução, independente da avaliação de risco do código em si. A instrução do bloqueio foi parar e deixar o proprietário decidir, sem tentar contornar.
+
+Alternativas descartadas, e por quê:
+- `apt` tem `binwalk` 2.3.4 (Python, pré-reescrita em Rust) disponível sem bloqueio — mas é incompatível com o pino de versão exato (`"binwalk 3.1.0"`) que o código exige, e mudar esse pino para aceitar uma versão mais antiga é uma decisão de compatibilidade/segurança que não me cabe tomar sem autorização explícita.
+- Ghidra não está no `apt`; baixaria um ZIP de release do GitHub e rodaria `analyzeHeadless`, o que cairia no mesmo bloqueio de "código externo".
+
+**Decisão do proprietário (confirmada nesta sessão): opção 1 — deixar documentado como pendência por enquanto.** Não instalar as ferramentas agora; o código do adaptador segue mergeado e testado para a ausência delas, sem fabricar sucesso. A instalação real fica para quando isso rodar numa máquina ou CI sem essa restrição de execução de código externo. Nenhuma mudança de código foi feita nesta tentativa — apenas o clone de leitura em `/home/user/refirmlabs/binwalk`, fora do repositório do projeto, inofensivo e não commitado.
