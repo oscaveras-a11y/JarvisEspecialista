@@ -56,9 +56,10 @@ PE32/PE32+, nomes, regiões sem bytes, arquitetura desconhecida, limites e
 integração real do filho → SQLite → relatório. Os binários sintéticos são
 somente lidos; nunca são executados.
 
-Este incremento não conclui todo o item 6. Desmontagem, decompilação,
-importações/símbolos, formatos proprietários e integrações Ghidra/Capstone/
-Binwalk/equivalentes continuam separados. Strings do candidato Claude
+Este incremento estrutural não conclui todo o item 6. A [prévia limitada
+Capstone](item-6-capstone.md) é um incremento posterior documentado separadamente.
+Desmontagem completa, decompilação, importações/símbolos, formatos proprietários
+e integrações Ghidra/Binwalk/equivalentes continuam separados. Strings do candidato Claude
 permanecem na branch dele; não foram copiadas nem integradas aqui.
 
 A revisão independente detectou entrada PE ausente tratada como base de imagem
