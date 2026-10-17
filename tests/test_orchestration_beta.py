@@ -282,3 +282,71 @@ class OrchestrationBetaTests(unittest.TestCase):
         self.assertTrue(self.core.verify_audit(self.case))
         self.assertEqual(self.worker()['status'], 'drained')
         self.assertEqual(len(self.core.results(self.case)), 1)
+
+    def test_aes_acceptance_and_cancellation_have_serial_commit_order(self):
+        self.assertTrue(callable(getattr(self.core, 'cancel', None)), 'Persistent cancellation is missing')
+        import os
+        import threading
+        from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+        key = b'k' * 32
+        nonce = os.urandom(12)
+        encrypted = self.inputs / 'control.ccaes'
+        encrypted.write_bytes(b'CCAES1' + nonce + AESGCM(key).encrypt(nonce, b'control', b'CCAES1'))
+        started, finished = threading.Event(), threading.Event()
+        errors = []
+        def cancel_on_other_connection():
+            other = Core(self.home)
+            try:
+                started.set()
+                other.cancel(self.case, reason='Concurrent cancellation at final recovery acceptance')
+            except BaseException as exc:
+                errors.append(exc)
+            finally:
+                other.close()
+                finished.set()
+        thread = threading.Thread(target=cancel_on_other_connection)
+        real_authorize = self.core.authorize
+        calls = [0]
+        def schedule_cancellation(*args, **kwargs):
+            row = real_authorize(*args, **kwargs)
+            calls[0] += 1
+            if calls[0] == 4:
+                thread.start()
+                self.assertTrue(started.wait(5))
+                # Without a final writer lock cancel commits here; with the lock it waits.
+                finished.wait(.5)
+            return row
+        with patch.object(self.core, 'authorize', side_effect=schedule_cancellation):
+            recovered = self.core.recover(self.case, encrypted, key)
+        self.assertTrue(finished.wait(15))
+        thread.join(timeout=1)
+        self.assertFalse(errors, repr(errors))
+        events = [row['event'] for row in self.core.audit(self.case)]
+        self.assertLess(events.index('recovery_verified'), events.index('investigation_cancelled'))
+        self.assertEqual(Path(recovered['output']).read_bytes(), b'control')
+        self.assertEqual(self.core.get(self.case)['state'], 'CANCELADO')
+
+    def test_batch_cancellation_reconciles_items_leased_by_another_worker(self):
+        self.assertTrue(callable(getattr(self.core, 'cancel', None)), 'Persistent cancellation is missing')
+        (self.inputs / 'second.bin').write_bytes(b'def')
+        other = Core(self.home)
+        self.addCleanup(other.close)
+        real_run = self.core.run_one
+        calls = [0]
+        leased = []
+        def run_with_concurrent_claim(*args, **kwargs):
+            calls[0] += 1
+            if calls[0] == 1:
+                claim = other._claim(self.case, kwargs['task_id'])
+                leased.append(claim['id'])
+                return real_run(*args, **kwargs)
+            result = real_run(*args, **kwargs)
+            other.cancel(self.case, reason='Stop batch with a separately leased earlier item')
+            return result
+        with patch.object(self.core, 'run_one', side_effect=run_with_concurrent_claim):
+            result = self.core.assess_recovery(self.case, self.inputs)
+        self.assertEqual(result['status'], 'cancelled')
+        self.assertEqual(result['cancelled_tasks'], leased)
+        self.assertFalse(result['pending_tasks'])
+        self.assertFalse(result['failures'])
+        self.assertEqual(len(result['results']), 1)
