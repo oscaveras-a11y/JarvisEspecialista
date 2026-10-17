@@ -1,0 +1,67 @@
+name: Project status audit
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/workflows/project-status-audit.yml'
+      - 'scripts/check-project-status.py'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: project-status-audit-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  audit:
+    name: Audit candidate / ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-2022, ubuntu-24.04]
+    timeout-minutes: 20
+    env:
+      PYTHONUTF8: "1"
+      PYTHONUNBUFFERED: "1"
+      PIP_DISABLE_PIP_VERSION_CHECK: "1"
+      CANDIDATE_SHA: 70deac283947e2245af59e2a8709c5e525d3f7de
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Checkout audit branch
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Combine fixed candidate in disposable runner
+        run: |
+          git cat-file -e "$CANDIDATE_SHA^{commit}"
+          git -c user.name="Status audit" -c user.email="audit@example.invalid" merge --no-commit --no-ff "$CANDIDATE_SHA"
+          git diff --check
+          git rev-parse HEAD
+          printf 'Audited candidate: %s\n' "$CANDIDATE_SHA" >> "$GITHUB_STEP_SUMMARY"
+          printf 'No branch is pushed. Diagnostic success is not product approval.\n' >> "$GITHUB_STEP_SUMMARY"
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - name: Install and check combined sources
+        run: |
+          python -m pip install .
+          python -m pip check
+          python -m compileall -q src scripts tests
+          cyber --help
+      - name: Run candidate offline suite
+        run: python scripts/run-tests.py
+      - name: Reproduce synthetic status observations
+        run: python scripts/check-project-status.py
+      - name: Run shared integration probes and demonstration
+        run: |
+          python scripts/check-integration-contracts.py
+          python scripts/check-reasoning-handoff.py
+          python scripts/demo.py
