@@ -7,7 +7,7 @@ from uuid import uuid4
 from cyber_core.errors import CoreError
 from cyber_core.memory import audit, connect, encoded, utc, verify
 from cyber_core.permissions import local_path, scoped_path, storage_root
-from cyber_core.reverse_engineering import analyze
+from cyber_core.analysis_process import analyze_in_process
 
 
 class Core:
@@ -124,33 +124,33 @@ class Core:
             output = folder / (task['id'] + '-' + task['token'] + '.evidence')
             limit = self.db.execute('SELECT max_bytes FROM task_limits WHERE task_id=?', (task['id'],)).fetchone()
             byte_limit = min(self.max_bytes, limit['max_bytes']) if limit is not None else self.max_bytes
-            remaining = budget - (time.monotonic() - started)
-            if remaining <= 0:
-                raise CoreError('Analysis time budget exhausted')
-            result = analyze(source, output, byte_limit, remaining)
-            result.update(task_id=task['id'], tool=task['tool'])
             parameters = self.db.execute('SELECT data FROM task_parameters WHERE task_id=?', (task['id'],)).fetchone()
             secondary_source = None
             if parameters:
                 secondary_source = self.authorize(case, json.loads(parameters['data'])['secondary'])
                 secondary_output = folder / (task['id'] + '-' + task['token'] + '-secondary.evidence')
-                remaining = budget - (time.monotonic() - started)
-                if remaining <= 0:
-                    raise CoreError('Paired analysis time budget exhausted')
-                result['secondary'] = analyze(secondary_source, secondary_output, self.max_bytes, remaining)
-            if recovery_assessment:
-                from cyber_core.cryptanalysis.assessment import assess
-                result['recovery_assessment'] = assess(output, entropy=result['entropy'])
-            if task['tool'] == 'analyze-firmware':
-                from cyber_core.firmware import analyze_firmware, compare_firmware
-                result['firmware'] = analyze_firmware(output, max_bytes=byte_limit)
-                if secondary_output:
-                    result['firmware_comparison'] = compare_firmware(output, secondary_output, max_bytes=self.max_bytes)
-            elif task['tool'] == 'analyze-can':
-                from cyber_core.automotive import analyze_can, compare_can
-                result['can'] = analyze_can(output, max_bytes=min(byte_limit, 16777216))
-                if secondary_output:
-                    result['can_comparison'] = compare_can(output, secondary_output, max_bytes=min(self.max_bytes, 16777216))
+
+            def check_claim():
+                self.authorize(case, recovery=recovery_assessment)
+                current = self.db.execute('SELECT status,token FROM tasks WHERE id=?', (task['id'],)).fetchone()
+                return 'claim replaced' if current['status'] != 'running' or current['token'] != task['token'] else None
+
+            def record_process(pid):
+                with self.db:
+                    self.db.execute('BEGIN IMMEDIATE')
+                    if check_claim():
+                        raise CoreError('Analysis claim no longer active')
+                    audit(self.db, case, 'analysis_process_started', {'task': task['id'], 'pid': pid,
+                          'containment': 'process-lifecycle', 'privilege_sandbox': False})
+
+            remaining = budget - (time.monotonic() - started)
+            if remaining <= 0:
+                raise CoreError('Analysis time budget exhausted')
+            result = analyze_in_process(source, output, byte_limit, remaining, tool=task['tool'],
+                                        secondary_source=secondary_source, secondary_destination=secondary_output,
+                                        secondary_max_bytes=self.max_bytes, should_stop=check_claim,
+                                        on_started=record_process)
+            result.update(task_id=task['id'], tool=task['tool'])
             if time.monotonic() - started > budget:
                 raise CoreError('Analysis resource limit exceeded')
             with self.db:
