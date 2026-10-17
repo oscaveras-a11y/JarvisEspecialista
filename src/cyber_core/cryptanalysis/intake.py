@@ -111,6 +111,14 @@ def assess_recovery(core, case, path, *, max_files=100, recursive=False, queue_o
                 output['blocked_error'] = str(exc)
                 break
             output['failures'].append({'task': task, 'error': str(exc)})
+    # A peer may have cancelled an item previously observed with a live lease,
+    # including during the final successful iteration. Reconcile the entire batch.
+    if core.get(case)['state'] == 'CANCELADO':
+        batch_ids = set(tasks)
+        durable = [row for row in core.tasks(case) if row['id'] in batch_ids]
+        output['cancelled_tasks'] = [row['id'] for row in durable if row['status'] == 'cancelled']
+        output['pending_tasks'] = [row['id'] for row in durable if row['status'] in ('pending', 'running')]
+        output['status'] = 'cancelled'
     if output['failures'] or output['pending_tasks']:
         if output['status'] == 'completed':
             output['status'] = 'partial'
