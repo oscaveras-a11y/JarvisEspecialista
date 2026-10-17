@@ -3,12 +3,14 @@
 class CoreConnection{
  constructor(health){this.token=health.token;this.capabilities=health.capabilities;this.online=true;this.reportCache=new Map();}
  static async open(){
+  const required=document.querySelector('meta[name="cyber-engine"]')?.content==='required';
   try{
    const response=await fetch('/api/health',{cache:'no-store',signal:AbortSignal.timeout(5000)});
-   if(!response.ok)return null;
+   if(!response.ok)throw Error('Motor indisponível');
    const health=await response.json();
-   return health.service==='cyber-core'&&health.version===1&&typeof health.token==='string'?new CoreConnection(health):null;
-  }catch{return null;}
+   if(health.service!=='cyber-core'||health.version!==1||typeof health.token!=='string')throw Error('Motor incompatível');
+   return new CoreConnection(health);
+  }catch(error){if(required)throw error;return null;}
  }
  async request(path,data){
   let response;
@@ -16,8 +18,12 @@ class CoreConnection{
    headers:{'X-Cyber-Request':this.token,...(data===undefined?{}:{'Content-Type':'application/json'})},
    body:data===undefined?undefined:JSON.stringify(data),signal:AbortSignal.timeout(15000)});
   }catch{this.online=false;connectionNotice(false);throw Error('Conexão com o motor interrompida. Reabra o Codespace e atualize o painel.');}
-  const result=await response.json();
-  if(!response.ok)throw Error(result.error||'O motor recusou a operação.');
+  let result;
+  try{result=await response.json();}catch{this.online=false;connectionNotice(false);throw Error('Reabra o painel pelo Codespace para restabelecer a conexão.');}
+  if(!response.ok){
+   if(response.status===403||response.status>=500){this.online=false;this.needsReload=response.status===403;connectionNotice(false);}
+   throw Error(result.error||'O motor recusou a operação.');
+  }
   this.online=true;connectionNotice(true);return result;
  }
 }
@@ -55,6 +61,7 @@ function renderEngineResults(){
   '</strong><p>SHA-256: <span class="mono">'+escapeHtml(result.sha256)+'</span></p><p>'+escapeHtml(result.size)+' bytes • cópia verificada: '+(result.copy_verified?'sim':'não confirmada')+
   '</p><details><summary>Detalhes técnicos</summary><pre>'+escapeHtml(JSON.stringify(result,null,2))+'</pre></details></article>').join(''):'<p>Nenhuma análise concluída nesta investigação.</p>';
  if(operations.length)element.innerHTML+='<h3>Inventários</h3><pre>'+escapeHtml(JSON.stringify(operations,null,2))+'</pre>';
+ if(state.result_errors?.[c.id])element.innerHTML+='<p role="alert">'+escapeHtml(state.result_errors[c.id])+'</p>';
  if(state.last_error)element.innerHTML+='<p role="alert">'+escapeHtml(state.last_error)+'</p>';
  document.getElementById('engine-run-pending').disabled=!canOrganize(c)||!state.tasks.some(t=>t.case_id===c.id&&t.status==='pending');
 }
@@ -89,10 +96,10 @@ function prepareEngineUI(){
  document.querySelector('.progress-heading').hidden=true;document.querySelector('.progress-track').hidden=true;
  for(const row of document.querySelectorAll('.capability-row')){
   const name=row.querySelector('span')?.textContent?.toLowerCase();
-  if(name==='ghidra'||name==='binwalk')row.querySelector('.badge').textContent=liveClient.capabilities[name]?'Configurado neste ambiente':'Não instalado neste ambiente';
+  if(name==='ghidra'||name==='binwalk')row.querySelector('.badge').textContent=liveClient.capabilities[name]?'Configurado neste ambiente':'Indisponível neste ambiente';
  }
  document.getElementById('engine-refresh').addEventListener('click',()=>schedule(async()=>{await refreshEngine();await render();}));
  document.getElementById('engine-run-pending').addEventListener('click',()=>schedule(async()=>{await liveAction(state.activeCase,'run');await render();}));
  connectionNotice(true);
- setInterval(()=>{if(state.busy||!liveClient.online)schedule(async()=>{await refreshEngine();await render();});},1500);
+ setInterval(()=>{if(!liveClient.needsReload&&(state.busy||!liveClient.online))schedule(async()=>{await refreshEngine();await render();});},1500);
 }

@@ -48,3 +48,31 @@ jobs:
             test-results/
             live-playwright-report/
           retention-days: 7
+
+  tools:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    env:
+      PYTHONUTF8: "1"
+      CYBER_BETA_REAL_TOOLS: "1"
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "21"
+      - run: python -m pip install .
+      - name: Prepare the same pinned tools as Codespaces
+        run: bash scripts/install-beta-tools.sh
+        env:
+          CYBER_TOOLS_ROOT: ${{ runner.temp }}/cyber-tools
+      - name: Real HTTP to Ghidra and Binwalk
+        run: python scripts/run-tests.py test_web_server.py
+        env:
+          CYBER_GHIDRA_HOME: ${{ runner.temp }}/cyber-tools/ghidra_12.1.4_PUBLIC
+          CYBER_BINWALK: ${{ runner.temp }}/cyber-tools/binwalk/bin/binwalk

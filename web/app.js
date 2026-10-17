@@ -4,6 +4,7 @@
 'use strict';
 const STORE_KEY='cybercore.ui.v1';
 let liveClient=null;
+const engineRequired=document.querySelector('meta[name="cyber-engine"]')?.content==='required';
 const DEFAULT_STATE={cases:[],tasks:[],audit:[],reports:[],activeCase:null};
 const VIEWS=['dashboard','new','investigations','tasks','logs','reports','recovery','forensics','tools','agents'];
 const VIEW_TITLES={dashboard:'Visão geral',new:'Nova investigação',investigations:'Investigações',tasks:'Tarefas e progresso',logs:'Registros',reports:'Relatórios',recovery:'Recuperação',forensics:'Perícia digital',tools:'Ferramentas',agents:'Agentes'};
@@ -20,14 +21,14 @@ function loadState(){
   return {cases,tasks,audit:parsed.audit,reports:Array.isArray(parsed.reports)?parsed.reports:[],activeCase:cases.some(c=>c.id===parsed.activeCase)?parsed.activeCase:null};
  }catch{storageIssue=true;return structuredClone(DEFAULT_STATE);}
 }
-let state=loadState();
+let state=engineRequired?structuredClone(DEFAULT_STATE):loadState();
 const firstVisit=state===null;
 if(firstVisit)state=structuredClone(DEFAULT_STATE);
 let search='',currentView='dashboard',auditQueue=Promise.resolve(),actionQueue=Promise.resolve(),renderVersion=0,lastFocusedElement=null;
 const mobileMenu=window.matchMedia('(max-width:760px)');
 function uid(){return crypto.randomUUID().replaceAll('-','');}
 function nowIso(){return new Date().toISOString();}
-function saveState(){if(liveClient)return;localStorage.setItem(STORE_KEY,JSON.stringify(state));}
+function saveState(){if(liveClient||engineRequired)return;localStorage.setItem(STORE_KEY,JSON.stringify(state));}
 function escapeHtml(value){return String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
 function icon(name){return '<svg class="icon" aria-hidden="true"><use href="assets/icons.svg#'+name+'"></use></svg>';}
 function getCase(id){return state.cases.find(c=>c.id===id)||null;}
@@ -37,6 +38,7 @@ function toast(message,kind='info'){
  document.getElementById('toast-stack').appendChild(el);setTimeout(()=>el.remove(),4500);
 }
 function schedule(action){
+ if(engineRequired&&!liveClient){toast('Motor indisponível. Reabra o Codespace e atualize o painel.','danger');return Promise.resolve();}
  actionQueue=actionQueue.then(action).catch(error=>toast(error.message||'Não foi possível concluir a ação demonstrativa.','danger'));
  return actionQueue;
 }
@@ -160,7 +162,7 @@ function renderRecovery(){
  document.querySelector('[data-recovery-act=pause]').disabled=!eligible||c.paused;
  document.querySelector('[data-recovery-act=resume]').disabled=!eligible||!c.paused;
  const cases=state.cases.filter(item=>item.allowRecovery);
- document.getElementById('recovery-list').innerHTML=cases.length?cases.map(item=>'<div class="item"><div class="item-main"><button class="project-link" data-case-select="'+escapeHtml(item.id)+'">'+escapeHtml(item.project)+'</button><span class="item-sub">Fluxo demonstrativo • sem tentativas reais</span></div>'+stateBadge(item)+'</div>').join(''):'<div class="empty">Crie uma investigação e marque a permissão de recuperação.</div>';
+ document.getElementById('recovery-list').innerHTML=cases.length?cases.map(item=>'<div class="item"><div class="item-main"><button class="project-link" data-case-select="'+escapeHtml(item.id)+'">'+escapeHtml(item.project)+'</button><span class="item-sub">'+(liveClient?'Avaliação pelo envio de arquivo':'Fluxo demonstrativo • sem tentativas reais')+'</span></div>'+stateBadge(item)+'</div>').join(''):'<div class="empty">Crie uma investigação e marque a permissão de recuperação.</div>';
 }
 async function renderLogs(version){
  const id=state.activeCase,list=document.getElementById('logs-list'),status=document.getElementById('chain-status');
@@ -282,6 +284,6 @@ document.addEventListener('DOMContentLoaded',async()=>{
   downloadText('relatorio-demonstrativo-'+c.id.slice(0,8)+'.md',buildReportMarkdown(c));await render();
  }));
  try{liveClient=await CoreConnection.open();if(liveClient){await refreshEngine();prepareEngineUI();}else{document.body.dataset.engine='demonstration';if(firstVisit)await seedExamples();}await render();if(storageIssue&&!liveClient)toast('Não foi possível carregar os dados anteriores deste navegador.','danger');}
- catch{toast('Não foi possível iniciar o painel. Reabra o ambiente e tente novamente.','danger');}
+ catch{if(engineRequired){document.body.dataset.engine='unavailable';connectionNotice(false);document.querySelector('.demo-pill').textContent='Motor indisponível';document.getElementById('stat-integrity').textContent='Indisponível';}toast('Não foi possível iniciar o painel. Reabra o ambiente e tente novamente.','danger');}
  document.body.dataset.ready='true';
 });

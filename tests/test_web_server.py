@@ -2,6 +2,7 @@
 import base64
 import hashlib
 import json
+import os
 from pathlib import Path
 import tempfile
 import threading
@@ -65,7 +66,7 @@ class WebServerTests(unittest.TestCase):
                             {"name": name, "content_base64": base64.b64encode(raw).decode(), "tool": tool})
 
     def settled(self):
-        deadline = time.monotonic() + 30
+        deadline = time.monotonic() + (210 if os.environ.get('CYBER_BETA_REAL_TOOLS') == '1' else 30)
         while time.monotonic() < deadline:
             code, state = self.request("/api/state")
             self.assertEqual(code, 200, state)
@@ -169,3 +170,30 @@ class WebServerTests(unittest.TestCase):
         changed = self.request("/api/state")[1]
         self.assertEqual(changed["results"][case], [])
         self.assertIn(case, changed["result_errors"])
+
+    @unittest.skipUnless(os.environ.get("CYBER_BETA_REAL_TOOLS") == "1", "Pinned tools run in the Linux tools job")
+    def test_real_ghidra_and_binwalk_through_http(self):
+        import gzip
+        import subprocess
+        root = Path(self.tmp.name)
+        source, binary = root / "synthetic.c", root / "synthetic.elf"
+        source.write_text("__attribute__((noinline)) int fixture_entry(void) { return 42; }\n")
+        subprocess.run(["gcc", "-O0", "-fno-pie", "-no-pie", "-nostdlib", "-Wl,-e,fixture_entry",
+                        "-o", str(binary), str(source)], check=True, timeout=30)
+        case = self.case()
+        status, reply = self.upload(case, binary.read_bytes(), tool="analyze-firmware", name="synthetic.elf")
+        self.assertEqual(status, 202, reply)
+        state = self.settled()
+        self.assertIsNone(state["last_error"])
+        ghidra = state["results"][case][0]["firmware"]["external_analysis"]["ghidra"]
+        self.assertEqual(ghidra["status"], "completed")
+        self.assertTrue(any(f["status"] == "decompiled" and ("42" in f["pseudocode"] or "0x2a" in f["pseudocode"]) for f in ghidra["functions"]))
+        raw = b"Z" * 256 + gzip.compress(b"synthetic firmware\n" * 16, mtime=0)
+        status, reply = self.upload(case, raw, tool="analyze-firmware", name="synthetic.bin")
+        self.assertEqual(status, 202, reply)
+        state = self.settled()
+        self.assertIsNone(state["last_error"])
+        scan = state["results"][case][-1]["firmware"]["external_analysis"]["binwalk"]
+        self.assertEqual(scan["status"], "completed")
+        self.assertTrue(any(f["offset"] == 256 and f["name"] == "gzip" for f in scan["findings"]))
+        self.assertEqual(scan["input_sha256"], hashlib.sha256(raw).hexdigest())
