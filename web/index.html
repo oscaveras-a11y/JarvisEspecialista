@@ -13,31 +13,39 @@
 
   <aside class="sidebar">
     <div class="brand">
-      <span class="brand-mark">◈</span>
+      <span class="brand-mark">
+        <svg class="icon" viewBox="0 0 24 24" width="20" height="20"><path d="M12 2.5 4.5 5.5v6c0 5.2 3.2 8.8 7.5 10 4.3-1.2 7.5-4.8 7.5-10v-6L12 2.5Z"/><path d="m9 12 2 2 4-4"/></svg>
+      </span>
       <div>
         <div class="brand-name">CYBER CORE</div>
-        <div class="brand-sub">painel de investigação</div>
+        <div class="brand-sub">Painel de investigação</div>
       </div>
     </div>
 
     <nav class="nav">
       <button class="nav-item is-active" data-view="dashboard">
-        <span class="nav-icon">▦</span> Painel
+        <span class="nav-icon"><svg class="icon" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/></svg></span>
+        Painel
       </button>
       <button class="nav-item" data-view="new">
-        <span class="nav-icon">＋</span> Nova investigação
+        <span class="nav-icon"><svg class="icon" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></span>
+        Nova investigação
       </button>
       <button class="nav-item" data-view="investigations">
-        <span class="nav-icon">▤</span> Investigações
+        <span class="nav-icon"><svg class="icon" viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h10"/></svg></span>
+        Investigações
       </button>
       <button class="nav-item" data-view="tasks">
-        <span class="nav-icon">◷</span> Tarefas &amp; progresso
+        <span class="nav-icon"><svg class="icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/></svg></span>
+        Tarefas &amp; progresso
       </button>
       <button class="nav-item" data-view="logs">
-        <span class="nav-icon">≋</span> Logs &amp; hipóteses
+        <span class="nav-icon"><svg class="icon" viewBox="0 0 24 24"><rect x="4" y="3" width="16" height="18" rx="1.5"/><path d="M8 8h8M8 12h8M8 16h5"/></svg></span>
+        Logs &amp; hipóteses
       </button>
       <button class="nav-item" data-view="reports">
-        <span class="nav-icon">▥</span> Relatórios
+        <span class="nav-icon"><svg class="icon" viewBox="0 0 24 24"><path d="M7 3h7l5 5v13a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1Z"/><path d="M14 3v5h5M9 13h6M9 17h6"/></svg></span>
+        Relatórios
       </button>
     </nav>
 
@@ -52,7 +60,10 @@
   <main class="main">
 
     <header class="topbar">
-      <div class="topbar-title" id="view-title">Painel</div>
+      <div>
+        <p class="eyebrow">Investigação digital autorizada</p>
+        <div class="topbar-title" id="view-title">Painel</div>
+      </div>
       <div class="topbar-case">
         <label for="case-select" class="sr-only">Investigação ativa</label>
         <select id="case-select">
@@ -62,32 +73,70 @@
     </header>
 
     <div class="banner" id="proto-banner">
-      <strong>Protótipo de interface (frontend).</strong>
-      Ainda não está conectado ao motor real do CORE (o CLI <code>cyber</code>).
-      Tudo aqui roda só no seu navegador e fica salvo em <code>localStorage</code> — nada é
-      enviado para fora, nenhuma análise real acontece. Serve para validar o fluxo e o
-      visual antes de ligar isso ao backend de verdade / app desktop.
+      <span class="banner-icon"><svg class="icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 8v5M12 16.2v.01"/></svg></span>
+      <div>
+        <strong>Protótipo de interface (frontend)</strong>
+        Ainda não está conectado ao motor real do CORE (o CLI <code>cyber</code>).
+        Tudo aqui roda só no seu navegador e fica salvo em <code>localStorage</code> — nada é
+        enviado para fora, nenhuma análise real acontece. Serve para validar o fluxo e o
+        visual antes de ligar isso ao backend de verdade / app desktop.
+      </div>
       <button class="banner-close" id="banner-close" aria-label="Fechar aviso">×</button>
     </div>
 
     <section class="view" id="view-dashboard">
       <div class="grid stats">
         <div class="card stat">
-          <div class="stat-label">Investigações</div>
-          <div class="stat-value" id="stat-total">0</div>
+          <span class="stat-icon"><svg class="icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.5 2.5 2.5 15.5 0 18M12 3c-2.5 2.5-2.5 15.5 0 18"/></svg></span>
+          <div>
+            <div class="stat-label">Investigações</div>
+            <div class="stat-value" id="stat-total">0</div>
+          </div>
         </div>
         <div class="card stat">
-          <div class="stat-label">Em investigação</div>
-          <div class="stat-value" id="stat-active">0</div>
+          <span class="stat-icon is-ok"><svg class="icon" viewBox="0 0 24 24"><path d="M12 2.5 4.5 5.5v6c0 5.2 3.2 8.8 7.5 10 4.3-1.2 7.5-4.8 7.5-10v-6L12 2.5Z"/><path d="m9 12 2 2 4-4"/></svg></span>
+          <div>
+            <div class="stat-label">Em investigação</div>
+            <div class="stat-value" id="stat-active">0</div>
+          </div>
         </div>
         <div class="card stat">
-          <div class="stat-label">Pausadas</div>
-          <div class="stat-value" id="stat-paused">0</div>
+          <span class="stat-icon is-warn"><svg class="icon" viewBox="0 0 24 24"><rect x="6" y="4" width="4" height="16" rx="1"/><rect x="14" y="4" width="4" height="16" rx="1"/></svg></span>
+          <div>
+            <div class="stat-label">Pausadas</div>
+            <div class="stat-value" id="stat-paused">0</div>
+          </div>
         </div>
         <div class="card stat">
-          <div class="stat-label">Canceladas</div>
-          <div class="stat-value" id="stat-cancelled">0</div>
+          <span class="stat-icon is-danger"><svg class="icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="m9 9 6 6m0-6-6 6"/></svg></span>
+          <div>
+            <div class="stat-label">Canceladas</div>
+            <div class="stat-value" id="stat-cancelled">0</div>
+          </div>
         </div>
+      </div>
+
+      <div class="grid quick">
+        <button class="quick-card" data-nav="new">
+          <span class="quick-icon"><svg class="icon" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></span>
+          <div class="quick-title">Nova investigação</div>
+          <div class="quick-desc">Registrar caso com objetivo, escopo e autorização declarados.</div>
+        </button>
+        <button class="quick-card" data-nav="tasks">
+          <span class="quick-icon"><svg class="icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/></svg></span>
+          <div class="quick-title">Enfileirar tarefa</div>
+          <div class="quick-desc">Perícia, criptografia, protocolos — sobre a investigação ativa.</div>
+        </button>
+        <button class="quick-card" data-nav="logs">
+          <span class="quick-icon"><svg class="icon" viewBox="0 0 24 24"><rect x="4" y="3" width="16" height="18" rx="1.5"/><path d="M8 8h8M8 12h8M8 16h5"/></svg></span>
+          <div class="quick-title">Verificar cadeia</div>
+          <div class="quick-desc">Conferir a trilha de auditoria hash-encadeada do caso.</div>
+        </button>
+        <button class="quick-card" data-nav="reports">
+          <span class="quick-icon"><svg class="icon" viewBox="0 0 24 24"><path d="M7 3h7l5 5v13a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1Z"/><path d="M14 3v5h5M9 13h6M9 17h6"/></svg></span>
+          <div class="quick-title">Gerar relatório</div>
+          <div class="quick-desc">Exportar o resumo da investigação em Markdown.</div>
+        </button>
       </div>
 
       <div class="grid two">
@@ -150,7 +199,7 @@
             </div>
           </div>
           <div class="form-actions">
-            <button type="submit" class="btn btn-primary">Criar investigação</button>
+            <button type="submit" class="btn btn-primary">Criar investigação <span aria-hidden="true">→</span></button>
             <button type="reset" class="btn btn-ghost">Limpar</button>
           </div>
         </form>
@@ -161,7 +210,7 @@
       <div class="card">
         <div class="card-head">
           <h2>Investigações</h2>
-          <button class="btn btn-primary" data-nav="new">＋ nova</button>
+          <button class="btn btn-primary" data-nav="new"><span aria-hidden="true">＋</span> nova</button>
         </div>
         <div id="investigations-table"></div>
       </div>
@@ -185,7 +234,7 @@
             <option value="assess-recovery">assess-recovery</option>
           </select>
           <input id="task-path" placeholder="caminho do arquivo autorizado" required>
-          <button type="submit" class="btn btn-primary">Enfileirar</button>
+          <button type="submit" class="btn btn-primary">Enfileirar <span aria-hidden="true">→</span></button>
         </form>
         <div id="tasks-list" class="list"></div>
       </div>
@@ -212,7 +261,7 @@
         </div>
         <div id="report-preview" class="report-preview"></div>
         <div class="form-actions">
-          <button class="btn btn-primary" id="gen-report">Gerar e baixar relatório (.md)</button>
+          <button class="btn btn-primary" id="gen-report">Gerar e baixar relatório <span aria-hidden="true">→</span></button>
         </div>
       </div>
     </section>

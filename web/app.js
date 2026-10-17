@@ -94,6 +94,13 @@ function getCase(id) {
   return state.cases.find(c => c.id === id) || null;
 }
 
+function eventDotClass(event) {
+  if (event.includes('cancel')) return 'is-danger';
+  if (event.includes('pause')) return 'is-warn';
+  if (event.includes('resume') || event.includes('created')) return 'is-ok';
+  return 'is-accent';
+}
+
 function stateBadge(c) {
   if (c.state === 'CANCELADO') return '<span class="badge badge-cancelled">cancelado</span>';
   if (c.paused) return '<span class="badge badge-paused">pausado</span>';
@@ -135,8 +142,11 @@ function renderDashboard() {
   activity.innerHTML = events.length ? events.map(e => `
     <div class="item">
       <div class="item-main">
-        <div class="item-title">${escapeHtml(e.event)}</div>
-        <div class="item-sub">${new Date(e.created).toLocaleString('pt-BR')}</div>
+        <span class="feed-dot ${eventDotClass(e.event)}"></span>
+        <div>
+          <div class="item-title">${escapeHtml(e.event)}</div>
+          <div class="item-sub">${new Date(e.created).toLocaleString('pt-BR')}</div>
+        </div>
       </div>
     </div>`).join('') : '<div class="empty">Sem atividade registrada ainda.</div>';
 }
@@ -199,8 +209,11 @@ async function renderLogs() {
   listEl.innerHTML = chain.length ? chain.slice().reverse().map(e => `
     <div class="item">
       <div class="item-main">
-        <div class="item-title">${escapeHtml(e.event)}</div>
-        <div class="item-sub">${new Date(e.created).toLocaleString('pt-BR')} · digest ${e.digest.slice(0, 16)}…</div>
+        <span class="feed-dot ${eventDotClass(e.event)}"></span>
+        <div>
+          <div class="item-title">${escapeHtml(e.event)}</div>
+          <div class="item-sub">${new Date(e.created).toLocaleString('pt-BR')} · digest ${e.digest.slice(0, 16)}…</div>
+        </div>
       </div>
     </div>`).join('') : '<div class="empty">Sem eventos registrados ainda.</div>';
 
