@@ -12,7 +12,7 @@ from uuid import uuid4
 
 from cyber_core.errors import CoreError
 from cyber_core.memory import audit, encoded, utc
-from cyber_core.investigation.workflow import Workflow, text
+from cyber_core.investigation.workflow import Workflow, text, evaluate_assertions, outcome_for
 from cyber_core.investigation.reasoning_store import ensure, exists
 from cyber_core.verification.artifacts import verified_result, result_digest
 
@@ -135,9 +135,12 @@ class Reasoning:
                 return 'awaiting_review'
             if review['decision'] == 'accepted':
                 # A stale/tampered acquisition may never discard a strategy.
-                _, digest = verified_result(self.core, case, row['task_id'])
+                result, digest = verified_result(self.core, case, row['task_id'])
                 if digest != row['evidence_digest'] or digest != review['evidence_digest']:
                     raise CoreError('Stale strategy evidence')
+                checks = evaluate_assertions(json.loads(plan['assertions']), result)
+                if encoded(checks) != row['checks'] or outcome_for(checks) != row['outcome']:
+                    raise CoreError('Strategy outcome differs from reproducible checks')
                 outcomes.add(row['outcome'])
         if len(outcomes) > 1:
             return 'conflicting'
