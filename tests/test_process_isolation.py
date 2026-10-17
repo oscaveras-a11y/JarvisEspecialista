@@ -250,7 +250,7 @@ class ProcessIsolationTests(unittest.TestCase):
         trigger, ready = self.root / 'spawn-now', self.root / 'new-child.ready'
         target, pid_file = self.root / 'late-copy.bin', self.root / 'late-child.pid'
         late = ("import sys,time;from pathlib import Path;"
-                "handles=[open('NUL','wb') for _ in range(4096)];"
+                "handles=[open('NUL','wb') for _ in range(256)];"
                 "held=open(sys.argv[1],'wb');held.write(b'partial');held.flush();"
                 "Path(sys.argv[2]).write_text('ready');time.sleep(60)")
         spawning = (
