@@ -22,6 +22,7 @@ def analyze_capture(text, *, max_messages=200000):
     messages, skipped = 0, 0
     lengths, ids, payloads = {}, {}, set()
     truncated = False
+    ids_truncated, payloads_truncated = False, False
     for raw in text.splitlines():
         line = raw.strip()
         if not line:
@@ -42,13 +43,19 @@ def analyze_capture(text, *, max_messages=200000):
         payload = bytes.fromhex(hexstr)
         messages += 1
         lengths[len(payload)] = lengths.get(len(payload), 0) + 1
-        if ident is not None and len(ids) < _MAX_DISTINCT:
-            ids[ident] = ids.get(ident, 0) + 1
-        if len(payloads) < _MAX_DISTINCT:
+        if ident is not None:
+            if ident in ids or len(ids) < _MAX_DISTINCT:
+                ids[ident] = ids.get(ident, 0) + 1
+            else:
+                ids_truncated = True
+        if hexstr.lower() in payloads or len(payloads) < _MAX_DISTINCT:
             payloads.add(hexstr.lower())
+        else:
+            payloads_truncated = True
     return {'messages': messages, 'skipped': skipped, 'unique_payloads': len(payloads),
             'length_histogram': dict(sorted(lengths.items())), 'id_histogram': ids,
-            'truncated': truncated,
+            'truncated': truncated, 'ids_truncated': ids_truncated,
+            'payloads_truncated': payloads_truncated,
             'limitations': ['Análise passiva de captura textual; nenhum barramento/rede foi acessado.',
                             'Reconhece enquadramento e padrões, não valida semântica do protocolo.']}
 
@@ -61,6 +68,9 @@ def compare_captures(first_text, second_text, *, max_messages=200000):
     return {'first': first, 'second': second,
             'only_in_first': sorted(a - b)[:1000], 'only_in_second': sorted(b - a)[:1000],
             'common_unique_payloads': len(a & b),
+            'comparison_truncated': (first['truncated'] or second['truncated'] or
+                first['payloads_truncated'] or second['payloads_truncated'] or
+                len(a - b) > 1000 or len(b - a) > 1000),
             'limitations': first['limitations']}
 
 

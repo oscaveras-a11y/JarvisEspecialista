@@ -607,41 +607,45 @@ class Core:
             out.append(entry)
         return out
 
+    @staticmethod
+    def _capture_sample(source, maximum):
+        with source.open('rb') as handle:
+            raw = handle.read(maximum)
+            truncated = bool(handle.read(1))
+        partial = False
+        if truncated and raw and not raw.endswith((b'\n', b'\r')):
+            end = max(raw.rfind(b'\n'), raw.rfind(b'\r'))
+            raw, partial = raw[:end + 1], True
+        return raw.decode('utf-8', errors='replace'), truncated, partial
+
     def analyze_capture(self, case, path, *, second_path=None, max_sample=4194304):
-        # Passive generic protocol-capture analysis (item 10). Static text capture;
-        # never opens a bus/device/socket. Optional comparison with a second capture.
-        if not isinstance(max_sample, int) or not 1 <= max_sample <= 16 * 1024 * 1024:
+        if type(max_sample) is not int or not 1 <= max_sample <= 16 * 1024 * 1024:
             raise CoreError('Invalid capture sample limit')
         row = self.authorize(case)
         self._ensure_not_paused(case, row)
         source = self.authorize(case, path)
         if source.stat().st_size > self.max_bytes:
             raise CoreError('File exceeds byte limit')
-        # Read only up to the sample cap plus a one-byte peek, instead of reading the
-        # whole file before slicing: fix for a reviewed gap where a large file was
-        # read entirely and byte-level truncation was never reported.
-        with source.open('rb') as handle:
-            raw = handle.read(max_sample)
-            byte_truncated = bool(handle.read(1))
-        text = raw.decode('utf-8', errors='replace')
+        text, clipped, partial = self._capture_sample(source, max_sample)
         from cyber_core.protocol import analyze_capture, compare_captures
         if second_path is not None:
             other = self.authorize(case, second_path)
             if other.stat().st_size > self.max_bytes:
                 raise CoreError('Second file exceeds byte limit')
-            with other.open('rb') as handle:
-                other_raw = handle.read(max_sample)
-                byte_truncated = byte_truncated or bool(handle.read(1))
-            other_text = other_raw.decode('utf-8', errors='replace')
+            other_text, other_clipped, other_partial = self._capture_sample(other, max_sample)
             result = compare_captures(text, other_text)
-            result['first']['truncated'] = result['first']['truncated'] or byte_truncated
-            result['second']['truncated'] = result['second']['truncated'] or byte_truncated
+            for sample, cut, tail in ((result['first'], clipped, partial),
+                                     (result['second'], other_clipped, other_partial)):
+                sample['truncated'] |= cut
+                sample.update(sample_truncated=cut, partial_record_discarded=tail)
+            result['sample_truncated'] = clipped or other_clipped
+            result['comparison_truncated'] |= clipped or other_clipped
             event = {'messages': result['first']['messages'], 'second_messages': result['second']['messages']}
         else:
             result = analyze_capture(text)
-            result['truncated'] = result['truncated'] or byte_truncated
+            result['truncated'] |= clipped
+            result.update(sample_truncated=clipped, partial_record_discarded=partial)
             event = {'messages': result['messages'], 'unique_payloads': result['unique_payloads']}
-        result['sample_truncated'] = byte_truncated
         self._persist_side_analysis(case, 'capture', source, result)
         with self.db:
             self.authorize(case)
