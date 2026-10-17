@@ -26,6 +26,7 @@ def parser():
     sub.add_parser('init', help='Initialize local SQLite storage')
     sub.add_parser('doctor', help='Diagnose runtime and optional CLIs')
     sub.add_parser('agents', help='List available agents')
+    sub.add_parser('crypto-demo', help='Synthetic round-trip of RSA-OAEP, ECDH+AES-GCM and ChaCha20-Poly1305 with freshly generated keys')
     backup = sub.add_parser('backup', help='Durable backup of the whole local store (every case), outside any single job')
     backup.add_argument('dest', help='Destination file path; must not already exist')
     restore = sub.add_parser('restore', help='Restore a prior backup into a fresh --home, proving durable recovery')
@@ -97,6 +98,9 @@ def parser():
     auditcfg = sub.add_parser('audit-config', help='Static authorized audit of a config file for exposed secrets / insecure settings')
     auditcfg.add_argument('case')
     auditcfg.add_argument('path')
+    auditcrypto = sub.add_parser('audit-crypto', help='Static audit of cryptographic implementation patterns (ECB, static IV, hardcoded keys, weak RNG/hash)')
+    auditcrypto.add_argument('case')
+    auditcrypto.add_argument('path')
     capture = sub.add_parser('analyze-capture', help='Passively analyze a generic hex protocol capture (no bus/network access)')
     capture.add_argument('case')
     capture.add_argument('path')
@@ -125,7 +129,7 @@ def parser():
     sources.add_argument('case')
     side = sub.add_parser('side-analyses', help='List persisted side analyses (strings/differentiate/audit-config/capture) for a case')
     side.add_argument('case')
-    side.add_argument('--kind', help='Filter by kind: strings, differentiate, config_audit, capture')
+    side.add_argument('--kind', help='Filter by kind: strings, differentiate, config_audit, crypto_audit, capture')
     recall = sub.add_parser('recall', help='Recall prior knowledge by evidence SHA-256 or by investigation type')
     recall.add_argument('--sha256', help='Find prior investigations that analyzed this exact evidence hash')
     recall.add_argument('--type', dest='recall_type', help='List prior investigations of this type')
@@ -139,10 +143,14 @@ def main(argv=None):
     core = None
     try:
         args = parser().parse_args(argv)
-        if args.command in ('doctor', 'agents'):
-            result = doctor()
-            if args.command == 'agents':
-                result = result['agents']
+        if args.command in ('doctor', 'agents', 'crypto-demo'):
+            if args.command == 'crypto-demo':
+                from cyber_core.cryptanalysis.algorithms import demonstrate_all
+                result = demonstrate_all()
+            else:
+                result = doctor()
+                if args.command == 'agents':
+                    result = result['agents']
         elif args.command == 'restore':
             # Must not construct Core(args.home, ...) first: that would already
             # create/open an empty store at the destination before we can check
@@ -203,6 +211,8 @@ def main(argv=None):
                 result = core.custody_timeline(args.case)
             elif cmd == 'audit-config':
                 result = core.audit_config(args.case, args.path)
+            elif cmd == 'audit-crypto':
+                result = core.audit_crypto_implementation(args.case, args.path)
             elif cmd == 'analyze-capture':
                 result = core.analyze_capture(args.case, args.path, second_path=args.compare_to)
             elif cmd == 'strings':

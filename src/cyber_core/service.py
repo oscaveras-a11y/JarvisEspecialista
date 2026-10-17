@@ -648,6 +648,30 @@ class Core:
             audit(self.db, case, 'capture_analyzed', event)
         return result
 
+    def audit_crypto_implementation(self, case, path, *, max_sample=1048576):
+        # Static audit of cryptographic implementation patterns (item 7: "auditar
+        # a segurança de implementações criptográficas"). No execution, no key
+        # derivation, no network. Findings are redacted; persisted so they are
+        # reconstructable from case history, like the other side analyses.
+        if not isinstance(max_sample, int) or not 1 <= max_sample <= 16 * 1024 * 1024:
+            raise CoreError('Invalid audit sample limit')
+        row = self.authorize(case)
+        self._ensure_not_paused(case, row)
+        source = self.authorize(case, path)
+        if source.stat().st_size > self.max_bytes:
+            raise CoreError('File exceeds byte limit')
+        with source.open('rb') as handle:
+            sample = handle.read(max_sample)
+            truncated = bool(handle.read(1))
+        from cyber_core.cryptanalysis.implementation_audit import audit_implementation
+        result = audit_implementation(sample.decode('utf-8', errors='replace'))
+        result['sample_truncated'] = truncated
+        self._persist_side_analysis(case, 'crypto_audit', source, result)
+        with self.db:
+            self.authorize(case)
+            audit(self.db, case, 'crypto_implementation_audited', {'summary': result['summary'], 'findings': len(result['findings'])})
+        return result
+
     def audit_config(self, case, path, *, max_sample=1048576):
         # Static, authorized configuration/exposure audit (item 9). No active scan,
         # no network. Findings are redacted; persisted so they are reconstructable
