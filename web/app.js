@@ -268,7 +268,8 @@ document.addEventListener('DOMContentLoaded',async()=>{
    const fields={};for(const key of ['project','objective','scope','owner','authorization'])fields[key]=document.getElementById('f-'+key).value.trim();
    fields.validHours=Number(document.getElementById('f-valid-hours').value);fields.allowRecovery=document.getElementById('f-recovery').checked;
    await createCase(fields);form.reset();document.getElementById('f-valid-hours').value=72;search='';document.getElementById('case-search').value='';
-   toast(liveClient?'Investigação criada no CORE.':'Investigação demonstrativa criada.');await showView('investigations');
+   toast(liveClient?'Investigação criada no CORE. Envie um arquivo abaixo para analisar.':'Investigação demonstrativa criada.');
+   await showView(liveClient?'tasks':'investigations');
   });
  });
  document.getElementById('form-new-task').addEventListener('submit',event=>{
