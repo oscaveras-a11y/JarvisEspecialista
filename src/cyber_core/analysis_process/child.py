@@ -6,6 +6,10 @@ import time
 
 # -I ignores PYTHONPATH/cwd. Insert only our own trusted package installation/source root.
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+from cyber_core.analysis_process.network_guard import block_network
+# Item 14 "politica de acesso a rede": block before any analysis code runs,
+# since this child parses untrusted evidence bytes.
+block_network()
 from cyber_core.errors import CoreError
 from cyber_core.analysis_process.limits import MAX_TIMEOUT_SECONDS
 from cyber_core.reverse_engineering import analyze
