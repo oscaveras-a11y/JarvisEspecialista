@@ -8,7 +8,7 @@ on:
       - 'scripts/check-integration-contracts.py'
       - 'src/cyber_core/analysis_process/**'
       - 'src/cyber_core/service.py'
-      - 'tests/test_process_isolation.py'
+      - 'tests/test_process*.py'
 
 permissions:
   contents: read
