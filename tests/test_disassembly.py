@@ -91,5 +91,32 @@ class DisassemblyTests(unittest.TestCase):
         self.assertIn("backend_version", core.report(case).read_text(encoding="utf-8"))
 
 
+    def test_invalid_first_opcode_does_not_claim_decoded_instructions(self):
+        if not self.backend():
+            self.skipTest("Optional Capstone; required by the combined CI job")
+        data = elf_fixture()
+        data[0x100] = 0x0f
+        struct.pack_into("<Q", data, 0x180 + 64 + 32, 1)
+        out = self.parse(data)
+        self.assertEqual(out["status"], "no_instructions_decoded")
+        self.assertEqual(out["instructions"], [])
+        self.assertEqual(out["undecoded_bytes"], 1)
+
+    def test_large_code_region_reports_sample_truncation(self):
+        if not self.backend():
+            self.skipTest("Optional Capstone; required by the combined CI job")
+        data = pe_fixture()
+        data.extend(bytes(0x2200 - len(data)))
+        data[0x200:0x2200] = b"\x90" * 8192
+        table = 88 + 224
+        struct.pack_into("<I", data, table + 8, 8192)
+        struct.pack_into("<I", data, table + 16, 8192)
+        struct.pack_into("<I", data, table + 40 + 12, 0x5000)
+        out = self.parse(data)
+        self.assertEqual(out["sample_bytes"], 4096)
+        self.assertTrue(out["sample_truncated"])
+        self.assertEqual(len(out["instructions"]), 128)
+
+
 if __name__ == "__main__":
     unittest.main()
