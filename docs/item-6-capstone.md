@@ -11,7 +11,10 @@ os bytes em arquivo que correspondem ao ponto de entrada. ELF executável usa
 PT_LOAD; segmentos NOTE e outros tipos não servem como mapa de carregamento.
 Seções alocadas conflitantes, mapeamentos virtuais ambíguos e caudas zero-fill
 são recusados. O fallback por seção permanece para objetos sem mapa LOAD
-apropriado, não para inventar um mapa de executável/dynamic sem LOAD.
+apropriado: objetos ET_REL usam uma seção individual, com índice e endereço
+relativo explícitos, sem misturar seções distintas que começam em zero. Não
+se inventa mapa de executável/dynamic sem LOAD. Outros tipos ELF não recebem
+uma interpretação executável implícita.
 Se não há entrada,
 pode usar a primeira região declarada executável, identificando essa escolha
 em `selection_basis`. Endereço virtual e offset de arquivo continuam distintos;
@@ -61,7 +64,9 @@ A revisão independente encontrou escolha incorreta quando seção ELF e
 PT_LOAD divergiam. O run39039274433 reproduziu quatro falhas: mapas divergentes,
 seção sobre cauda zero-fill, segmento não LOAD tratado como mapa e sobreposição
 virtual PE escolhida por ordem. A correção consulta LOAD e recusa ambiguidades
-antes de invocar o backend.
+antes de invocar o backend. O run39039468540 também reproduziu colisão
+indevida entre endereços relativos de seções ET_REL; a correção preserva
+cada contexto de seção em vez de fingir uma imagem global carregada.
 
 Os testes usam bytes sintéticos conhecidos de x86/x86_64/AArch64, entradas
 em memória sem bytes, limite de instruções/amostra e o caminho real
