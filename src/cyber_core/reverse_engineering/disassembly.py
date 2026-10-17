@@ -12,25 +12,74 @@ def _empty(status, **fields):
     return {"status": status, "instructions": [], "limitations": _LIMITATION, **fields}
 
 
-def _region(data, metadata):
-    sections = metadata.get("section_headers", [])
-    segments = metadata.get("segments", [])
-    regions = [r for r in (*sections, *segments)
-               if r.get("executable") and r.get("file_size", 0) > 0 and not r.get("compressed")]
-    entry = metadata.get("entry_point")
-    for region in regions:
-        start = region["virtual_address"]
-        size = min(region["file_size"], region.get("memory_size") or region["file_size"])
-        if entry and start <= entry < start + size:
-            delta = entry - start
-            return region["file_offset"] + delta, entry, size - delta, "declared_entry_point"
+def _span(region):
+    return region.get("memory_size") or region.get("file_size", 0)
+
+
+def _file_span(region):
+    return min(region.get("file_size", 0), _span(region))
+
+
+def _choose(regions, entry):
     if entry:
-        return None
-    if regions:
-        region = regions[0]
-        size = min(region["file_size"], region.get("memory_size") or region["file_size"])
-        return region["file_offset"], region["virtual_address"], size, "first_declared_executable_region"
-    return None
+        address, basis = entry, "declared_entry_point"
+    else:
+        candidates = [r for r in regions if r.get("executable") and
+                      _file_span(r) and not r.get("compressed")]
+        if not candidates:
+            return None, "no_executable_file_bytes"
+        first = min(candidates, key=lambda r: (r["virtual_address"], r["file_offset"]))
+        address, basis = first["virtual_address"], "first_declared_executable_region"
+    covering = [r for r in regions if r["virtual_address"] <= address <
+                r["virtual_address"] + _span(r)]
+    if not covering:
+        return None, "entry_not_file_backed"
+    if any(not r.get("executable") for r in covering):
+        return None, "entry_not_executable"
+    if any(r.get("compressed") for r in covering):
+        return None, "compressed_code_unsupported"
+    if any(address - r["virtual_address"] >= _file_span(r) for r in covering):
+        return None, "entry_not_file_backed"
+    offsets = {r["file_offset"] + address - r["virtual_address"] for r in covering}
+    if len(offsets) != 1:
+        return None, "ambiguous_entry_mapping"
+    available = min(_file_span(r) - (address - r["virtual_address"]) for r in covering)
+    original = available
+    # Do not decode across a new mapping or permission boundary.
+    for region in regions:
+        if _span(region) and address < region["virtual_address"] < address + available:
+            available = region["virtual_address"] - address
+    return {"offset": offsets.pop(), "address": address, "available": available,
+            "basis": basis, "mapping_truncated": available < original}, None
+
+
+def _region(metadata):
+    sections = [r for r in metadata.get("section_headers", []) if not r.get("ignored")]
+    if "segments" in metadata:
+        loads = [r for r in metadata["segments"] if r.get("type") == 1]
+        if loads:
+            choice, error = _choose(loads, metadata.get("entry_point"))
+            if error:
+                return None, error
+            address, offset = choice["address"], choice["offset"]
+            original = choice["available"]
+            for section in sections:
+                if not section.get("allocated"):
+                    continue
+                start = section["virtual_address"]
+                if start <= address < start + _span(section):
+                    delta = address - start
+                    if section.get("compressed") or delta >= _file_span(section) or (
+                            section["file_offset"] + delta != offset):
+                        return None, "conflicting_section_mapping"
+                    choice["available"] = min(choice["available"], _file_span(section) - delta)
+                elif address < start < address + choice["available"]:
+                    choice["available"] = start - address
+            choice["mapping_truncated"] |= choice["available"] < original
+            return choice, None
+        if metadata.get("type") in (2, 3):
+            return None, "no_executable_load_map"
+    return _choose(sections, metadata.get("entry_point"))
 
 
 def preview(data, metadata):
@@ -42,17 +91,17 @@ def preview(data, metadata):
         return _empty("unsupported_architecture", architecture=architecture)
     if metadata.get("endian", "little") != "little":
         return _empty("unsupported_encoding", architecture=architecture)
-    chosen = _region(data, metadata)
-    if chosen is None:
-        return _empty("entry_not_file_backed" if metadata.get("entry_point") else
-                      "no_executable_file_bytes", architecture=architecture)
-    offset, address, available, basis = chosen
+    chosen, selection_error = _region(metadata)
+    if selection_error:
+        return _empty(selection_error, architecture=architecture)
+    offset, address, available, basis = (chosen[k] for k in ("offset", "address", "available", "basis"))
     if not 0 <= offset <= len(data) or available > len(data) - offset:
         raise CoreError("Disassembly range outside validated input")
     if architecture == "aarch64" and address % 4:
         return _empty("unaligned_entry_point", architecture=architecture)
     common = {"architecture": architecture, "source_file_offset": offset,
               "start_address": address, "selection_basis": basis,
+              "mapping_truncated": chosen["mapping_truncated"],
               "address_basis": "Declared header addresses; relocations are not applied"}
     try:
         capstone = import_module("capstone")
