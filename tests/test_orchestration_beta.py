@@ -185,7 +185,7 @@ class OrchestrationBetaTests(unittest.TestCase):
     def test_late_analysis_is_discarded_after_other_connection_cancels(self):
         self.queue()
         from cyber_core import service
-        original = service.analyze
+        original = service.analyze_in_process
         other = Core(self.home)
         self.addCleanup(other.close)
         self.assertTrue(callable(getattr(other, 'cancel', None)), 'Persistent cancellation is missing')
@@ -193,7 +193,7 @@ class OrchestrationBetaTests(unittest.TestCase):
             result = original(*args, **kwargs)
             other.cancel(self.case, reason='Cancelled while analysis was running')
             return result
-        with patch.object(service, 'analyze', side_effect=cancel_during_analysis):
+        with patch.object(service, 'analyze_in_process', side_effect=cancel_during_analysis):
             result = self.worker()
         self.assertEqual(result['status'], 'cancelled')
         self.assertFalse(self.core.results(self.case))
@@ -204,11 +204,11 @@ class OrchestrationBetaTests(unittest.TestCase):
     def test_interruption_releases_claim_and_removes_partial_copy(self):
         self.queue()
         from cyber_core import service
-        def interrupted(source, output, *args):
+        def interrupted(source, output, *args, **kwargs):
             output.write_bytes(b'partial')
             raise KeyboardInterrupt
         self.assertTrue(callable(getattr(self.core, 'run_queue', None)), 'Continuous bounded queue execution is missing')
-        with patch.object(service, 'analyze', side_effect=interrupted):
+        with patch.object(service, 'analyze_in_process', side_effect=interrupted):
             with self.assertRaises(KeyboardInterrupt):
                 self.worker()
         self.assertEqual(self.core.tasks(self.case)[0]['status'], 'pending')
