@@ -33,5 +33,15 @@ Para um store grande, uma correspondência de hash antiga pode não aparecer, si
 - **Fix do Linux (reap POSIX):** teste antes falho passa 10/10; suíte 162 OK; não desabilita teste.
 - **Transações:** as chamadas aninhadas (`decompose`→`plan`→`classify`) rodam sequencialmente, cada uma commitando sua própria transação antes da seguinte; sem `with self.db` aninhado.
 
+## Correções aplicadas (2026-10-17)
+
+- **F1 — resolvido.** Novo comando `cyber make-lab-envelope` (método `Core.make_lab_envelope`) cria um envelope `CCPW1` no escopo próprio, exigindo `owner_consent` e sem registrar a senha; a ajuda do `self-test-recovery` aponta para ele. Fluxo ponta a ponta pela CLI confirmado (criar → autoteste recupera senha fraca). Fica explícito que o autoteste é sobre o envelope de laboratório, não arquivos reais arbitrários.
+- **F2 — reconciliado (documental).** `03b` §3 agora descreve o estado real: `authorization_basis` é exigida para recuperação/autoteste; exigi-la nas demais análises é um passo de núcleo (item 14) a coordenar com o item 4 do Codex. Sem alterar o núcleo dele.
+- **F3 — resolvido.** `config.load_defaults` valida faixas mínimas por chave (erro claro nomeando a chave), batendo com os limites do `Core`.
+- **F4 — resolvido.** `recall_by_hash` deixou de ter teto de varredura de 5000; varre todo o store, limitando apenas o número de correspondências.
+- **F5** — permanece como nota informativa (comportamento intencional).
+
+Suíte após as correções: **165 testes OK** (2 skipped só-Windows); `compileall` e `demo.py` (exit 0). CLI `make-lab-envelope`/`self-test-recovery` confirmada ponta a ponta.
+
 ## Resumo
 Nenhum achado **[ALTO]**. Os dois **[MÉDIO]** (F1 fluxo do autoteste pela CLI; F2 inconsistência design×implementação de autorização) valem correção; F1 é seguro de corrigir agora (só nos meus arquivos), F2 toca o núcleo e deve ser decidido junto com o item 4 do Codex. Os **[BAIXO]** são melhorias.

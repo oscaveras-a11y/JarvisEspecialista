@@ -12,6 +12,8 @@ import tomllib
 from cyber_core.errors import CoreError
 
 BUILTIN = {'max_bytes': 67108864, 'timeout_seconds': 60, 'max_attempts': 3, 'agent_calls_per_case': 5}
+# Minimums the Core also enforces; validating here gives a clear, key-named error.
+MINIMUMS = {'max_bytes': 1, 'timeout_seconds': 1, 'max_attempts': 1, 'agent_calls_per_case': 0}
 
 
 def config_path():
@@ -34,7 +36,7 @@ def load_defaults():
         for key in BUILTIN:
             if key in loaded:
                 value = loaded[key]
-                if not isinstance(value, int) or isinstance(value, bool) or value < 0:
-                    raise CoreError('Configuration value for ' + key + ' must be a non-negative integer')
+                if not isinstance(value, int) or isinstance(value, bool) or value < MINIMUMS[key]:
+                    raise CoreError('Configuration value for ' + key + ' must be an integer >= ' + str(MINIMUMS[key]))
                 values[key] = value
     return values

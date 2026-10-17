@@ -39,7 +39,7 @@ CREATE TABLE IF NOT EXISTS authorization_basis(
 
 - `owner_consent`: arquivos próprios ou de cliente com termo (caso atual).
 - `legal_authority`: mandado/decisão judicial, com autoridade, referência do processo, perito e escopo.
-- O CORE **exige** uma base de autorização registrada antes de qualquer análise/recuperação; tudo vai para a auditoria encadeada. Um agente **não** pode criar nem ampliar essa base (item 14).
+- Estado da implementação: a `authorization_basis` é **exigida hoje** para a recuperação/autoteste (`self_test_recovery`, `make_lab_envelope` exigem `owner_consent`). As demais análises (`analyze-file`, `decompose`, `recover-aes`, `assess-recovery`) exigem a autorização do `investigate()` (dono/escopo/prazo/revogação), ainda **não** a `authorization_basis`. Passar a exigir `authorization_basis` também nessas análises é um passo de núcleo (item 14) a coordenar com o item 4 do Codex — registrado aqui para não haver divergência entre design e código. Em todos os casos, um agente **não** pode criar nem ampliar essa base (item 14); tudo vai para a auditoria encadeada.
 
 ## 4. Fronteira ética (vedações por design)
 

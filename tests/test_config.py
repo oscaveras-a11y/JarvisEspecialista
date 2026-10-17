@@ -39,6 +39,16 @@ class ConfigTests(unittest.TestCase):
         with self.assertRaises(CoreError):
             load_defaults()
 
+    def test_zero_below_minimum_is_rejected(self):
+        # timeout_seconds=0 / max_bytes=0 pass a naive >=0 check but the Core rejects them;
+        # config now rejects them up front with a clear, key-named error.
+        for line in ('timeout_seconds = 0', 'max_bytes = 0'):
+            config = self.root / 'z.toml'
+            config.write_text(line + '\n', encoding='utf-8')
+            os.environ['CYBER_CONFIG'] = str(config)
+            with self.assertRaises(CoreError):
+                load_defaults()
+
     def test_long_timeout_is_accepted_and_absurd_is_rejected(self):
         # A single authorized task may run for days; a full day must be valid.
         core = Core(self.root / 'state-day', timeout=86400)

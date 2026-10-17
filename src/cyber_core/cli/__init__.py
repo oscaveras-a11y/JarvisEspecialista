@@ -60,7 +60,12 @@ def parser():
     basis.add_argument('--kind', choices=('owner_consent', 'legal_authority'), required=True)
     for name in ('authority', 'reference', 'examiner', 'scope-note'):
         basis.add_argument('--' + name, required=True)
-    selftest = sub.add_parser('self-test-recovery', help='Authorized recovery self-test on your own CCPW1 lab file')
+    lab = sub.add_parser('make-lab-envelope', help='Create a CCPW1 lab file on your own scope to exercise the recovery self-test')
+    lab.add_argument('case')
+    lab.add_argument('path', help='Output path inside the authorized scope; must not already exist')
+    lab.add_argument('--passphrase-file', required=True, help='Local file whose first line is the passphrase; never logged')
+    lab.add_argument('--content', default='cyber-core lab self-test content', help='Synthetic plaintext to seal into the lab file')
+    selftest = sub.add_parser('self-test-recovery', help='Authorized recovery self-test on your own CCPW1 lab file (create it with make-lab-envelope)')
     selftest.add_argument('case')
     selftest.add_argument('path')
     selftest.add_argument('--wordlist', required=True, help='Local file with one candidate passphrase per line')
@@ -138,6 +143,12 @@ def main(argv=None):
             elif cmd == 'authorize-basis':
                 result = core.set_authorization_basis(args.case, kind=args.kind, authority=args.authority,
                                                       reference=args.reference, examiner=args.examiner, scope_note=args.scope_note)
+            elif cmd == 'make-lab-envelope':
+                passphrase_file = local_path(args.passphrase_file)
+                lines = passphrase_file.read_text(encoding='utf-8', errors='replace').splitlines()
+                passphrase = lines[0] if lines else ''
+                result = core.make_lab_envelope(args.case, args.path, passphrase=passphrase, content=args.content.encode('utf-8'))
+                del passphrase
             elif cmd == 'self-test-recovery':
                 wordlist = local_path(args.wordlist)
                 candidates = [line for line in wordlist.read_text(encoding='utf-8', errors='replace').splitlines() if line]

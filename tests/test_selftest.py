@@ -77,6 +77,22 @@ class AuthorizationAndSelfTestServiceTests(unittest.TestCase):
         self.assertFalse(out['recovered'])
         self.assertFalse(out['recovery_demonstrated'])
 
+    def test_make_lab_envelope_then_self_test_end_to_end(self):
+        self.core.set_authorization_basis(self.case, kind='owner_consent', authority='dono', reference='termo', examiner='op', scope_note='arquivo proprio')
+        made = self.core.make_lab_envelope(self.case, str(self.scope / 'made.ccpw1'), passphrase='senha123', content=b'conteudo de lab')
+        self.assertEqual(made['format'], 'CCPW1')
+        recovered = self.core.self_test_recovery(self.case, made['path'], ['x', 'senha123', 'y'])
+        self.assertTrue(recovered['recovered'])
+        self.assertNotIn('senha123', __import__('json').dumps(self.core.audit(self.case)))
+
+    def test_make_lab_envelope_requires_owner_consent_and_no_overwrite(self):
+        with self.assertRaises(CoreError):
+            self.core.make_lab_envelope(self.case, str(self.scope / 'z.ccpw1'), passphrase='p', content=b'c')
+        self.core.set_authorization_basis(self.case, kind='owner_consent', authority='d', reference='t', examiner='o', scope_note='s')
+        self.core.make_lab_envelope(self.case, str(self.scope / 'z.ccpw1'), passphrase='p', content=b'c')
+        with self.assertRaises(CoreError):  # refuses to overwrite an existing path
+            self.core.make_lab_envelope(self.case, str(self.scope / 'z.ccpw1'), passphrase='p', content=b'c')
+
 
 if __name__ == '__main__':
     unittest.main()

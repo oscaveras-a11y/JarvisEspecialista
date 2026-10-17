@@ -416,6 +416,38 @@ class Core:
             audit(self.db, case, 'self_test_recovery', {'recovered': result['recovered'], 'attempts': result['attempts'], 'status': result['status']})
         return result
 
+    def make_lab_envelope(self, case, output_path, *, passphrase, content):
+        # Create a CCPW1 lab target on the operator's OWN scope, to exercise the
+        # recovery self-test end to end. Requires owner_consent; passphrase not logged.
+        row = self.authorize(case)
+        basis = self.db.execute('SELECT kind FROM authorization_basis WHERE case_id=?', (case,)).fetchone()
+        if basis is None or basis['kind'] != 'owner_consent':
+            raise CoreError('Creating a lab envelope requires an owner_consent authorization basis')
+        if not isinstance(passphrase, str) or not passphrase:
+            raise CoreError('A passphrase is required to seal the lab envelope')
+        if not isinstance(content, (bytes, bytearray)) or not 0 < len(content) <= self.max_bytes:
+            raise CoreError('Lab content must be non-empty bytes within the byte limit')
+        target = Path(output_path)
+        parent = local_path(target.parent, directory=True)
+        if not parent.is_relative_to(local_path(row['scope'], directory=True)):
+            raise CoreError('Lab envelope must be inside the authorized scope')
+        name = target.name
+        if not name or name in ('.', '..') or '/' in name or '\\' in name:
+            raise CoreError('Invalid lab envelope filename')
+        destination = parent / name
+        if destination.exists() or destination.is_symlink():
+            raise CoreError('Lab envelope path already exists')
+        from cyber_core.cryptanalysis.selftest import seal
+        envelope = seal(passphrase, bytes(content))
+        with destination.open('xb') as handle:
+            handle.write(envelope)
+            handle.flush()
+        digest = hashlib.sha256(envelope).hexdigest()
+        with self.db:
+            self.authorize(case)
+            audit(self.db, case, 'lab_envelope_created', {'path': str(destination), 'size': len(envelope), 'sha256': digest})
+        return {'path': str(destination), 'size': len(envelope), 'format': 'CCPW1', 'sha256': digest}
+
     def recall_by_hash(self, sha256, *, limit=50):
         # Cross-investigation artifact recognition by SHA-256. Metadata only; never
         # exposes evidence content or stored copy paths. Reuses prior knowledge (item 5).
@@ -425,7 +457,8 @@ class Core:
             raise CoreError('Invalid recall limit')
         needle = sha256.lower()
         matches = []
-        for row in self.db.execute('SELECT task_id,case_id,data,created FROM results ORDER BY created DESC LIMIT 5000'):
+        # Scan the whole local store (no silent cap); only the number of matches is bounded.
+        for row in self.db.execute('SELECT task_id,case_id,data,created FROM results ORDER BY created DESC'):
             try:
                 data = json.loads(row['data'])
             except (ValueError, TypeError):
