@@ -45,11 +45,16 @@ def parser():
     cancel = sub.add_parser('cancel', help='Permanently stop a case, preserving committed evidence')
     cancel.add_argument('case')
     cancel.add_argument('--reason', required=True)
-    for name in ('classify', 'plan', 'plans'):
+    for name in ('classify', 'plan', 'plans', 'assignments'):
         cmd = sub.add_parser(name, help={'classify': 'Classify the investigation type from its objective',
                                          'plan': 'Create an ordered execution plan for the case',
-                                         'plans': 'List execution plans and steps for the case'}[name])
+                                         'plans': 'List execution plans and steps for the case',
+                                         'assignments': 'List task execution assignments (broker decisions)'}[name])
         cmd.add_argument('case')
+    decompose = sub.add_parser('decompose', help='Materialize plan tasks for an authorized file and assign an executor')
+    decompose.add_argument('case')
+    decompose.add_argument('path')
+    decompose.add_argument('--compare-to', help='Second authorized input for paired firmware/CAN comparison')
     analyze = sub.add_parser('analyze-file', help='Acquire verified copy and analyze statically')
     analyze.add_argument('case')
     analyze.add_argument('path')
@@ -96,7 +101,7 @@ def main(argv=None):
                 from cyber_core.cli.science import execute
                 result = execute(core, args)
             elif cmd == 'init':
-                result = {'initialized': True, 'home': str(core.home), 'schema': 5}
+                result = {'initialized': True, 'home': str(core.home), 'schema': 6}
             elif cmd == 'investigate':
                 result = {'id': core.investigate(args.project, args.objective, args.scope, args.owner, args.authorization, recovery=args.allow_recovery, valid_hours=args.valid_hours)}
             elif cmd == 'status':
@@ -111,8 +116,10 @@ def main(argv=None):
                                         poll_interval=args.poll_interval, idle_timeout=args.idle_timeout)
             elif cmd == 'cancel':
                 result = core.cancel(args.case, reason=args.reason)
-            elif cmd in ('classify', 'plan', 'plans'):
+            elif cmd in ('classify', 'plan', 'plans', 'assignments'):
                 result = getattr(core, cmd)(args.case)
+            elif cmd == 'decompose':
+                result = core.decompose(args.case, args.path, second_path=args.compare_to)
             elif cmd == 'run':
                 result = core.run_one(args.case)
             elif cmd == 'assess-recovery':

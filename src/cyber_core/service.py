@@ -332,3 +332,44 @@ class Core:
             steps = [dict(s) for s in self.db.execute('SELECT * FROM plan_steps WHERE plan_id=? ORDER BY ordinal', (row['id'],))]
             out.append({**dict(row), 'steps': steps})
         return out
+
+    @staticmethod
+    def _decide_executor(tool):
+        # Analysis/acquisition tools run locally in the CORE sandbox. Agents (Codex/
+        # Claude) act on review via review_summary, never on raw evidence execution.
+        return 'core', 'Local tool execution within the CORE; agents act only on review of derived metadata'
+
+    def decompose(self, case, path, *, second_path=None, tool=None):
+        self.authorize(case)
+        plan_row = self.db.execute('SELECT id,investigation_type FROM plans WHERE case_id=? ORDER BY created DESC LIMIT 1', (case,)).fetchone()
+        if plan_row is None:
+            created = self.plan(case)
+            plan_id, investigation_type = created['plan'], created['type']
+        else:
+            plan_id, investigation_type = plan_row['id'], plan_row['investigation_type']
+        from cyber_core.planning import select_tool
+        chosen = tool or select_tool(investigation_type)['tool']
+        with self.db:
+            self.authorize(case)
+            task = self._enqueue(case, path, tool=chosen, second_path=second_path)
+            self.db.execute('INSERT INTO plan_tasks(task_id,plan_id,case_id,created) VALUES(?,?,?,?)', (task, plan_id, case, utc()))
+            executor, reason = self._decide_executor(chosen)
+            self.db.execute('INSERT OR REPLACE INTO task_assignments(task_id,case_id,executor,reason,created) VALUES(?,?,?,?,?)', (task, case, executor, reason, utc()))
+            audit(self.db, case, 'plan_decomposed', {'plan': plan_id, 'task': task, 'tool': chosen, 'executor': executor})
+        return {'plan': plan_id, 'type': investigation_type, 'tasks': [{'task': task, 'tool': chosen, 'executor': executor}]}
+
+    def assign(self, case, task_id):
+        self.authorize(case)
+        row = self.db.execute('SELECT id,tool FROM tasks WHERE id=? AND case_id=?', (task_id, case)).fetchone()
+        if row is None:
+            raise CoreError('Unknown task in this investigation')
+        executor, reason = self._decide_executor(row['tool'])
+        with self.db:
+            self.authorize(case)
+            self.db.execute('INSERT OR REPLACE INTO task_assignments(task_id,case_id,executor,reason,created) VALUES(?,?,?,?,?)', (task_id, case, executor, reason, utc()))
+            audit(self.db, case, 'task_assigned', {'task': task_id, 'executor': executor})
+        return {'task': task_id, 'executor': executor, 'reason': reason}
+
+    def assignments(self, case):
+        self.get(case)
+        return [dict(r) for r in self.db.execute('SELECT * FROM task_assignments WHERE case_id=? ORDER BY created', (case,))]

@@ -86,6 +86,12 @@ CREATE TABLE IF NOT EXISTS plan_steps(
  goal TEXT NOT NULL, candidate_tool TEXT NOT NULL, success_criterion TEXT NOT NULL,
  status TEXT NOT NULL DEFAULT 'pending', created TEXT NOT NULL,
  UNIQUE(plan_id, ordinal));
+CREATE TABLE IF NOT EXISTS plan_tasks(
+ task_id TEXT PRIMARY KEY REFERENCES tasks(id), plan_id TEXT NOT NULL REFERENCES plans(id),
+ case_id TEXT NOT NULL REFERENCES investigations(id), created TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS task_assignments(
+ task_id TEXT PRIMARY KEY REFERENCES tasks(id), case_id TEXT NOT NULL REFERENCES investigations(id),
+ executor TEXT NOT NULL, reason TEXT NOT NULL, created TEXT NOT NULL);
 '''
 
 
@@ -95,7 +101,7 @@ def connect(path):
     db.execute('PRAGMA foreign_keys=ON')
     db.execute('PRAGMA busy_timeout=10000')
     version = db.execute('PRAGMA user_version').fetchone()[0]
-    if version not in (0, 1, 2, 3, 4, 5):
+    if version not in (0, 1, 2, 3, 4, 5, 6):
         db.close()
         raise CoreError('Unsupported database version')
     db.executescript(SCHEMA)
@@ -104,7 +110,8 @@ def connect(path):
     # heuristics move to analysis_notes. A legacy hypotheses table from an older
     # database is left untouched and simply no longer written to or reported.
     # Schema 5 adds CORE planning: investigation_type, plans and plan_steps.
-    db.execute('PRAGMA user_version=5')
+    # Schema 6 adds decomposition/distribution: plan_tasks and task_assignments.
+    db.execute('PRAGMA user_version=6')
     db.commit()
     return db
 
