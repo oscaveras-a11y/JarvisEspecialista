@@ -253,16 +253,19 @@ class Reasoning:
             # Resume a reservation even if evaluation committed just before interruption.
             matches = [r for r in self.db.execute("SELECT * FROM reasoning_cycles WHERE case_id=? AND status='QUEUED' AND input_fingerprint=? ORDER BY created,id",
                                                   (case, fingerprint)) if strategy is None or r['strategy_id'] == strategy]
-            if matches:
-                cycle = dict(matches[0])
-                projection = next(r for r in current if r['id'] == cycle['strategy_id'])
-                if projection['revision'] != cycle['hypothesis_revision']:
-                    return self._finish(case, cycle, 'STALE', error='Hypothesis changed before resuming reserved task')
+            cycle, stale_reservations = None, []
+            for reservation in matches:
+                candidate_cycle = dict(reservation)
+                projection = next(r for r in current if r['id'] == candidate_cycle['strategy_id'])
+                if projection['revision'] != candidate_cycle['hypothesis_revision']:
+                    stale_reservations.append(candidate_cycle)
+                    continue
                 committed_run = self.db.execute('SELECT 1 FROM experiment_runs WHERE task_id=? AND experiment_id=? AND hypothesis_revision=?',
-                                                (cycle['task_id'], projection['experiment'], cycle['hypothesis_revision'])).fetchone()
-                if not projection['eligible'] and committed_run is None:
-                    return self._idle([projection])
-            else:
+                                                (candidate_cycle['task_id'], projection['experiment'], candidate_cycle['hypothesis_revision'])).fetchone()
+                if projection['eligible'] or committed_run is not None:
+                    cycle = candidate_cycle
+                    break
+            if cycle is None:
                 selected, duplicates = None, []
                 for candidate in current:
                     if not candidate['eligible'] or (strategy is not None and candidate['id'] != strategy):
@@ -279,7 +282,9 @@ class Reasoning:
                         candidate, duplicate = duplicates[0]
                         audit(self.db, case, 'reasoning_repeat_rejected', {'strategy': candidate['id'], 'cycle': duplicate['id']})
                         return {'status': 'repeated', 'cycle': duplicate['id']}
-                    return self._idle(current)
+                    if stale_reservations:
+                        return self._finish(case, stale_reservations[0], 'STALE', error='Hypothesis changed before resuming reserved task')
+                    return self._idle([r for r in current if strategy is None or r['id'] == strategy])
                 record = self._row('reasoning_strategies', case, selected['id'])
                 plan = self.flow._row('experiments', case, record['experiment_id'])
                 if plan['tool'] not in TOOLS:
