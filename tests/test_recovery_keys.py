@@ -4,6 +4,8 @@ import hashlib
 import json
 from pathlib import Path
 import tempfile
+import subprocess
+import sys
 import unittest
 from cryptography import x509
 from cryptography.hazmat.primitives import serialization
@@ -139,6 +141,20 @@ class ScopedScanTests(unittest.TestCase):
         self.core.cancel(self.case, reason="Synthetic cancel")
         with self.assertRaises(CoreError):
             self.scan()
+
+    def test_cli_inspect_emits_metadata_only(self):
+        run = subprocess.run([sys.executable, "-m", "cyber_core", "keys", "inspect", str(self.scope / "key.pem")],
+                             capture_output=True, text=True, timeout=60)
+        self.assertEqual(run.returncode, 0, run.stderr)
+        self.assertEqual(json.loads(run.stdout)["material_kind"], "private_key")
+        self.assertNotIn(self.secret.decode().splitlines()[1], run.stdout + run.stderr)
+
+    def test_cli_scan_uses_the_case_scope(self):
+        run = subprocess.run([sys.executable, "-m", "cyber_core", "--home", str(self.root / "store"),
+                              "keys", "scan", self.case, str(self.scope)],
+                             capture_output=True, text=True, timeout=60)
+        self.assertEqual(run.returncode, 0, run.stderr)
+        self.assertEqual(len(json.loads(run.stdout)["candidates"]), 1)
 
     def test_assessment_identifies_key_requirements(self):
         from cyber_core.cryptanalysis.assessment import assess
