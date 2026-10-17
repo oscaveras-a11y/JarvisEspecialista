@@ -22,7 +22,8 @@ function loadState(){
 let state=loadState();
 const firstVisit=state===null;
 if(firstVisit)state=structuredClone(DEFAULT_STATE);
-let search='',currentView='dashboard',auditQueue=Promise.resolve(),actionQueue=Promise.resolve(),renderVersion=0;
+let search='',currentView='dashboard',auditQueue=Promise.resolve(),actionQueue=Promise.resolve(),renderVersion=0,lastFocusedElement=null;
+const mobileMenu=window.matchMedia('(max-width:760px)');
 function uid(){return crypto.randomUUID().replaceAll('-','');}
 function nowIso(){return new Date().toISOString();}
 function saveState(){localStorage.setItem(STORE_KEY,JSON.stringify(state));}
@@ -62,8 +63,36 @@ async function verifyChain(caseId){
  return true;
 }
 function closeMenu(){
+ const wasOpen=document.body.classList.contains('menu-open');
  document.body.classList.remove('menu-open');document.getElementById('menu-backdrop').hidden=true;
- document.getElementById('menu-toggle').setAttribute('aria-expanded','false');
+ const toggle=document.getElementById('menu-toggle');toggle.setAttribute('aria-expanded','false');
+ if(wasOpen&&mobileMenu.matches)toggle.focus();
+ document.getElementById('sidebar').inert=mobileMenu.matches;
+}
+function openMenu(){
+ if(!mobileMenu.matches)return;
+ const sidebar=document.getElementById('sidebar');sidebar.inert=false;
+ document.body.classList.add('menu-open');document.getElementById('menu-backdrop').hidden=false;
+ document.getElementById('menu-toggle').setAttribute('aria-expanded','true');sidebar.querySelector('a').focus();
+}
+function syncMenuViewport(){
+ const sidebar=document.getElementById('sidebar'),toggle=document.getElementById('menu-toggle');
+ // A breakpoint can hide a control and blur it before this callback runs.
+ const focused=document.activeElement===document.body?lastFocusedElement:document.activeElement;
+ const focusInSidebar=sidebar.contains(focused),focusOnToggle=focused===toggle;
+ closeMenu();
+ if(mobileMenu.matches&&focusInSidebar)toggle.focus();
+ if(!mobileMenu.matches&&focusOnToggle)(sidebar.querySelector('[aria-current="page"]')||sidebar.querySelector('.nav-item'))?.focus();
+}
+function handleMenuKeyboard(event){
+ if(!mobileMenu.matches||!document.body.classList.contains('menu-open'))return;
+ if(event.key==='Escape'){event.preventDefault();closeMenu();return;}
+ if(event.key!=='Tab')return;
+ const items=Array.from(document.getElementById('sidebar').querySelectorAll('a[href],button:not(:disabled)'));
+ const first=items[0],last=items[items.length-1],active=document.activeElement;
+ if(!items.includes(active)){event.preventDefault();first.focus();}
+ else if(event.shiftKey&&active===first){event.preventDefault();last.focus();}
+ else if(!event.shiftKey&&active===last){event.preventDefault();first.focus();}
 }
 function showView(view){
  currentView=VIEWS.includes(view)?view:'dashboard';document.body.dataset.view=currentView;
@@ -187,12 +216,12 @@ async function seedExamples(){
 }
 document.addEventListener('DOMContentLoaded',async()=>{
  document.body.dataset.view='dashboard';
- document.getElementById('menu-toggle').addEventListener('click',()=>{
-  const open=!document.body.classList.contains('menu-open');document.body.classList.toggle('menu-open',open);
-  document.getElementById('menu-backdrop').hidden=!open;document.getElementById('menu-toggle').setAttribute('aria-expanded',String(open));
- });
+ document.addEventListener('focusin',event=>{lastFocusedElement=event.target;});
+ syncMenuViewport();mobileMenu.addEventListener('change',syncMenuViewport);
+ document.getElementById('menu-toggle').addEventListener('click',()=>{if(document.body.classList.contains('menu-open'))closeMenu();else openMenu();});
  document.getElementById('menu-backdrop').addEventListener('click',closeMenu);
- document.addEventListener('keydown',event=>{if(event.key==='Escape'){closeMenu();document.getElementById('menu-toggle').focus();}});
+ document.getElementById('sidebar-close').addEventListener('click',closeMenu);
+ document.addEventListener('keydown',handleMenuKeyboard);
  document.getElementById('case-search').addEventListener('input',event=>{search=event.target.value;renderDashboard();renderInvestigations();});
  document.getElementById('case-select').addEventListener('change',event=>schedule(async()=>{state.activeCase=event.target.value||null;saveState();await render();}));
  document.addEventListener('click',event=>{

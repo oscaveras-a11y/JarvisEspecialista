@@ -19,6 +19,10 @@ test('navigation, search and accessible mobile menu expose their real views',asy
  await page.getByRole('navigation',{name:'Navegação principal'}).getByRole('button',{name:'Ferramentas',exact:true}).click();
  await expect(page.locator('#view-tools')).toBeVisible();
  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+ await page.getByLabel('Buscar investigação').fill('');
+ await page.getByRole('button',{name:'Abrir menu'}).click();
+ await page.getByRole('navigation',{name:'Navegação principal'}).getByRole('button',{name:'Visão geral',exact:true}).click();
+ await expect(page.locator('#sidebar')).toBeHidden();
  await page.screenshot({path:'test-results/dashboard-mobile.png',fullPage:true});
 });
 test('a declared demonstration case persists and blocks tasks while paused or cancelled',async({page})=>{
@@ -83,4 +87,41 @@ test('application only loads local assets and all module views remain navigable'
  await page.getByRole('navigation',{name:'Navegação principal'}).getByRole('button',{name:label,exact:true}).click();
  await expect(page.locator('#view-'+id)).toBeVisible();}
  expect(external).toEqual([]);expect(errors).toEqual([]);
+});
+test('mobile navigation hides closed links, restores focus and adapts to desktop',async({page})=>{
+ await page.setViewportSize({width:390,height:844});
+ const sidebar=page.locator('#sidebar'),toggle=page.getByRole('button',{name:'Abrir menu'});
+ await expect(sidebar).toBeHidden();
+ await toggle.focus();await page.keyboard.press('Tab');
+ await expect(page.getByLabel('Buscar investigação')).toBeFocused();
+ await toggle.click();
+ await expect(sidebar).toBeVisible();
+ await expect(page.getByRole('link',{name:'CYBER CORE, início'})).toBeFocused();
+ await page.keyboard.press('Shift+Tab');await expect(sidebar.getByRole('button',{name:'Fechar menu',exact:true})).toBeFocused();
+ await page.keyboard.press('Tab');await expect(page.getByRole('link',{name:'CYBER CORE, início'})).toBeFocused();
+ await page.getByRole('navigation',{name:'Navegação principal'}).getByRole('button',{name:'Ferramentas',exact:true}).click();
+ await expect(page.locator('#view-tools')).toBeVisible();
+ await expect(sidebar).toBeHidden();await expect(toggle).toBeFocused();
+ await toggle.click();await page.keyboard.press('Escape');
+ await expect(sidebar).toBeHidden();await expect(toggle).toBeFocused();
+ await page.setViewportSize({width:1584,height:992});
+ await expect(sidebar).toBeVisible();
+ const tools=page.getByRole('navigation',{name:'Navegação principal'}).getByRole('button',{name:'Ferramentas',exact:true});
+ await tools.focus();await expect(tools).toBeFocused();
+ await page.keyboard.press('Escape');await expect(tools).toBeFocused();
+ await page.setViewportSize({width:390,height:844});
+ await expect(sidebar).toBeHidden();await expect(toggle).toBeFocused();
+ await toggle.click();await page.setViewportSize({width:1584,height:992});
+ await expect(sidebar).toBeVisible();await expect(page.locator('#menu-backdrop')).toBeHidden();
+ await tools.focus();await expect(tools).toBeFocused();
+});
+
+test('initial dashboard restores navigation focus when resized before any navigation',async({page})=>{
+ const errors=[];page.on('pageerror',error=>errors.push(error.message));
+ await page.setViewportSize({width:390,height:844});
+ const toggle=page.getByRole('button',{name:'Abrir menu'});
+ await toggle.click();await page.keyboard.press('Escape');await expect(toggle).toBeFocused();
+ await page.setViewportSize({width:1584,height:992});
+ const dashboard=page.getByRole('navigation',{name:'Navegação principal'}).getByRole('button',{name:'Visão geral',exact:true});
+ await expect(dashboard).toBeFocused();expect(errors).toEqual([]);
 });
