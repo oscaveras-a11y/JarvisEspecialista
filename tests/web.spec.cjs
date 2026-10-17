@@ -115,3 +115,13 @@ test('mobile navigation hides closed links, restores focus and adapts to desktop
  await expect(sidebar).toBeVisible();await expect(page.locator('#menu-backdrop')).toBeHidden();
  await tools.focus();await expect(tools).toBeFocused();
 });
+
+test('initial dashboard restores navigation focus when resized before any navigation',async({page})=>{
+ const errors=[];page.on('pageerror',error=>errors.push(error.message));
+ await page.setViewportSize({width:390,height:844});
+ const toggle=page.getByRole('button',{name:'Abrir menu'});
+ await toggle.click();await page.keyboard.press('Escape');await expect(toggle).toBeFocused();
+ await page.setViewportSize({width:1584,height:992});
+ const dashboard=page.getByRole('navigation',{name:'Navegação principal'}).getByRole('button',{name:'Visão geral',exact:true});
+ await expect(dashboard).toBeFocused();expect(errors).toEqual([]);
+});
