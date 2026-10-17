@@ -171,6 +171,13 @@ class Core:
                 audit(self.db, case, 'analysis_verified', {'task': task['id'], 'sha256': result['sha256'], 'size': result['size'], 'source': str(source), 'copy': str(output), 'result_digest': result_digest(result)})
             return result
         except BaseException as exc:
+            # An interrupt can arrive after SQLite commits, before returning to the caller.
+            # A done claim owns durable evidence; never clean it up as a partial result.
+            current = self.db.execute('SELECT status,token FROM tasks WHERE id=?', (task['id'],)).fetchone()
+            if current['status'] == 'done' and current['token'] == task['token']:
+                if not isinstance(exc, Exception):
+                    raise
+                raise CoreError('Analysis committed; inspect stored result before retrying') from exc
             if output:
                 output.unlink(missing_ok=True)
             if secondary_output:
