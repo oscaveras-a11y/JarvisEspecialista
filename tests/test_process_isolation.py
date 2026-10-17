@@ -163,6 +163,7 @@ class ProcessIsolationTests(unittest.TestCase):
         task = self.core.enqueue(self.case, self.source)
         helper = self.root / 'worker.py'
         command = self.fixture("Path(request['destination']).write_bytes(b'partial')\nwhile True: time.sleep(1)\n")
+        command[-1] = command[-1].replace("request['marker']", repr(str(self.marker)))
         helper.write_text(
             "import sys\nfrom unittest.mock import patch\n"
             "from cyber_core.service import Core\nfrom cyber_core.errors import CoreError\n"
@@ -173,10 +174,6 @@ class ProcessIsolationTests(unittest.TestCase):
             "  try: core.run_one(sys.argv[2])\n"
             "  except CoreError: pass\n"
             "finally: core.close()\n", encoding='utf-8')
-        # The synthetic child receives the fixed marker through its fixture, not production options.
-        helper.write_text(helper.read_text(encoding='utf-8').replace(
-            "Path(request['marker']).write_text(str(os.getpid()))",
-            "Path(" + repr(str(self.marker)) + ").write_text(str(os.getpid()))"), encoding='utf-8')
         process = subprocess.Popen([sys.executable, str(helper), str(self.home), self.case],
                                    stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
         self.addCleanup(lambda: process.kill() if process.poll() is None else None)
