@@ -9,12 +9,15 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from cyber_core.errors import CoreError
 from cyber_core.analysis_process.limits import MAX_TIMEOUT_SECONDS
 from cyber_core.reverse_engineering import analyze
+from cyber_core.analysis_process.specialists import TOOLS, KEYS, validate_options, execute as specialist
 
 
 def execute(request):
     if not isinstance(request, dict) or request.get('tool') not in (
-            'analyze-file', 'assess-recovery', 'analyze-firmware', 'analyze-can'):
+            'analyze-file', 'assess-recovery', 'analyze-firmware', 'analyze-can') + TOOLS:
         raise CoreError('Analysis operation is not allowlisted')
+    if request['tool'] in TOOLS:
+        validate_options(request['tool'], request.get('options', {}))
     source, output = Path(request['source']), Path(request['destination'])
     maximum, timeout = request['max_bytes'], request['timeout']
     if type(maximum) is not int or not 0 <= maximum <= 268435456:
@@ -27,7 +30,7 @@ def execute(request):
     result = analyze(source, output, maximum, timeout)
     secondary = None
     if request.get('secondary_source') is not None:
-        if request['tool'] not in ('analyze-firmware', 'analyze-can'):
+        if request['tool'] not in ('analyze-firmware', 'analyze-can', 'analyze-capture'):
             raise CoreError('Paired analysis is not supported')
         secondary = Path(request['secondary_destination'])
         second_limit = request['secondary_max_bytes']
@@ -51,6 +54,8 @@ def execute(request):
         result['can'] = analyze_can(output, max_bytes=min(maximum, 16777216))
         if secondary:
             result['can_comparison'] = compare_can(output, secondary, max_bytes=min(request['secondary_max_bytes'], 16777216))
+    if tool in TOOLS:
+        result[KEYS[tool]] = specialist(tool, output, request.get('options', {}), secondary)
     return result
 
 

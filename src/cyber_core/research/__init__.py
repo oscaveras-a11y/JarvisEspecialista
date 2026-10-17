@@ -18,7 +18,7 @@ COMMUNITY = ('github.com', 'gitlab.com', 'stackoverflow.com', 'stackexchange.com
 
 
 def _matches(host, markers):
-    return any(host == marker.lstrip('.') or host.endswith(marker) for marker in markers)
+    return any(host == marker.lstrip('.') or host.endswith('.' + marker.lstrip('.')) for marker in markers)
 
 
 def classify_source(url):
@@ -27,7 +27,7 @@ def classify_source(url):
     parts = urlsplit(url.strip())
     if parts.scheme not in ('http', 'https') or not parts.hostname:
         raise CoreError('Source URL must be http(s) with a host')
-    host = parts.hostname.lower()
+    host = parts.hostname.lower().rstrip('.')
     if _matches(host, OFFICIAL):
         category = 'official'
     elif _matches(host, ACADEMIC):

@@ -8,6 +8,7 @@ from cyber_core.errors import CoreError
 from cyber_core.memory import audit, connect, encoded, utc, verify
 from cyber_core.permissions import local_path, scoped_path, storage_root
 from cyber_core.analysis_process import analyze_in_process
+from cyber_core.analysis_process.specialists import TOOLS as SPECIALIST_TOOLS, KEYS as SPECIALIST_KEYS, validate_options, audit_event
 
 
 class Core:
@@ -68,22 +69,27 @@ class Core:
         with self.db:
             return self._enqueue(case, path, tool=tool, second_path=second_path)
 
-    def _enqueue(self, case, path, *, tool, second_path=None):
+    def _enqueue(self, case, path, *, tool, second_path=None, options=None):
         # Serialize the authorization check with cancellation and insertion.
         if not self.db.in_transaction:
             self.db.execute('BEGIN IMMEDIATE')
-        if tool not in ('analyze-file', 'assess-recovery', 'analyze-firmware', 'analyze-can'):
+        if tool not in ('analyze-file', 'assess-recovery', 'analyze-firmware', 'analyze-can') + SPECIALIST_TOOLS:
             raise CoreError('Tool is not allowlisted')
         source = self.authorize(case, path, recovery=tool == 'assess-recovery')
         secondary = None
         if second_path is not None:
-            if tool not in ('analyze-firmware', 'analyze-can'):
+            if tool not in ('analyze-firmware', 'analyze-can', 'analyze-capture'):
                 raise CoreError('This tool does not support paired inputs')
             secondary = self.authorize(case, second_path)
         task = uuid4().hex
         self.db.execute('INSERT INTO tasks(id,case_id,tool,path,created) VALUES(?,?,?,?,?)', (task, case, tool, str(source), utc()))
+        parameters = {}
         if secondary is not None:
-            self.db.execute('INSERT INTO task_parameters VALUES(?,?)', (task, encoded({'secondary': str(secondary)})))
+            parameters['secondary'] = str(secondary)
+        if options:
+            parameters['options'] = options
+        if parameters:
+            self.db.execute('INSERT INTO task_parameters VALUES(?,?)', (task, encoded(parameters)))
         self.reopen(case, reason='New task queued')
         audit(self.db, case, 'task_queued', {'task': task, 'tool': tool, 'source': str(source)})
         return task
@@ -125,7 +131,7 @@ class Core:
         output, secondary_output = None, None
         try:
             recovery_assessment = task['tool'] == 'assess-recovery'
-            if task['tool'] not in ('analyze-file', 'assess-recovery', 'analyze-firmware', 'analyze-can'):
+            if task['tool'] not in ('analyze-file', 'assess-recovery', 'analyze-firmware', 'analyze-can') + SPECIALIST_TOOLS:
                 raise CoreError('Tool is not allowlisted')
             source = self.authorize(case, task['path'], recovery=recovery_assessment)
             folder = storage_root(self.home / 'cases' / case / 'evidence')
@@ -134,9 +140,11 @@ class Core:
             byte_limit = min(self.max_bytes, limit['max_bytes']) if limit is not None else self.max_bytes
             parameters = self.db.execute('SELECT data FROM task_parameters WHERE task_id=?', (task['id'],)).fetchone()
             secondary_source = None
-            if parameters:
-                secondary_source = self.authorize(case, json.loads(parameters['data'])['secondary'])
+            options = json.loads(parameters['data']) if parameters else {}
+            if options.get('secondary') is not None:
+                secondary_source = self.authorize(case, options['secondary'])
                 secondary_output = folder / (task['id'] + '-' + task['token'] + '-secondary.evidence')
+            operation_options = {'options': options.get('options', {})} if task['tool'] in SPECIALIST_TOOLS else {}
 
             def check_claim():
                 self.authorize(case, recovery=recovery_assessment)
@@ -157,7 +165,7 @@ class Core:
             result = analyze_in_process(source, output, byte_limit, remaining, tool=task['tool'],
                                         secondary_source=secondary_source, secondary_destination=secondary_output,
                                         secondary_max_bytes=self.max_bytes, should_stop=check_claim,
-                                        on_started=record_process)
+                                        on_started=record_process, **operation_options)
             result.update(task_id=task['id'], tool=task['tool'])
             if time.monotonic() - started > budget:
                 raise CoreError('Analysis resource limit exceeded')
@@ -179,6 +187,9 @@ class Core:
                 self.db.execute('INSERT INTO checkpoints(case_id,event,data,created) VALUES(?,?,?,?)', (case, 'analysis_committed', encoded({'task': task['id'], 'sha256': result['sha256']}), utc()))
                 from cyber_core.verification.artifacts import result_digest
                 audit(self.db, case, 'analysis_verified', {'task': task['id'], 'sha256': result['sha256'], 'size': result['size'], 'source': str(source), 'copy': str(output), 'result_digest': result_digest(result)})
+                if task['tool'] in SPECIALIST_TOOLS:
+                    event, details = audit_event(task['tool'], result[SPECIALIST_KEYS[task['tool']]])
+                    audit(self.db, case, event, {**details, 'task': task['id']})
             return result
         except BaseException as exc:
             # An interrupt can arrive after SQLite commits, before returning to the caller.
@@ -397,7 +408,7 @@ class Core:
         return dict(row) if row is not None else None
 
     def self_test_recovery(self, case, path, candidates, *, max_attempts=10000, max_seconds=30):
-        self.authorize(case)
+        self._authorize_active(case)
         basis = self.db.execute('SELECT kind FROM authorization_basis WHERE case_id=?', (case,)).fetchone()
         if basis is None or basis['kind'] != 'owner_consent':
             raise CoreError('Self-test requires an owner_consent authorization basis on your own file')
@@ -414,14 +425,14 @@ class Core:
         result['recovery_demonstrated'] = result['recovered']
         # Audit records only the outcome, never the passphrase or the plaintext.
         with self.db:
-            self.authorize(case)
+            self._authorize_active(case)
             audit(self.db, case, 'self_test_recovery', {'recovered': result['recovered'], 'attempts': result['attempts'], 'status': result['status']})
         return result
 
     def make_lab_envelope(self, case, output_path, *, passphrase, content):
         # Create a CCPW1 lab target on the operator's OWN scope, to exercise the
         # recovery self-test end to end. Requires owner_consent; passphrase not logged.
-        row = self.authorize(case)
+        row = self._authorize_active(case)
         basis = self.db.execute('SELECT kind FROM authorization_basis WHERE case_id=?', (case,)).fetchone()
         if basis is None or basis['kind'] != 'owner_consent':
             raise CoreError('Creating a lab envelope requires an owner_consent authorization basis')
@@ -473,25 +484,26 @@ class Core:
                     break
         return matches
 
-    def extract_strings(self, case, path, *, min_length=4, max_strings=1000, max_sample=1048576):
-        # Static string extraction (item 6) over a bounded prefix of an authorized file.
-        # Strings go to the operator; the audit records only counts, not evidence content.
-        if not isinstance(max_sample, int) or not 1 <= max_sample <= 16 * 1024 * 1024:
-            raise CoreError('Invalid string extraction sample limit')
-        self.authorize(case)
-        source = self.authorize(case, path)
-        if source.stat().st_size > self.max_bytes:
-            raise CoreError('File exceeds byte limit')
-        with source.open('rb') as handle:
-            sample = handle.read(max_sample)
-            truncated = bool(handle.read(1))
-        from cyber_core.reverse_engineering.strings import extract_strings
-        result = extract_strings(sample, min_length=min_length, max_strings=max_strings)
-        result['sample_truncated'] = truncated
+    def _authorize_active(self, case):
+        row = self.authorize(case)
+        if row['paused']:
+            raise CoreError('Investigation is paused')
+        return row
+
+    def _run_specialist(self, case, path, tool, options, *, second_path=None):
+        validate_options(tool, options)
         with self.db:
-            self.authorize(case)
-            audit(self.db, case, 'strings_extracted', {'counts': result['counts'], 'min_length': min_length})
-        return result
+            self.db.execute('BEGIN IMMEDIATE')
+            self._authorize_active(case)
+            task = self._enqueue(case, path, tool=tool, second_path=second_path, options=options)
+        result = self.run_one(case, task)
+        if result is None:
+            raise CoreError('Specialist task was not claimed; inspect the queue')
+        return {**result[SPECIALIST_KEYS[tool]], 'task_id': task}
+
+    def extract_strings(self, case, path, *, min_length=4, max_strings=1000, max_sample=1048576):
+        return self._run_specialist(case, path, 'extract-strings',
+            {'min_length': min_length, 'max_strings': max_strings, 'max_sample': max_sample})
 
     def classify_source(self, url):
         # Offline source-authority heuristic (item 11); stateless, no web retrieval.
@@ -512,50 +524,11 @@ class Core:
         return out
 
     def analyze_capture(self, case, path, *, second_path=None, max_sample=4194304):
-        # Passive generic protocol-capture analysis (item 10). Static text capture;
-        # never opens a bus/device/socket. Optional comparison with a second capture.
-        if not isinstance(max_sample, int) or not 1 <= max_sample <= 16 * 1024 * 1024:
-            raise CoreError('Invalid capture sample limit')
-        self.authorize(case)
-        source = self.authorize(case, path)
-        if source.stat().st_size > self.max_bytes:
-            raise CoreError('File exceeds byte limit')
-        text = source.read_bytes()[:max_sample].decode('utf-8', errors='replace')
-        from cyber_core.protocol import analyze_capture, compare_captures
-        if second_path is not None:
-            other = self.authorize(case, second_path)
-            if other.stat().st_size > self.max_bytes:
-                raise CoreError('Second file exceeds byte limit')
-            other_text = other.read_bytes()[:max_sample].decode('utf-8', errors='replace')
-            result = compare_captures(text, other_text)
-            event = {'messages': result['first']['messages'], 'second_messages': result['second']['messages']}
-        else:
-            result = analyze_capture(text)
-            event = {'messages': result['messages'], 'unique_payloads': result['unique_payloads']}
-        with self.db:
-            self.authorize(case)
-            audit(self.db, case, 'capture_analyzed', event)
-        return result
+        return self._run_specialist(case, path, 'analyze-capture',
+            {'max_sample': max_sample}, second_path=second_path)
 
     def audit_config(self, case, path, *, max_sample=1048576):
-        # Static, authorized configuration/exposure audit (item 9). No active scan,
-        # no network. Findings are redacted; the audit records only counts by severity.
-        if not isinstance(max_sample, int) or not 1 <= max_sample <= 16 * 1024 * 1024:
-            raise CoreError('Invalid audit sample limit')
-        self.authorize(case)
-        source = self.authorize(case, path)
-        if source.stat().st_size > self.max_bytes:
-            raise CoreError('File exceeds byte limit')
-        with source.open('rb') as handle:
-            sample = handle.read(max_sample)
-            truncated = bool(handle.read(1))
-        from cyber_core.vulnerability import audit_config
-        result = audit_config(sample.decode('utf-8', errors='replace'))
-        result['sample_truncated'] = truncated
-        with self.db:
-            self.authorize(case)
-            audit(self.db, case, 'config_audited', {'summary': result['summary'], 'findings': len(result['findings'])})
-        return result
+        return self._run_specialist(case, path, 'audit-config', {'max_sample': max_sample})
 
     def custody_timeline(self, case):
         # Forensic timeline / chain-of-custody view (item 8), assembled from the
@@ -581,23 +554,7 @@ class Core:
                                 'Para custódia forense formal, use retenção externa assinada e mídia protegida contra escrita.']}
 
     def differentiate_content(self, case, path, *, max_sample=65536):
-        # Static differentiation (item 7): encoding vs compression vs encryption vs
-        # structured, over a bounded prefix. Never asserts encryption from entropy alone.
-        if not isinstance(max_sample, int) or not 1 <= max_sample <= 262144:
-            raise CoreError('Invalid differentiation sample limit')
-        self.authorize(case)
-        source = self.authorize(case, path)
-        if source.stat().st_size > self.max_bytes:
-            raise CoreError('File exceeds byte limit')
-        with source.open('rb') as handle:
-            sample = handle.read(max_sample)
-            truncated = bool(handle.read(1))
-        from cyber_core.cryptanalysis.differentiate import differentiate
-        result = differentiate(sample, sample_truncated=truncated)
-        with self.db:
-            self.authorize(case)
-            audit(self.db, case, 'content_differentiated', {'content_class': result['content_class'], 'label': result['label']})
-        return result
+        return self._run_specialist(case, path, 'differentiate-content', {'max_sample': max_sample})
 
     def recall_by_type(self, investigation_type, *, limit=20):
         # Prior investigations of a given type, to reuse approaches (item 5).

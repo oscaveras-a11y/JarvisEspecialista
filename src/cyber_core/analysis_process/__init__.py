@@ -20,12 +20,12 @@ def _validate(result, destination, maximum):
 
 def analyze_in_process(source, destination, max_bytes, timeout, *, tool='analyze-file',
                        secondary_source=None, secondary_destination=None, secondary_max_bytes=None,
-                       should_stop=None, on_started=None):
+                       should_stop=None, on_started=None, options=None):
     request = {'source': str(source), 'destination': str(destination),
                'max_bytes': max_bytes, 'timeout': timeout, 'tool': tool,
                'secondary_source': str(secondary_source) if secondary_source is not None else None,
                'secondary_destination': str(secondary_destination) if secondary_destination is not None else None,
-               'secondary_max_bytes': secondary_max_bytes}
+               'secondary_max_bytes': secondary_max_bytes, 'options': options or {}}
     result = run_monitored(request, cwd=Path(destination).parent, timeout=timeout,
                            should_stop=should_stop, on_started=on_started)
     _validate(result, destination, max_bytes)
