@@ -118,5 +118,24 @@ class DisassemblyTests(unittest.TestCase):
         self.assertEqual(len(out["instructions"]), 128)
 
 
+    def test_real_aarch64_little_endian_instruction(self):
+        if not self.backend():
+            self.skipTest("Optional Capstone; required by the combined CI job")
+        data = elf_fixture(machine=183)
+        data[0x100:0x104] = b"\x1f\x20\x03\xd5"
+        out = self.parse(data)
+        self.assertEqual(out["architecture"], "aarch64")
+        self.assertEqual(out["instructions"][0]["mnemonic"], "nop")
+        self.assertEqual(out["decoded_bytes"], 4)
+        self.assertEqual(out["undecoded_bytes"], 0)
+
+    def test_aarch64_unaligned_entry_is_not_silently_rounded(self):
+        data = elf_fixture(machine=183)
+        struct.pack_into("<Q", data, 24, 0x400101)
+        out = self.parse(data)
+        self.assertEqual(out.get("status"), "unaligned_entry_point")
+        self.assertEqual(out.get("instructions", []), [])
+
+
 if __name__ == "__main__":
     unittest.main()
