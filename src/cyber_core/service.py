@@ -54,6 +54,8 @@ class Core:
         self.get(case)
         with self.db:
             self.db.execute('UPDATE investigations SET revoked=1 WHERE id=?', (case,))
+            from cyber_core.cryptanalysis.sessions import stop_case_sessions
+            stop_case_sessions(self, case)
             audit(self.db, case, 'authorization_revoked', {})
 
     def enqueue(self, case, path, *, tool='analyze-file', second_path=None):
@@ -222,6 +224,8 @@ class Core:
             self.db.execute('BEGIN IMMEDIATE')
             row = self.get(case)
             if row['state'] == 'CANCELADO':
+                from cyber_core.cryptanalysis.sessions import stop_case_sessions
+                stop_case_sessions(self, case)
                 return {'id': case, 'state': 'CANCELADO', 'already_cancelled': True}
             self.db.execute("UPDATE investigations SET state='CANCELADO',paused=1 WHERE id=?", (case,))
             count = self.db.execute(
@@ -230,6 +234,8 @@ class Core:
             data = {'reason': reason.strip(), 'cancelled_tasks': count}
             self.db.execute('INSERT INTO checkpoints(case_id,event,data,created) VALUES(?,?,?,?)',
                             (case, 'cancelled', encoded(data), utc()))
+            from cyber_core.cryptanalysis.sessions import stop_case_sessions
+            stop_case_sessions(self, case)
             audit(self.db, case, 'investigation_cancelled', data)
         return {'id': case, 'state': 'CANCELADO', 'cancelled_tasks': count, 'already_cancelled': False}
 
@@ -238,6 +244,8 @@ class Core:
         with self.db:
             self.db.execute('UPDATE investigations SET paused=1 WHERE id=?', (case,))
             self.db.execute('INSERT INTO checkpoints(case_id,event,data,created) VALUES(?,?,?,?)', (case, 'paused', '{}', utc()))
+            from cyber_core.cryptanalysis.sessions import stop_case_sessions
+            stop_case_sessions(self, case, state='paused')
             audit(self.db, case, 'paused', {})
 
     def reopen(self, case, *, reason):
@@ -286,5 +294,5 @@ class Core:
         return recover(self, case, source, key, **expectations)
 
     def assess_recovery(self, case, path, **limits):
-        from cyber_core.cryptanalysis.intake import assess_recovery
+        from cyber_core.recovery import assess_recovery
         return assess_recovery(self, case, path, **limits)
