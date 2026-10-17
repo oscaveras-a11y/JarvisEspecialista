@@ -171,3 +171,14 @@ Alternativas descartadas, e por quê:
 - Ghidra não está no `apt`; baixaria um ZIP de release do GitHub e rodaria `analyzeHeadless`, o que cairia no mesmo bloqueio de "código externo".
 
 **Decisão do proprietário (confirmada nesta sessão): opção 1 — deixar documentado como pendência por enquanto.** Não instalar as ferramentas agora; o código do adaptador segue mergeado e testado para a ausência delas, sem fabricar sucesso. A instalação real fica para quando isso rodar numa máquina ou CI sem essa restrição de execução de código externo. Nenhuma mudança de código foi feita nesta tentativa — apenas o clone de leitura em `/home/user/refirmlabs/binwalk`, fora do repositório do projeto, inofensivo e não commitado.
+
+## Status honesto do PR #3 e do CI real no GitHub (checagem feita a pedido do proprietário)
+
+O proprietário perguntou se o projeto já está completo. Resposta honesta: **não.** Levantamento feito agora via `mcp__github__pull_request_read`/`actions_list`/`actions_get`:
+
+- O PR #3 (`claude/gifted-gates-kd07xv` → `main`) ainda está **aberto, não mergeado** — nada do trabalho desta sessão chegou à `main` ainda.
+- O CI real no GitHub (não a suíte local) estava verde desde muito antes desta sessão até a run #142 (commit dos itens 8/10, ~4-5 min de execução normal). As duas runs seguintes do workflow `ci.yml` — #145 e #146, disparadas pelos dois últimos commits **só de documentação** (`.md`, nenhuma linha de código) — **falharam em 4 a 9 segundos**, com `runner_id: 0` nos jobs: o job nunca chegou a pegar uma máquina para executar. Isso não é a suíte de testes falhando por bug; é sintoma de problema de infraestrutura do Actions no repositório, coincidindo no tempo com a renomeação do projeto (`CyberCore` → `JarvisEspecialista`) feita pelo proprietário no meio da sessão.
+- Não consegui diagnosticar mais fundo com as ferramentas disponíveis aqui: download de log retornou HTTP 404, e a URL assinada de log foi bloqueada pelo proxy de rede deste sandbox (`results-receiver.actions.githubusercontent.com` não está na lista de hosts permitidos). Configuração de billing/Actions do repositório não é algo que eu tenha acesso para inspecionar.
+- Há ainda um PR duplicado aberto (#12, rascunho do Codex, corrigindo os mesmos 5 achados que eu já corrigi nesta branch) — apenas comentado, nunca fechado.
+
+Este commit, só de documentação, serve também para testar se a falha das runs #145/#146 foi transitória (ligada à renomeação) ou persistente.
