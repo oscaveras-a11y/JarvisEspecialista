@@ -205,6 +205,17 @@ class ServiceBoundaryTests(unittest.TestCase):
         self.assertTrue(result["capture"]["sample_truncated"])
         self.assertEqual(len(self.core.results(self.case)), 1)
 
+    def test_large_printable_strings_have_explicit_bounded_presentation(self):
+        for value in (b"A" * (3 * 1024 * 1024), b"\t" * (1024 * 1024)):
+            with self.subTest(bytes=len(value), first=value[:1]):
+                path = self.file("large.txt", value)
+                result = self.core.extract_strings(self.case, path, max_sample=len(value), max_strings=1)
+                self.assertTrue(result.get("presentation_truncated", False))
+                self.assertTrue(result["truncated"])
+                self.assertLessEqual(len(json.dumps(result).encode("utf-8")), 1024 * 1024)
+                self.assertTrue(result["ascii"])
+                self.assertEqual(len(self.core.results(self.case)[-1]["strings"]["ascii"]), 1)
+
     def test_completed_specialist_survives_reopen(self):
         path = self.file("config.txt", b"DEBUG=true")
         self.core.audit_config(self.case, path)
