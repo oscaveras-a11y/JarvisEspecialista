@@ -182,3 +182,5 @@ O proprietário perguntou se o projeto já está completo. Resposta honesta: **n
 - Há ainda um PR duplicado aberto (#12, rascunho do Codex, corrigindo os mesmos 5 achados que eu já corrigi nesta branch) — apenas comentado, nunca fechado.
 
 Este commit, só de documentação, serve também para testar se a falha das runs #145/#146 foi transitória (ligada à renomeação) ou persistente.
+
+**Atualização:** o teste confirmou que a falha era **persistente**, não transitória — a run #147 (disparada pelo commit anterior) falhou da mesma forma, em ~3s, nas duas plataformas, com `runner_id: 0` e sem gerar log algum. O proprietário então confirmou que o repositório está **público**. Hipótese mais provável: enquanto o repositório esteve privado (durante/após a renomeação), os minutos gratuitos de Actions para repositório privado podem ter sido esgotados ou a execução bloqueada por billing; repositório público não tem esse limite prático. Este commit serve para testar se voltar a ficar público resolveu.
