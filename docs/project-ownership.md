@@ -17,4 +17,6 @@ A orientação atual de ambiente prevalece sobre o plano local inicial: desenvol
 
 O [PR #3 do Claude](https://github.com/oscaveras-a11y/CyberCore/pull/3) também modifica contratos centrais. O [PR #5](https://github.com/oscaveras-a11y/CyberCore/pull/5) verifica a combinação com o candidato imutável `c5f87f363bcc472e4087636ce29c366aefe95e28` somente em runners descartáveis, corrigindo as fronteiras de prazo e interrupção das seções pares. Veja [resultados e limites](integration-contracts.md). Isso não integra nem aprova automaticamente o PR do Claude; qualquer novo head ou alteração de contrato exige avaliação da versão correspondente.
 
+[PR #6](https://github.com/oscaveras-a11y/CyberCore/pull/6): item **4 — motor de raciocínio e investigação** concluído no [contrato operacional e mapa das 15 etapas](item-4-reasoning.md), com API persistente documentada para o item 5. Validação da base Windows e combinação Windows/Linux com o candidato Claude `00adab4ccc187f517ee8272a29e285087b54e347`, incluindo reabertura, recall e relatório. O trabalho do Claude permanece na branch dele.
+
 Concluir uma beta delimitada não significa concluir todas as obrigações de uma seção. O resultado de testes e os requisitos pendentes devem ser apresentados separadamente.
