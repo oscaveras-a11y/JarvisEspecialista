@@ -1,6 +1,6 @@
 # Validação — 16/10/2026
 
-**Resultado atual: 94 testes passaram, 0 falhas, 0 erros, 0 skips, em 376,611 segundos.** A entrega anterior teve 50 testes em 95,749 segundos. Comando: `python scripts/run-tests.py`, com o runtime Python 3.12.14. A primeira entrega teve 33 testes aprovados em 70,334 segundos. Não usar esses resultados como prova de módulos ainda pendentes.
+**Registro histórico anterior a esta mudança: 94 testes passaram, 0 falhas, 0 erros, 0 skips, em 376,611 segundos.** A entrega anterior teve 50 testes em 95,749 segundos. Comando: `python scripts/run-tests.py`, com o runtime Python 3.12.14. A primeira entrega teve 33 testes aprovados em 70,334 segundos. Não usar esses resultados como prova de módulos ainda pendentes.
 
 Ambiente observado: Windows 10 build 19042, Python 3.12.14 (64 bits), SQLite 3.53.1, Git 2.55.0.windows.5, cryptography disponível. Python não estava no PATH inicial do shell; foi usado o runtime Python do aplicativo. O executável Codex foi descoberto no ambiente do processo Python e seu `exec --help` foi consultado. Claude e gh não foram encontrados.
 
@@ -39,3 +39,15 @@ Firmware e CAN são analisados sobre cópias verificadas, sem execução nem har
 Integração Codex posterior: `codex login status` executado sob o usuário correto retornou `Logged in using ChatGPT`. `scripts/agent-smoke.py`, com timeout de 120 segundos, passou em chamada real usando apenas resumo sintético. A resposta estruturada reconheceu as limitações da amostra. Uso informado pelo CLI: 19148 tokens de entrada (12544 em cache) e 104 de saída; isso é contabilização reportada, não teto financeiro garantido. Claude continua ausente. Nenhum dado de cliente foi enviado.
 
 A revisão independente de código encontrou três problemas de fechamento/repetição, todos reproduzidos por testes antes da correção. Os nomes dos revisores do produto ainda são declarações locais, não identidades autenticadas. A plataforma completa continua pendente: isolamento/worktrees, perícia, ferramentas externas, pesquisa automática, worker e validação profissional seguem em desenvolvimento.
+
+## Validação somente no GitHub — nova entrega
+
+A orientação atual do proprietário substitui o fluxo de desenvolvimento local: alterações via GitHub, sem clonar, instalar dependências ou executar o projeto no computador. Os relatos locais acima são histórico preexistente e não foram repetidos nesta entrega.
+
+Branch: `codex/github-validation`. Automação: `.github/workflows/ci.yml`, runner GitHub-hosted `windows-2022`, Python 3.12. Etapas: instalação do pacote, `pip check`, `compileall`, CLI instalada, suíte completa pelo runner existente e demonstração sintética. Sem chamadas reais aos agentes, credenciais ou dados de clientes.
+
+**Execução comprovada no GitHub:** [run 38984887659](https://github.com/oscaveras-a11y/CyberCore/actions/runs/38984887659), [job Windows](https://github.com/oscaveras-a11y/CyberCore/actions/runs/38984887659/job/117253939975). Head do PR: `7de7829e3cad5c975fd8d5c555be7072213cee94`; merge temporário testado pelo evento pull_request: `68f736d35f3755575e810ae39905fec9dd374a67`, sobre base `35adb738fae9f1dcfeda75c7f643b1637467fa05`.
+
+Em 16/10/2026, às 21:08 (America/Sao_Paulo), o runner Windows Server 2022 com CPython 3.12.10 concluiu **94 testes em 53,583 segundos: OK, sem falhas, erros ou skips reportados**. A demonstração terminou com 13 etapas sintéticas e quatro rejeições esperadas; `platform_complete` permaneceu false. Instalação do pacote, `pip check`, compilação e CLI instalada também passaram. Dependências observadas: cryptography 50.0.2, cffi 2.1.1 e pycparser 3.11.
+
+A revisão independente das alterações do PR nesse head não encontrou achados acionáveis. A revisão foi estática, sem execução local, e não substitui os testes do GitHub. Este registro é vinculado ao commit citado; consulte os checks do PR para qualquer commit posterior. Não houve instalação nem execução do projeto no computador do proprietário. Integrações reais de agentes, ferramentas externas e hardware permanecem fora desta validação.

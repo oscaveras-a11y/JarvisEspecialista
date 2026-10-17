@@ -1,111 +1,52 @@
 # CYBER CORE
 
-Plataforma local de investigação tecnológica **autorizada**, em desenvolvimento. Python 3.12+, SQLite, Windows, sem GPU dedicada. Repositório privado J.A.R.V.I.S reutilizado por autorização do proprietário, com histórico anterior preservado.
+Plataforma de investigação digital **autorizada**, em desenvolvimento. Núcleo em Python 3.12+ e SQLite, com CLI e módulos de análise offline. Repositório privado [oscaveras-a11y/CyberCore](https://github.com/oscaveras-a11y/CyberCore), com histórico anterior preservado.
 
-**Entrega atual:** núcleo funcional, ciclo científico com verificação, análise offline de firmware/CAN e triagem de recuperação em lotes sem chave fornecida. Não é a plataforma completa. Veja [cobertura de recuperação](docs/recovery-coverage.md), [estado das fases](docs/roadmap.md), [limites de segurança](docs/security.md) e [validação real](docs/validation.md).
+**Fluxo atual: desenvolvimento e validação somente no GitHub. Nenhuma instalação no computador do proprietário é necessária para acompanhar esta entrega.**
 
-## Instalação no Windows
+## Desenvolvimento no GitHub
 
-```powershell
-git clone https://github.com/oscaveras-a11y/J.A.R.V.I.S.git
-Set-Location J.A.R.V.I.S
-.\scripts\install.ps1 -Python python
-.\.venv\Scripts\cyber.exe doctor
-.\.venv\Scripts\cyber.exe --help
-```
+1. As alterações são feitas em branches e apresentadas em pull requests para a `main`.
+2. O workflow [Offline validation](.github/workflows/ci.yml) executa a validação em um runner Windows hospedado pelo GitHub, com Python 3.12.
+3. O runner instala o pacote e suas dependências no ambiente temporário do GitHub, verifica dependências, compila as fontes, verifica a CLI instalada, executa `python scripts/run-tests.py` e `python scripts/demo.py`.
+4. Consulte a aba **Checks** do PR ou [Actions](https://github.com/oscaveras-a11y/CyberCore/actions) para ver resultados e logs. Uma execução pendente ou ausente não significa aprovação.
+5. A integração na `main` permanece uma etapa separada de revisão. Este workflow não configura proteção de branch nem faz merge automático.
 
-Se Python não estiver no PATH, passe `-Python 'C:\caminho\python.exe'`. O instalador cria um venv local e instala `cryptography`, a única dependência de runtime. Não instala Codex, Claude nem suítes externas. A política de execução de scripts do computador deve permitir os scripts; não é modificada automaticamente.
+O workflow roda em PRs para a `main` e em pushes para `main` e `codex/github-validation`. O disparo manual estará disponível na interface quando o workflow estiver na branch padrão. Há limite de 20 minutos por job e cancelamento de execuções anteriores do mesmo evento/ref após nova atualização.
 
-Alternativa sem instalação do pacote, usando um Python com cryptography disponível:
+Os testes usam arquivos sintéticos. Nenhuma credencial de Codex/Claude, chave de API ou evidência de cliente é necessária. O workflow não executa `scripts/agent-smoke.py`, não instala CLIs de agentes e não faz chamadas aos provedores de IA. As instalações de dependências usam a rede; a suíte de investigação é offline.
 
-```powershell
-$env:PYTHONPATH = Join-Path $PWD 'src'
-python -m cyber_core doctor
-python -m cyber_core --help
-```
+GitHub Actions valida o software em ambientes temporários; a plataforma ainda não oferece um serviço de investigação hospedado e persistente no GitHub. Bancos, evidências e relatórios operacionais de clientes devem permanecer fora do repositório e dos logs de CI. Não use os runners desta entrega para investigar dados de clientes.
 
-## Primeira investigação
+## Funcionalidades existentes
 
-Escolha uma pasta de arquivos autorizados fora do checkout. O armazenamento padrão é `%LOCALAPPDATA%\CyberCore`. Use um `CYBER_HOME` distinto por cliente e ACLs adequadas. Operações em diretórios Git e caminhos de rede são rejeitadas para armazenamento.
+- CLI para investigações, autorização e escopo, fila, pausa e retomada manual.
+- SQLite com migrações, checkpoints, histórico e trilha de auditoria.
+- Cópias verificadas, SHA-256, entropia, identificação de assinaturas e triagem de recuperação por arquivo ou lote, sem exigir chave fornecida.
+- Hipóteses versionadas, experimentos com critérios declarados, avaliação de resultados auditados e revisão independente declarada.
+- Análise e comparação offline de BIN, Intel HEX, S-record e cabeçalhos ELF/PE, com limites documentados.
+- Análise e comparação de logs CAN clássicos, sem acesso a barramentos ou transmissão.
+- Recuperação autenticada AES-GCM somente do envelope sintético de laboratório `CCAES1`, quando material legítimo está disponível.
 
-```powershell
-$env:CYBER_HOME = Join-Path $env:LOCALAPPDATA 'CyberCore\cliente-demo'
-$cyber = '.\.venv\Scripts\cyber.exe'
-& $cyber init
-& $cyber investigate --project laboratorio --objective 'Identificar binário próprio' --scope 'C:\Laboratorio\entradas' --owner 'Responsavel' --authorization 'Autorizacao de bancada sobre arquivos sinteticos'
-# Copie o id retornado:
-& $cyber analyze-file ID 'C:\Laboratorio\entradas\amostra.bin'
-& $cyber status ID
-& $cyber report ID
-```
+Uma assinatura não comprova validade integral do formato; alta entropia não comprova criptografia. A triagem não demonstra descriptografia e não há promessa universal de recuperação.
 
-A autorização declarada vale 24 horas por padrão, configurável por `--valid-hours`; `cyber revoke ID` a revoga. O operador é responsável pela legitimidade da declaração. A plataforma não verifica uma identidade legal.
+## Agentes e limites
 
-`analyze-file` preserva o original, cria uma cópia exclusiva verificada, calcula SHA-256, mede entropia por fluxo e identifica assinaturas conhecidas. Uma assinatura ELF não valida estruturas ELF; entropia alta não comprova criptografia. Cada resultado gera hipótese aberta, proposta de experimento e checkpoint persistente. A investigação permanece EM INVESTIGACAO; não é declarada resolvida automaticamente.
+O núcleo funciona sem agentes. O adaptador Codex e a chamada real sintética têm um registro histórico em [validação](docs/validation.md); esse registro não comprova autenticação ou funcionamento no runner atual. O envio de resumo exige autorização explícita. Claude permanece opcional e bloqueado até validação do contrato.
 
-## Fila, pausa e retomada
+O sandbox do CLI é dependência externa. Nomes de revisores são declarações, não identidades autenticadas. Worker persistente, cancelamento cooperativo completo, worktrees por tarefa, revisão cruzada automática e ferramentas profissionais externas ainda estão pendentes. Pausa e retomada existentes são manuais; `run` processa uma tarefa e não é um daemon.
 
-```powershell
-& $cyber analyze-file ID 'C:\Laboratorio\entradas\amostra.bin' --queue-only
-& $cyber pause ID
-# Pode encerrar o terminal. Em outro terminal, restaure CYBER_HOME:
-& $cyber resume ID
-& $cyber run ID
-```
+**A plataforma completa ainda não foi entregue.** Testes aprovados comprovam apenas o comportamento coberto, não a prontidão de módulos profissionais ou ensaios com hardware.
 
-`run` executa uma tarefa pendente; não é um daemon. Claims transacionais e leases impedem duplicação de resultados no banco. Após morte do processo, tarefas em execução podem ser retomadas após o vencimento do lease (timeout + 30 segundos), até três tentativas. Falha definitiva registra erro e não fica repetindo. Pausa ocorre entre operações, sem interromper uma aquisição já iniciada. Cancelamento/worker gerenciado e retomada automática após boot ainda estão pendentes.
+## Documentação
 
-## Recuperação: começar sem chave fornecida
+- [Referência técnica da CLI para uso futuro](docs/cli-reference.md)
+- [Estado das fases e próximos critérios](docs/roadmap.md)
+- [Validação e resultados históricos](docs/validation.md)
+- [Limites de segurança](docs/security.md)
+- [Cobertura real de recuperação](docs/recovery-coverage.md)
+- [Ciclo científico](docs/scientific-workflow.md)
+- [Análise de firmware](docs/firmware.md)
+- [Análise CAN](docs/can.md)
 
-O cliente fornece autorização, escopo e arquivos. O comando `assess-recovery` inicia a investigação sem chave ou senha: reconhece famílias de formatos, registra os indícios observados e indica os próximos testes e fontes autorizadas que podem viabilizar recuperação.
-
-```powershell
-& $cyber investigate --project cliente-demo --objective 'Avaliar recuperacao de arquivos' --scope 'C:\Laboratorio\entradas' --owner 'Responsavel' --authorization 'Autorizacao para investigar os arquivos deste diretorio' --allow-recovery
-& $cyber assess-recovery ID 'C:\Laboratorio\entradas' --max-files 100 --max-total-bytes 268435456
-& $cyber report ID
-# Para incluir subpastas explicitamente:
-& $cyber assess-recovery ID 'C:\Laboratorio\entradas' --recursive --queue-only
-& $cyber run ID
-```
-
-Cada arquivo recebe cópia verificada, hash, triagem, limitações e caminhos de investigação registrados no SQLite e no relatório. O lote tem limites de quantidade, bytes e duração, sem executar ou extrair arquivos. As tarefas ficam persistidas e a pausa preserva a contagem correta dos itens pendentes. O esquema SQLite 2 adiciona limites por tarefa e mantém os registros do esquema 1. Se o arquivo crescer depois da entrada na fila, a aquisição é rejeitada para preservar o orçamento de bytes, inclusive após reiniciar.
-
-Há reconhecimento inicial de PDF, ZIP, OLE/CFB, 7z, RAR, LUKS, envelope OpenSSL, SQLite, ELF/PE, gzip, PNG/JPEG e CCAES1. A [matriz de cobertura](docs/recovery-coverage.md) distingue assinatura reconhecida, metadados inspecionados e recuperação realmente implementada. Arquivos desconhecidos seguem para investigação de formato e proveniência; não são classificados automaticamente como criptografados.
-
-A triagem pode começar somente com autorização, mas isso não demonstra descriptografia. Inventário de backups, reparo estrutural, validação integral desses formatos e busca em fontes autorizadas ainda são procedimentos propostos, não ferramentas automáticas já implementadas. Não há promessa universal de recuperação nem requisito de que o cliente já possua uma chave.
-
-## Descriptografia opcional com material disponível
-
-Somente o envelope de laboratório `CCAES1` é suportado: magic de 6 bytes, nonce de 12 bytes, ciphertext e tag GCM de 16 bytes, com o magic como AAD. Não há suporte universal a arquivos AES, ZIP, BitLocker ou firmware. Não há quebra de AES ou busca indiscriminada de senhas.
-
-O teste de descriptografia CCAES1 continua disponível quando material legítimo vier a estar disponível durante uma investigação; ele não é pré-requisito da triagem nem do atendimento. A chave, quando disponível, deve estar em arquivo local protegido contendo exatamente **32 bytes brutos**, fora do Git. Não passe a chave na linha de comando.
-
-```powershell
-& $cyber recover-aes ID 'C:\Laboratorio\entradas\arquivo.ccaes' --key-file 'C:\Cofre\material.key' --expected-sha256 HASH_DO_PLAINTEXT --expected-format 'PDF signature'
-```
-
-Três tentativas criptográficas por investigação; entrada limitada a 64 MiB ou ao limite configurado menor. A tag é autenticada antes de escrever plaintext. Falhas de chave, integridade ou autorização não produzem saída recuperada. Chaves não são persistidas: a auditoria registra referência opaca ao material fornecido. As expectativas de hash e formato são opcionais; a autenticação GCM é sempre obrigatória. Python não garante zerar todas as cópias de uma chave na memória.
-
-## Agentes
-
-`cyber agents` e `cyber doctor` descobrem CLIs, sem assumir autenticação. O núcleo funciona sem agentes. O adaptador inicial Codex usa processo com stdin estruturado, sandbox read-only, tempo e saída limitados. A saída é proposta, não comando. Após as falhas iniciais do sandbox e de timeout curto, a autenticação ChatGPT foi confirmada e uma chamada real com prazo de 120 segundos passou usando somente resumo sintético. Isso valida o adaptador Codex neste ambiente; a resposta não é verificação independente de arquivos.
-
-`cyber review ID --allow-cloud-summary` envia somente tamanho, formato, entropia e estado de verificação ao Codex. Não envia caminhos, conteúdo, objetivo ou autorização. Exige permissão explícita de envio e limita a cinco chamadas por investigação; isso **não** é um limite financeiro garantido. O sandbox do CLI é uma dependência externa, não um isolamento implementado pelo CYBER CORE.
-
-Claude tem interface extensível e diagnóstico, mas sua execução é bloqueada até o CLI e o contrato serem validados. Worktrees por tarefa, paralelismo e revisão cruzada automatizada completa ainda não foram implementados.
-
-## Testes e demonstração
-
-```powershell
-.\scripts\test.ps1 -Python '.\.venv\Scripts\python.exe'
-# Ou:
-$env:PYTHONPATH = Join-Path $PWD 'src'
-python -m unittest discover -s tests -v
-python scripts/demo.py
-# Runner que também configura src para subprocessos:
-python scripts/run-tests.py
-```
-
-A demonstração gera todos os arquivos sintéticos e uma chave aleatória em memória, preserva o relatório em diretório temporário e imprime os resultados. Não utiliza dados de clientes. `scripts/agent-smoke.py` é opcional, realiza chamada real ao Codex com resumo sintético e pode consumir a cota do agente; não faz parte da suíte offline.
-
-Os comandos `analyze-firmware` e `analyze-can` agora analisam e comparam arquivos offline autorizados; veja [firmware](docs/firmware.md) e [CAN](docs/can.md). O comando `research` registra referências consultadas pelo operador, sem fingir consulta web automática. O [ciclo científico](docs/scientific-workflow.md) oferece `hypothesis`, `experiment`, `verify` e `history`, com critérios reproduzíveis e revisão declarada. Perícia avançada, integrações externas e worker ainda estão em desenvolvimento.
+Referências da automação: [actions/checkout](https://github.com/actions/checkout), [actions/setup-python](https://github.com/actions/setup-python) e [eventos do GitHub Actions](https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows).

@@ -1,0 +1,46 @@
+name: Offline validation
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main, codex/github-validation]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: offline-validation-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  offline:
+    name: Windows / Python 3.12
+    runs-on: windows-2022
+    timeout-minutes: 20
+    env:
+      PYTHONUTF8: "1"
+      PYTHONUNBUFFERED: "1"
+      PIP_DISABLE_PIP_VERSION_CHECK: "1"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - name: Install package on ephemeral GitHub runner
+        run: python -m pip install .
+      - name: Check dependency compatibility
+        run: python -m pip check
+      - name: Compile Python sources
+        run: python -m compileall -q src scripts tests
+      - name: Check installed CLI
+        run: cyber --help
+      - name: Run complete offline suite
+        run: python scripts/run-tests.py
+      - name: Run synthetic end-to-end demonstration
+        run: python scripts/demo.py
