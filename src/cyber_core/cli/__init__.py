@@ -36,6 +36,15 @@ def parser():
     for name in ('report', 'pause', 'resume', 'revoke', 'run'):
         cmd = sub.add_parser(name, help={'report': 'Generate technical report', 'pause': 'Pause at operation boundary', 'resume': 'Resume persistent investigation', 'revoke': 'Revoke operation permission', 'run': 'Run one persistent pending task'}[name])
         cmd.add_argument('case')
+    worker = sub.add_parser('worker', help='Run bounded persistent queue worker (beta)')
+    worker.add_argument('case')
+    worker.add_argument('--max-tasks', type=int, default=100)
+    worker.add_argument('--max-seconds', type=float, default=300)
+    worker.add_argument('--poll-interval', type=float, default=.2)
+    worker.add_argument('--idle-timeout', type=float, default=0)
+    cancel = sub.add_parser('cancel', help='Permanently stop a case, preserving committed evidence')
+    cancel.add_argument('case')
+    cancel.add_argument('--reason', required=True)
     analyze = sub.add_parser('analyze-file', help='Acquire verified copy and analyze statically')
     analyze.add_argument('case')
     analyze.add_argument('path')
@@ -92,6 +101,11 @@ def main(argv=None):
                     raise CoreError('Investigation is paused')
                 task = core.enqueue(args.case, args.path, tool=cmd, second_path=getattr(args, 'compare_to', None))
                 result = {'task': task} if args.queue_only else core.run_one(args.case, task_id=task)
+            elif cmd == 'worker':
+                result = core.run_queue(args.case, max_tasks=args.max_tasks, max_seconds=args.max_seconds,
+                                        poll_interval=args.poll_interval, idle_timeout=args.idle_timeout)
+            elif cmd == 'cancel':
+                result = core.cancel(args.case, reason=args.reason)
             elif cmd == 'run':
                 result = core.run_one(args.case)
             elif cmd == 'assess-recovery':
