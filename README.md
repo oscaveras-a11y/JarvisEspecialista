@@ -40,6 +40,7 @@ O sandbox do CLI é dependência externa. Nomes de revisores são declarações,
 
 ## Documentação
 
+- [Referência técnica da CLI para uso futuro](docs/cli-reference.md)
 - [Estado das fases e próximos critérios](docs/roadmap.md)
 - [Validação e resultados históricos](docs/validation.md)
 - [Limites de segurança](docs/security.md)
