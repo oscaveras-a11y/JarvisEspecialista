@@ -354,7 +354,7 @@ class ReasoningTests(unittest.TestCase):
         hypothesis = self.flow.add_hypothesis(self.case, 'Input contains a CAN capture', author='analyst')
         experiment = self.flow.plan_experiment(self.case, hypothesis, 'Parse CAN', author='analyst',
                                                criterion='A capture is parsed',
-                                               assertions=[{'field': 'can.frames', 'op': 'gt', 'value': 0}],
+                                               assertions=[{'field': 'can.frame_count', 'op': 'gt', 'value': 0}],
                                                tool='analyze-can')
         self.engine.register(self.case, experiment, actor='analyst', cost=0, rationale='Check a format hypothesis')
         self.strategy(cost=5)
