@@ -244,7 +244,7 @@ class Core:
 
     def reopen(self, case, *, reason):
         row = self.get(case)
-        if row['state'] in ('RESOLVIDO', 'SEM SOLUCAO VIAVEL DEMONSTRADA'):
+        if row['state'] in ('RESOLVIDO', 'SEM SOLUCAO VIAVEL DEMONSTRADA', 'FALHA DE EXECUCAO'):
             self.db.execute("UPDATE investigations SET state='EM INVESTIGACAO' WHERE id=?", (case,))
             audit(self.db, case, 'investigation_reopened', {'previous': row['state'], 'reason': reason})
 

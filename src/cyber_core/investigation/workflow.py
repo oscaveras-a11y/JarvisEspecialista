@@ -273,7 +273,7 @@ class Workflow:
         self._ready(case)
         actor, reason = text(actor, 'actor', 200), text(reason, 'state rationale')
         allowed = ('RESOLVIDO', 'EM INVESTIGACAO', 'AGUARDANDO INFORMACOES', 'AGUARDANDO AUTORIZACAO',
-                   'AGUARDANDO RECURSOS', 'SEM SOLUCAO VIAVEL DEMONSTRADA')
+                   'AGUARDANDO RECURSOS', 'SEM SOLUCAO VIAVEL DEMONSTRADA', 'FALHA DE EXECUCAO')
         if state not in allowed:
             raise CoreError('Unknown investigation state')
         snapshot = self.snapshot(case)
