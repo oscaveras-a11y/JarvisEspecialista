@@ -30,6 +30,51 @@ TERMINAL = {"succeeded", "exhausted", "cancelled", "resource_limited"}
 def _number(value, low, high):
     return type(value) in (float, int) and math.isfinite(value) and low <= value <= high
 
+def _cleanup_claim(core, row):
+    token, job = row.get("token"), row["id"]
+    if not token:
+        return
+    if any(len(v) != 32 or any(c not in "0123456789abcdef" for c in v) for v in (job,token)):
+        raise CoreError("Invalid recovery cleanup identity")
+    root = storage_root(core.home/"recovery-staging")
+    folder = root/(job+"-"+token)
+    # A private per-claim directory is also a tombstone: removing it prevents a
+    # surviving child from creating a plaintext file after its parent is gone.
+    if folder.exists():
+        local_path(folder,directory=True)
+        pending = folder/"result.pending"
+        if pending.exists():
+            local_path(pending).unlink()
+        folder.rmdir()
+    # The flat path is retained for cleanup of pre-release sessions.
+    legacy = root/(job+"-"+token+".pending")
+    if legacy.exists():
+        local_path(legacy).unlink()
+    output = storage_root(core.home/"cases"/row["case_id"]/"recovered")/(job+"-"+token+".recovered")
+    if output.exists():
+        local_path(output).unlink()
+
+def stop_case_sessions(core, case, *, state="cancelled"):
+    """Called under the same writer lock as case pause/revoke/cancellation."""
+    if not core.db.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='recovery_sessions'").fetchone():
+        return
+    if not core.db.in_transaction or state not in ("paused","cancelled"):
+        raise CoreError("Recovery stop requires the case writer lock")
+    rows = core.db.execute("SELECT * FROM recovery_sessions WHERE case_id=? AND status NOT IN ('succeeded','exhausted')",(case,)).fetchall()
+    for record in rows:
+        row = dict(record)
+        deferred = False
+        try:
+            _cleanup_claim(core,row)
+        except (OSError,CoreError):
+            deferred = True
+        token = row["token"] if deferred else None
+        core.db.execute("UPDATE recovery_sessions SET status=?,token=?,lease_until=0 WHERE id=?",(state,token,row["id"]))
+        event = "recovery_session_paused" if state == "paused" else "recovery_session_cancelled"
+        payload = {"session":row["id"],"cleanup_deferred":deferred}
+        core.db.execute("INSERT INTO checkpoints(case_id,event,data,created) VALUES(?,?,?,?)",(case,event,encoded(payload),utc()))
+        audit(core.db,case,event,payload)
+
 class RecoverySessions:
     def __init__(self, core):
         self.core, self.db = core, core.db
@@ -196,13 +241,7 @@ class RecoverySessions:
         return self.get(case,job)
 
     def _cleanup(self, row):
-        if not row.get("token"):
-            return
-        stage = storage_root(self.core.home/"recovery-staging")/(row["id"]+"-"+row["token"]+".pending")
-        output = storage_root(self.core.home/"cases"/row["case_id"]/"recovered")/(row["id"]+"-"+row["token"]+".recovered")
-        for path in (stage,output):
-            if path.exists():
-                local_path(path).unlink()
+        _cleanup_claim(self.core,row)
 
     def _control(self, case, job, action, reason=None):
         with self.db:
@@ -212,6 +251,8 @@ class RecoverySessions:
             self._validate(row)
             if row["status"] in TERMINAL and not (row["status"] == "resource_limited" and action == "resume"):
                 if action == "cancel" and row["status"] == "cancelled":
+                    self._cleanup(row)
+                    self.db.execute("UPDATE recovery_sessions SET token=NULL,lease_until=0 WHERE id=?", (job,))
                     return self._public(row)
                 raise CoreError("Recovery session is terminal")
             state = {"pause":"paused","resume":"pending","cancel":"cancelled"}[action]
@@ -220,7 +261,7 @@ class RecoverySessions:
                     raise CoreError("Resource-limited trial requires an explicit retry reason")
             elif action == "resume" and row["status"] != "paused":
                 raise CoreError("Only paused recovery sessions can resume")
-            if action == "cancel":
+            if action in ("cancel","pause"):
                 self._cleanup(row)
             self.db.execute("UPDATE recovery_sessions SET status=?,token=NULL,lease_until=0 WHERE id=?", (state,job))
             self._event(case,"recovery_session_"+{"pause":"paused","resume":"resumed","cancel":"cancelled"}[action],{"session":job})
@@ -267,9 +308,11 @@ class RecoverySessions:
             raise CoreError("Invalid recovery worker slice")
         with self.db:
             self.db.execute("BEGIN IMMEDIATE")
-            self._ready(case)
             row = self._row(case,job)
             self._validate(row)
+            if row["status"] != "succeeded" and (row["status"] != "running" or row["lease_until"] <= time.time()):
+                self._cleanup(row)
+            self._ready(case)
             if row["status"] in TERMINAL or row["status"] == "paused":
                 return self._public(row)
             if row["status"] == "running" and row["lease_until"] > time.time():
@@ -291,14 +334,19 @@ class RecoverySessions:
             if not hmac.compare_digest(commitment,row["material_commitment"]) or len(values) != row["total_candidates"]:
                 raise CoreError("Recovery candidate material changed")
             output_folder = storage_root(self.core.home/"cases"/case/"recovered")
-            stage_folder = storage_root(self.core.home/"recovery-staging")
+            with self.db:
+                self.db.execute("BEGIN IMMEDIATE")
+                if self._stop(case,job,token):
+                    return self.get(case,job)
+                stage_root = storage_root(self.core.home/"recovery-staging")
+                stage_folder = storage_root(stage_root/(job+"-"+token))
             completed = 0
             while row["cursor"] < len(values) and completed < max_attempts:
                 if self._stop(case,job,token) or time.monotonic() >= stop_at:
                     break
                 value = values[row["cursor"]]
                 candidate = bytes.fromhex(value.decode("ascii")) if row["mode"] == "ccaes1" else value
-                scratch = stage_folder/(job+"-"+token+".pending")
+                scratch = stage_folder/"result.pending"
                 request = {"mode":row["mode"],"source":artifact["copy"],"candidate":candidate.hex(),"output":str(scratch),"source_sha256":artifact["sha256"]}
                 remaining = min(stop_at-time.monotonic(),row["deadline"]-time.time(),self.core.timeout)
                 if remaining <= 0:
@@ -383,6 +431,11 @@ class RecoverySessions:
                 durable = self._row(case,job)
                 if durable["status"] != "succeeded" or not durable["result"] or json.loads(durable["result"]).get("output") != str(published_path):
                     published_path.unlink(missing_ok=True)
+            # Remove the claim directory even on normal completion. A stopped
+            # orphan cannot recreate a file after this directory disappears.
+            stage_dir = self.core.home/"recovery-staging"/(job+"-"+token)
+            if stage_dir.exists():
+                local_path(stage_dir,directory=True).rmdir()
             with self.db:
                 self.db.execute("BEGIN IMMEDIATE")
                 current = self._row(case,job)
