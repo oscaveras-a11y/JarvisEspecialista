@@ -34,3 +34,14 @@ Sem mudança de esquema (lê `results` e `investigation_type` já existentes). V
 ## Veredito
 
 Item 5 **completo** do lado do CORE: toda a lista do escopo está coberta; a busca e o reaproveitamento de conhecimento agora existem. "Comandos executados" permanece limitado por design (o sistema não executa shell arbitrário; registra chamadas de agente e operações de ferramenta via auditoria), o que é coerente com os itens 7/9/14.
+
+## Correção final — backup/restauração durável (fecha o item 5)
+
+A revisão cruzada do Codex (PR #9) apontou a última lacuna real do item 5: "comprovar backup/restauração e recuperação durável fora de um único job". Implementado:
+
+- `Core.backup(destino)` (CLI `backup <dest>`): backup íntegro de todo o store local (todas as investigações), via API nativa de backup do SQLite (`sqlite3.Connection.backup`) — segura contra a conexão aberta ao vivo, diferente de cópia bruta de arquivo. Recusa sobrescrever destino existente.
+- `Core.restore(home, origem)` (CLI `restore <source>` com `--home` novo): restaura num diretório **novo**, provando recuperação durável fora da sessão/job original. Usa a mesma API de backup do SQLite para **ler** a origem (rejeita arquivo corrompido/não-SQLite, não apenas copia bytes). Recusa sobrescrever um store já existente no destino.
+- `tests/test_backup_restore.py` (4 testes): dados sobrevivem ao ciclo completo backup→restauração em `--home` diferente (investigação, tarefa, resultado, cadeia de auditoria idêntica byte a byte); recusa de sobrescrita nos dois sentidos; rejeição de origem corrompida sem deixar arquivo órfão.
+- Confirmado ponta a ponta pela CLI: `investigate` → `analyze-file` → `backup` → `restore` em `--home` novo → `status` mostra a investigação, tarefa e checkpoint intactos.
+
+Suíte: **277 testes OK** (273 + 4), demo exit 0. **Item 5 agora está completo** — nenhuma lacuna pendente identificada pela revisão cruzada.

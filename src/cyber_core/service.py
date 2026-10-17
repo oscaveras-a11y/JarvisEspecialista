@@ -2,6 +2,7 @@
 import hashlib
 import json
 from pathlib import Path
+import sqlite3
 import time
 from uuid import uuid4
 from cyber_core.errors import CoreError
@@ -28,6 +29,60 @@ class Core:
 
     def close(self):
         self.db.close()
+
+    def backup(self, destination):
+        # Durable backup of the whole local store (every case), via SQLite's own
+        # backup API — safe against the live open connection, unlike a raw file
+        # copy. Operational data, kept outside any single job and outside Git.
+        target = Path(destination)
+        name = target.name
+        if not name or name in ('.', '..') or '/' in name or '\\' in name:
+            raise CoreError('Invalid backup filename')
+        parent = local_path(target.parent, directory=True)
+        dest_path = parent / name
+        if dest_path.exists() or dest_path.is_symlink():
+            raise CoreError('Backup destination already exists')
+        dest_conn = sqlite3.connect(str(dest_path), timeout=10)
+        try:
+            self.db.backup(dest_conn)
+        except sqlite3.Error as exc:
+            dest_conn.close()
+            dest_path.unlink(missing_ok=True)
+            raise CoreError('Backup failed') from exc
+        dest_conn.close()
+        return {'path': str(dest_path), 'size': dest_path.stat().st_size}
+
+    @classmethod
+    def restore(cls, home, source, **core_kwargs):
+        # Restores a prior backup into a FRESH home directory, using SQLite's own
+        # backup API (reads real database structures, not raw bytes, so a
+        # truncated or foreign file is rejected rather than silently imported).
+        # Refuses to overwrite an existing store. Returns a usable, open Core,
+        # proving durable recovery outside the job/session that created the data.
+        home_path = storage_root(home)
+        destination = home_path / 'core.sqlite3'
+        if destination.exists():
+            raise CoreError('Restore target already has a store; back it up and remove it first')
+        source_path = local_path(source)
+        try:
+            source_conn = sqlite3.connect(str(source_path), timeout=10)
+            source_conn.execute('PRAGMA busy_timeout=10000')
+        except sqlite3.Error as exc:
+            raise CoreError('Backup source is not a readable SQLite database') from exc
+        try:
+            dest_conn = sqlite3.connect(str(destination), timeout=10)
+            try:
+                source_conn.backup(dest_conn)
+            finally:
+                dest_conn.close()
+        except sqlite3.Error as exc:
+            destination.unlink(missing_ok=True)
+            raise CoreError('Restore failed; source may be corrupt or incompatible') from exc
+        finally:
+            source_conn.close()
+        # Re-opening through the normal constructor validates the schema version
+        # and applies any additive migrations, exactly as a fresh Core() would.
+        return cls(home, **core_kwargs)
 
     def investigate(self, project, objective, scope, owner, reason, *, recovery=False, valid_hours=24):
         if not all(str(v).strip() for v in (project, objective, scope, owner, reason)):

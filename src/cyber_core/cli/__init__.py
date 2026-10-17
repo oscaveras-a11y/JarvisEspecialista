@@ -26,6 +26,10 @@ def parser():
     sub.add_parser('init', help='Initialize local SQLite storage')
     sub.add_parser('doctor', help='Diagnose runtime and optional CLIs')
     sub.add_parser('agents', help='List available agents')
+    backup = sub.add_parser('backup', help='Durable backup of the whole local store (every case), outside any single job')
+    backup.add_argument('dest', help='Destination file path; must not already exist')
+    restore = sub.add_parser('restore', help='Restore a prior backup into a fresh --home, proving durable recovery')
+    restore.add_argument('source', help='Local backup file to restore from')
     inv = sub.add_parser('investigate', help='Register investigation and declared authorization')
     for name in ('project', 'objective', 'scope', 'owner', 'authorization'):
         inv.add_argument('--' + name, required=True)
@@ -139,6 +143,16 @@ def main(argv=None):
             result = doctor()
             if args.command == 'agents':
                 result = result['agents']
+        elif args.command == 'restore':
+            # Must not construct Core(args.home, ...) first: that would already
+            # create/open an empty store at the destination before we can check
+            # whether one exists there.
+            restored = Core.restore(args.home, args.source, max_bytes=args.max_bytes, timeout=args.timeout,
+                                    max_attempts=args.max_attempts, agent_calls_per_case=args.agent_calls_per_case)
+            try:
+                result = {'restored': True, 'home': str(restored.home)}
+            finally:
+                restored.close()
         else:
             core = Core(args.home, max_bytes=args.max_bytes, timeout=args.timeout,
                         max_attempts=args.max_attempts, agent_calls_per_case=args.agent_calls_per_case)
@@ -148,6 +162,8 @@ def main(argv=None):
                 result = execute(core, args)
             elif cmd == 'init':
                 result = {'initialized': True, 'home': str(core.home), 'schema': 8}
+            elif cmd == 'backup':
+                result = core.backup(args.dest)
             elif cmd == 'investigate':
                 result = {'id': core.investigate(args.project, args.objective, args.scope, args.owner, args.authorization, recovery=args.allow_recovery, valid_hours=args.valid_hours)}
             elif cmd == 'status':
