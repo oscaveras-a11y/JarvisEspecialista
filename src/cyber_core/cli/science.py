@@ -28,6 +28,8 @@ def configure(sub):
         review.add_argument('--' + name, required=True)
     review.add_argument('--decision', choices=('accepted', 'rejected'), required=True)
     es.add_parser('list').add_argument('case')
+    from cyber_core.cli.reasoning import configure as configure_reasoning
+    configure_reasoning(es)
     source = sub.add_parser('research', help='Register consulted technical reference metadata; no implicit web retrieval')
     source.add_argument('case')
     for name in ('title', 'url', 'version', 'author'):
@@ -53,6 +55,9 @@ def execute(core, args):
             return flow.revise_hypothesis(args.case, args.id, author=args.author, plausibility=args.plausibility, reason=args.reason)
         return flow.snapshot(args.case)['hypotheses']
     if cmd == 'experiment':
+        from cyber_core.cli.reasoning import ACTIONS, execute as execute_reasoning
+        if args.action in ACTIONS:
+            return execute_reasoning(core, args)
         if args.action == 'plan':
             path = core.authorize(args.case, args.assertions_file)
             with path.open('rb') as handle:
