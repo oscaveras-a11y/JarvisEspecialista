@@ -200,7 +200,9 @@ class Core:
                 current = self.db.execute('SELECT status,token,attempts FROM tasks WHERE id=?', (task['id'],)).fetchone()
                 owns_claim = current['status'] == 'running' and current['token'] == task['token']
                 if owns_claim:
-                    status = 'pending' if interrupted and current['attempts'] < 3 else 'failed'
+                    # PR #3 supplies a configured limit; the current base defaults to three.
+                    attempt_limit = getattr(self, 'max_attempts', 3)
+                    status = 'pending' if interrupted and current['attempts'] < attempt_limit else 'failed'
                     self.db.execute('UPDATE tasks SET status=?,error=?,lease_until=0,token=NULL WHERE id=?',
                                     (status, message, task['id']))
                     event = 'task_interrupted' if interrupted else 'task_failed'

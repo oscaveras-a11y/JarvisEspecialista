@@ -11,10 +11,12 @@ A divisão atribui funcionalidades e revisão de contratos; não transforma um a
 
 A orientação atual de ambiente prevalece sobre o plano local inicial: desenvolvimento e testes desta entrega **somente no GitHub**, sem instalar ou executar o projeto no computador do proprietário. Usar somente entradas sintéticas/autorizadas nos testes; nenhum segredo ou evidência de cliente deve ir para o repositório ou CI.
 
-## Entrega Codex em andamento
+## Entregas Codex
 
-[PR #4](https://github.com/oscaveras-a11y/CyberCore/pull/4), `codex/analysis-process-beta`: supervisão de processos de análise (seções 12 e 14), seus testes (18), documentação/entrega (16 e 20). Não acrescenta funcionalidades de criptografia, interface, memória ou pesquisa das seções ímpares.
+[PR #4](https://github.com/oscaveras-a11y/CyberCore/pull/4), integrado na main em `3d5329066e41fdb585520182abc8f3522410589f`: supervisão de processos de análise (seções 12 e 14), seus testes (18), documentação/entrega (16 e 20). Não acrescenta funcionalidades de criptografia, interface, memória ou pesquisa das seções ímpares.
 
-O [PR #3 do Claude](https://github.com/oscaveras-a11y/CyberCore/pull/3) também modifica contratos centrais. Os testes desta entrega comprovam a base declarada no próprio PR; não comprovam a combinação de ambos os PRs. Qualquer combinação deve preservar as alterações dos dois lados e executar novamente a suíte, especialmente configuração, prazos, notas/hipóteses e versão SQLite.
+O [PR #3 do Claude](https://github.com/oscaveras-a11y/CyberCore/pull/3) também modifica contratos centrais. O [PR #5](https://github.com/oscaveras-a11y/CyberCore/pull/5) verifica a combinação com o candidato imutável `c5f87f363bcc472e4087636ce29c366aefe95e28` somente em runners descartáveis, corrigindo as fronteiras de prazo e interrupção das seções pares. Veja [resultados e limites](integration-contracts.md). Isso não integra nem aprova automaticamente o PR do Claude; qualquer novo head ou alteração de contrato exige avaliação da versão correspondente.
+
+[PR #6](https://github.com/oscaveras-a11y/CyberCore/pull/6): item **4 — motor de raciocínio e investigação** concluído no [contrato operacional e mapa das 15 etapas](item-4-reasoning.md), com API persistente documentada para o item 5. Validação da base Windows e combinação Windows/Linux com o candidato Claude `00adab4ccc187f517ee8272a29e285087b54e347`, incluindo reabertura, recall e relatório. O trabalho do Claude permanece na branch dele.
 
 Concluir uma beta delimitada não significa concluir todas as obrigações de uma seção. O resultado de testes e os requisitos pendentes devem ser apresentados separadamente.

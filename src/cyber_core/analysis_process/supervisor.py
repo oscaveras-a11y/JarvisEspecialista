@@ -9,6 +9,7 @@ import threading
 import time
 
 from cyber_core.errors import CoreError
+from cyber_core.analysis_process.limits import MAX_TIMEOUT_SECONDS
 from cyber_core.analysis_process.tree import attach as _attach_tree
 
 
@@ -17,7 +18,7 @@ def _command():
 
 
 def run_monitored(request, *, cwd, timeout, should_stop=None, on_started=None, max_output=2097152):
-    if type(timeout) not in (int, float) or not 0 < timeout <= 3600 or not math.isfinite(timeout):
+    if type(timeout) not in (int, float) or not 0 < timeout <= MAX_TIMEOUT_SECONDS or not math.isfinite(timeout):
         raise CoreError('Invalid analysis process timeout')
     if type(max_output) is not int or not 1024 <= max_output <= 16777216:
         raise CoreError('Invalid analysis process output limit')

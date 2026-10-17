@@ -157,11 +157,15 @@ class Workflow:
             audit(self.db, case, 'experiment_planned', {'id': identifier, 'hypothesis': hypothesis, 'criterion': criterion, 'max_runs': max_runs})
         return identifier
 
-    def evaluate(self, case, experiment, task, *, operator):
+    def evaluate(self, case, experiment, task, *, operator, expected_revision=None):
         self._ready(case)
         operator = text(operator, 'operator', 200)
+        if expected_revision is not None and (type(expected_revision) is not int or expected_revision < 1):
+            raise CoreError('Invalid expected hypothesis revision')
         plan = self._row('experiments', case, experiment)
         hypothesis = self._row('hypothesis_records', case, plan['hypothesis_id'])
+        if expected_revision is not None and hypothesis['revision'] != expected_revision:
+            raise CoreError('Hypothesis revision differs from reserved experiment')
         result, digest = verified_result(self.core, case, task)
         if result.get('tool') != plan['tool']:
             raise CoreError('Result tool differs from experiment plan')
