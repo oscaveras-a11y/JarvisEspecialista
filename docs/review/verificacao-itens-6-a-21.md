@@ -80,3 +80,19 @@ A revisão cruzada do Codex (PR #9) apontou a última pendência real do item 15
 - Adicionado ao CI (`.github/workflows/ci.yml`), rodando junto do `demo.py` em cada execução.
 
 Execução local: **9 de 9 verificações passaram**, exit 0. Suíte completa: 290 testes OK; demo exit 0.
+
+## Item 9/7 — expansão das auditorias estáticas (regras adicionais)
+
+A pedido do proprietário, continuei escrevendo código: ampliei as duas auditorias estáticas já existentes com padrões de segurança reais e bem conhecidos, mantendo o mesmo rigor (indício a verificar, nunca prova; segredos sempre redigidos).
+
+**Item 9 — `vulnerability/__init__.py`** (5 regras novas):
+- `insecure_deserialization` — `pickle.loads`/`pickle.load`/`Unpickler` (execução arbitrária de código sobre dado não confiável).
+- `unsafe_yaml_load` — `yaml.load(...)` sem `Loader=` explícito na mesma linha (não sinaliza quando usa `SafeLoader`, testado).
+- `jwt_alg_none` — `"alg": "none"` em cabeçalho JWT (falsificação de token).
+- `cors_wildcard` — `Access-Control-Allow-Origin: *`.
+- `sql_string_concat` — f-string com palavra-chave SQL e interpolação (indício de injeção).
+
+**Item 7 — `cryptanalysis/implementation_audit.py`** (1 regra nova):
+- `insufficient_kdf_iterations` — `PBKDF2(...iterations=N...)` com N conhecidamente baixo (1/10/100/1000/2000/4096/10000); não sinaliza valores altos (testado com 600000).
+
+Validação: **296 testes OK** (290 + 6: 5 em `test_vulnerability.py` + 1 em `test_implementation_audit.py`), `compileall`, `demo.py` e `try-me.py` (exit 0). Confirmado ponta a ponta pela CLI num arquivo com `yaml.load`/`pickle.loads`/SQL por f-string — as três regras disparam corretamente.

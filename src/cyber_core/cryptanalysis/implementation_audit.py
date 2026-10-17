@@ -17,6 +17,7 @@ RULES = (
     ('weak_random_for_crypto', re.compile(r'(?i)\brandom\.(random|randint|choice|randrange)\s*\('), 'medium', 0),
     ('weak_hash_for_integrity', re.compile(r'(?i)\b(md5|sha1)\s*\([^)]*\)\s*(?:#.*(?:hmac|signature|integrity|checksum|password))'), 'medium', 0),
     ('short_key_length', re.compile(r'(?i)\b(?:key_size|keysize|bits)\s*[:=]\s*(?:40|56|64)\b'), 'medium', 0),
+    ('insufficient_kdf_iterations', re.compile(r'(?i)\bPBKDF2\b[^\n]{0,80}\biterations\s*[:=]\s*(?:1|10|100|1000|2000|4096|10000)\b'), 'medium', 0),
     ('custom_crypto_warning', re.compile(r'(?i)\bdef\s+(encrypt|decrypt|xor_encrypt|rot13|custom_cipher)\b'), 'low', 0),
 )
 _LIMITS = ['Correspondência por padrão estático sobre texto; não executa nem analisa comportamento em tempo real.',

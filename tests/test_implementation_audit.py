@@ -28,6 +28,12 @@ class ImplementationAuditUnitTests(unittest.TestCase):
         self.assertIn('weak_random_for_crypto', kinds)
         self.assertIn('short_key_length', kinds)
 
+    def test_detects_insufficient_pbkdf2_iterations(self):
+        weak = audit_implementation('key = PBKDF2(password, salt, iterations=1000)\n')
+        self.assertIn('insufficient_kdf_iterations', {f['kind'] for f in weak['findings']})
+        strong = audit_implementation('key = PBKDF2(password, salt, iterations=600000)\n')
+        self.assertNotIn('insufficient_kdf_iterations', {f['kind'] for f in strong['findings']})
+
     def test_clean_code_has_no_findings(self):
         report = audit_implementation('from cryptography.hazmat.primitives.ciphers.aead import AESGCM\nkey = os.urandom(32)\n')
         self.assertEqual(report['findings'], [])
