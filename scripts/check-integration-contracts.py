@@ -50,6 +50,18 @@ class IntegrationContracts(unittest.TestCase):
         self.assertIsNone(core.run_one(case))
         self.assertTrue(core.verify_audit(case))
 
+    def test_interruption_preserves_remaining_attempts_above_three(self):
+        core, case = self.make_core(max_attempts=5)
+        core.db.execute('UPDATE tasks SET attempts=3 WHERE case_id=?', (case,))
+        core.db.commit()
+        with patch('cyber_core.service.analyze_in_process', side_effect=KeyboardInterrupt):
+            with self.assertRaises(KeyboardInterrupt):
+                core.run_one(case)
+        task = core.tasks(case)[0]
+        self.assertEqual(task['attempts'], 4)
+        self.assertEqual(task['status'], 'pending')
+        self.assertTrue(core.verify_audit(case))
+
 
 if __name__ == '__main__':
     unittest.main(verbosity=2)
