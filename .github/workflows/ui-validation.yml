@@ -1,0 +1,52 @@
+name: Approved interface validation
+on:
+  workflow_dispatch:
+  push:
+    branches: [codex/approved-blue-interface]
+  pull_request:
+    branches: [main]
+    paths: ['web/**','tests/web.spec.cjs','playwright.config.cjs','.github/workflows/ui-validation.yml']
+permissions:
+  contents: read
+concurrency:
+  group: approved-ui-${{ github.event.pull_request.head.ref || github.ref_name }}
+  cancel-in-progress: true
+jobs:
+  browser:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04,windows-2022]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    env:
+      PYTHONUTF8: "1"
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "22"
+      - name: Install browser test tools only on disposable GitHub runner
+        run: npm install --no-save --package-lock=false --ignore-scripts @playwright/test@1.64.1
+      - name: Install Chromium only on disposable GitHub runner
+        run: npx playwright install --with-deps chromium
+      - name: Check JavaScript syntax when implementation exists
+        shell: bash
+        run: |
+          if [ -f web/app.js ]; then node --check web/app.js; fi
+      - name: Browser flows and responsive screenshots
+        run: npx playwright test
+      - name: Preserve synthetic browser preview and test diagnostics
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: interface-preview-${{ matrix.os }}
+          path: |
+            test-results/
+            playwright-report/
+          retention-days: 7

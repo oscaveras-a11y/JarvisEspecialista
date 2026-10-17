@@ -1,0 +1,169 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="color-scheme" content="dark"><meta name="description" content="Painel demonstrativo do CYBER CORE. Organize investigações e conheça o fluxo de análise digital.">
+<title>CYBER CORE — Centro de investigações</title>
+<link rel="icon" type="image/svg+xml" href="assets/core-shield.svg"><link rel="stylesheet" href="styles.css">
+<script src="app.js" defer></script>
+</head>
+<body>
+<a class="skip-link" href="#main-content">Pular para o conteúdo</a>
+<div class="app">
+<aside class="sidebar" id="sidebar">
+ <a class="brand" href="./" aria-label="CYBER CORE, início"><svg class="brand-mark" aria-hidden="true"><use href="assets/icons.svg#shield"></use></svg><span><strong>CYBER CORE</strong><small>INVESTIGAÇÃO DIGITAL</small></span></a>
+ <nav class="nav" aria-label="Navegação principal"><button class="nav-item is-active" data-view="dashboard" aria-current="page"><svg class="icon" aria-hidden="true"><use href="assets/icons.svg#home"></use></svg><span>Visão geral</span></button>
+<button class="nav-item" data-view="investigations"><svg class="icon" aria-hidden="true"><use href="assets/icons.svg#folder"></use></svg><span>Investigações</span></button>
+<button class="nav-item" data-view="recovery"><svg class="icon" aria-hidden="true"><use href="assets/icons.svg#recovery"></use></svg><span>Recuperação</span></button>
+<button class="nav-item" data-view="forensics"><svg class="icon" aria-hidden="true"><use href="assets/icons.svg#search"></use></svg><span>Perícia digital</span></button>
+<button class="nav-item" data-view="tools"><svg class="icon" aria-hidden="true"><use href="assets/icons.svg#tools"></use></svg><span>Ferramentas</span></button>
+<button class="nav-item" data-view="agents"><svg class="icon" aria-hidden="true"><use href="assets/icons.svg#chip"></use></svg><span>Agentes</span></button>
+<button class="nav-item" data-view="reports"><svg class="icon" aria-hidden="true"><use href="assets/icons.svg#chart"></use></svg><span>Relatórios</span></button></nav>
+ <div class="sidebar-foot"><span class="beta-pill">BETA PESSOAL</span><span class="subtle">Interface de demonstração</span><a href="https://github.com/oscaveras-a11y/JarvisEspecialista" target="_blank" rel="noopener noreferrer">Abrir repositório <svg class="icon" aria-hidden="true"><use href="assets/icons.svg#arrow"></use></svg></a></div>
+ <button class="sidebar-close btn" id="sidebar-close" type="button">Fechar menu</button>
+</aside>
+<button class="menu-backdrop" id="menu-backdrop" tabindex="-1" aria-label="Fechar menu" hidden></button>
+<main class="main" id="main-content" tabindex="-1">
+ <header class="topbar">
+  <button class="menu-toggle" id="menu-toggle" aria-label="Abrir menu" aria-controls="sidebar" aria-expanded="false"><svg class="icon" aria-hidden="true"><use href="assets/icons.svg#menu"></use></svg></button>
+  <div class="breadcrumb"><span>Workspace</span><span aria-hidden="true">/</span><strong id="view-title">Visão geral</strong></div>
+  <label class="search-field"><svg class="icon" aria-hidden="true"><use href="assets/icons.svg#search"></use></svg><input type="search" id="case-search" aria-label="Buscar investigação" placeholder="Buscar investigação..." maxlength="200"></label>
+  <span class="demo-pill"><i></i>Ambiente de demonstração</span>
+ </header>
+ <div class="workspace">
+ <div id="demo-notice" class="demo-notice" role="note"><svg class="icon" aria-hidden="true"><use href="assets/icons.svg#info"></use></svg><p><strong>Dados demonstrativos.</strong> Nenhum arquivo é analisado ou enviado por este painel. As ações ficam neste navegador e ainda não estão conectadas ao motor real.</p></div>
+ <section class="view" id="view-dashboard" aria-label="Visão geral">
+  <div class="hero"><div class="hero-copy"><p class="eyebrow">SEU CENTRO DE INVESTIGAÇÕES</p><h1>Clareza para cada investigação.</h1><p class="hero-description">Organize evidências, acompanhe análises e registre resultados.</p><div class="hero-actions"><button class="btn btn-primary" data-nav="new"><svg class="icon" aria-hidden="true"><use href="assets/icons.svg#plus"></use></svg>Nova investigação</button><button class="btn" data-nav="reports"><svg class="icon" aria-hidden="true"><use href="assets/icons.svg#file"></use></svg>Ver relatórios</button></div></div><img class="hero-art" src="assets/core-shield.svg" alt="" aria-hidden="true"></div>
+  <p class="data-label">Dados de exemplo <span>• demonstração local</span></p>
+  <div class="stats">
+   <article class="card stat"><svg class="icon" aria-hidden="true"><use href="assets/icons.svg#folder"></use></svg><div><span class="stat-label">Investigações</span><strong id="stat-total">0</strong></div></article>
+   <article class="card stat"><svg class="icon" aria-hidden="true"><use href="assets/icons.svg#tools"></use></svg><div><span class="stat-label">Análises em andamento</span><strong id="stat-running">0</strong></div></article>
+   <article class="card stat"><svg class="icon" aria-hidden="true"><use href="assets/icons.svg#file"></use></svg><div><span class="stat-label">Relatórios gerados</span><strong id="stat-reports">0</strong></div></article>
+   <article class="card stat"><svg class="icon" aria-hidden="true"><use href="assets/icons.svg#shield"></use></svg><div><span class="stat-label">Integridade dos registros</span><strong class="integrity-value" id="stat-integrity">Conferindo</strong></div></article>
+  </div>
+  <div class="dashboard-grid">
+   <div class="main-column">
+    <section class="card"><div class="card-head"><h2>Investigações recentes</h2><button class="text-link" data-nav="investigations">Ver todas <svg class="icon" aria-hidden="true"><use href="assets/icons.svg#arrow"></use></svg></button></div><div id="dashboard-recent" class="table-scroll"></div></section>
+    <section class="card recovery-card"><div class="card-head"><h2><svg class="icon" aria-hidden="true"><use href="assets/icons.svg#clock"></use></svg>Recuperação com controle</h2><span class="subtle">Janela de até 24 horas no CORE</span></div><p class="subtle" id="recovery-case-label">Selecione uma investigação de recuperação.</p><div class="progress-heading"><span>Progresso ilustrativo</span><span id="recovery-percent">0%</span></div><div class="progress-track" role="img" aria-label="Progresso somente ilustrativo"><span id="recovery-progress"></span></div><div class="recovery-actions"><button class="btn btn-sm" data-recovery-act="pause"><svg class="icon" aria-hidden="true"><use href="assets/icons.svg#pause"></use></svg>Pausar</button><button class="btn btn-sm" data-recovery-act="resume"><svg class="icon" aria-hidden="true"><use href="assets/icons.svg#play"></use></svg>Retomar</button><button class="btn btn-sm" data-nav="recovery"><svg class="icon" aria-hidden="true"><use href="assets/icons.svg#file"></use></svg>Ver detalhes</button></div></section>
+   </div>
+   <div class="side-column">
+    <section class="card"><div class="card-head"><h2><svg class="icon" aria-hidden="true"><use href="assets/icons.svg#tools"></use></svg>Ferramentas de análise</h2></div><div class="capability-row"><svg class="icon" aria-hidden="true"><use href="assets/icons.svg#file"></use></svg><span>Ghidra</span><span class="badge badge-capability">Integrado ao CORE</span></div><div class="capability-row"><svg class="icon" aria-hidden="true"><use href="assets/icons.svg#chip"></use></svg><span>Binwalk</span><span class="badge badge-capability">Integrado ao CORE</span></div><p class="card-footnote">Disponibilidade no ambiente de execução não consultada por esta prévia.</p></section>
+    <section class="card" id="agents-summary"><div class="card-head"><h2><svg class="icon" aria-hidden="true"><use href="assets/icons.svg#chip"></use></svg>Agentes</h2></div><div class="capability-row"><svg class="icon" aria-hidden="true"><use href="assets/icons.svg#robot"></use></svg><span>Codex</span><span class="waiting"><i></i>Aguardando configuração</span></div><div class="capability-row"><svg class="icon" aria-hidden="true"><use href="assets/icons.svg#robot"></use></svg><span>Claude</span><span class="waiting"><i></i>Aguardando configuração</span></div><p class="card-footnote"><svg class="icon" aria-hidden="true"><use href="assets/icons.svg#info"></use></svg>Credenciais ainda não configuradas.</p></section>
+   </div>
+  </div>
+ </section>
+ <div class="case-context"><label for="case-select">Investigação selecionada</label><select id="case-select"><option value="">Selecione uma investigação</option></select><button class="text-link" data-nav="tasks">Tarefas e progresso</button><button class="text-link" data-nav="logs">Ver registros</button></div>
+ <section class="view" id="view-new" hidden>
+      <div class="card form-card">
+        <div class="card-head">
+          <h2>Nova investigação</h2>
+          <p class="muted">Organize um caso de demonstração. Nenhum arquivo será lido ou enviado.</p>
+        </div>
+        <form id="form-new-case">
+          <div class="field">
+            <label for="f-project">Projeto / caso</label>
+            <input id="f-project" required placeholder="ex.: incidente-2026-04">
+          </div>
+          <div class="field">
+            <label for="f-objective">Objetivo da investigação</label>
+            <textarea id="f-objective" required placeholder="o que precisa ser respondido com esta investigação"></textarea>
+          </div>
+          <div class="field">
+            <label for="f-scope">Escopo (caminho autorizado)</label>
+            <input id="f-scope" required placeholder="ex.: /evidencias/caso-01">
+          </div>
+          <div class="row">
+            <div class="field">
+              <label for="f-owner">Proprietário / responsável</label>
+              <input id="f-owner" required placeholder="quem autoriza">
+            </div>
+            <div class="field">
+              <label for="f-authorization">Referência da autorização</label>
+              <input id="f-authorization" required placeholder="referência da autorização">
+            </div>
+          </div>
+          <div class="row">
+            <div class="field">
+              <label for="f-valid-hours">Validade (horas)</label>
+              <input id="f-valid-hours" type="number" min="1" max="8760" value="72">
+            </div>
+            <div class="field field-check">
+              <label class="checkbox">
+                <input id="f-recovery" type="checkbox">
+                Permitir operações de recuperação
+              </label>
+            </div>
+          </div>
+          <div class="form-actions">
+            <button type="submit" class="btn btn-primary">Criar investigação</button>
+            <button type="reset" class="btn btn-ghost">Limpar</button>
+          </div>
+        </form>
+      </div>
+    </section>
+<section class="view" id="view-investigations" hidden>
+      <div class="card">
+        <div class="card-head">
+          <h2>Investigações</h2>
+          <button class="btn btn-primary" data-nav="new">＋ nova</button>
+        </div>
+        <div id="investigations-table"></div>
+      </div>
+    </section>
+<section class="view" id="view-tasks" hidden>
+      <div class="card">
+        <div class="card-head">
+          <h2>Tarefas e progresso</h2>
+          <p class="muted">Da investigação selecionada no topo da página.</p>
+        </div>
+        <form id="form-new-task" class="inline-form">
+          <select id="task-tool" aria-label="Tipo de análise">
+            <option value="analyze-file">Análise estática de arquivo</option><option value="analyze-firmware">Firmware • Ghidra / Binwalk</option>
+            <option value="audit-config">audit-config</option>
+            <option value="audit-crypto">audit-crypto</option>
+            <option value="inventory-disk">Inventário de disco</option>
+            <option value="inventory-pcap">Inventário de PCAP</option>
+            <option value="strings">strings</option>
+            <option value="differentiate">differentiate</option>
+            <option value="assess-recovery">assess-recovery</option>
+          </select>
+          <input id="task-path" aria-label="Caminho demonstrativo" placeholder="caminho do arquivo autorizado" required>
+          <button type="submit" class="btn btn-primary">Enfileirar</button>
+        </form>
+        <div id="tasks-list" class="list"></div>
+      </div>
+    </section>
+<section class="view" id="view-logs" hidden>
+      <div class="card">
+        <div class="card-head">
+          <h2>Logs &amp; hipóteses</h2>
+          <button class="btn btn-ghost" id="verify-chain">verificar integridade da cadeia</button>
+        </div>
+        <p class="muted">Verifique a integridade dos registros desta demonstração. Essa conferência não valida arquivos ou evidências do CORE.</p>
+        <div id="chain-status" class="chain-status"></div>
+        <div id="logs-list" class="list mono"></div>
+      </div>
+    </section>
+<section class="view" id="view-reports" hidden>
+      <div class="card">
+        <div class="card-head">
+          <h2>Relatórios</h2>
+          <p class="muted">Exporte os dados demonstrativos desta investigação. O relatório técnico do CORE é separado.</p>
+        </div>
+        <div id="report-preview" class="report-preview"></div>
+        <div class="form-actions">
+          <button class="btn btn-primary" id="gen-report">Gerar e baixar relatório</button>
+        </div>
+      </div>
+    </section>
+ <section class="view" id="view-recovery" hidden><div class="section-heading"><p class="eyebrow">RECUPERAÇÃO</p><h1>Um caminho claro para recuperar.</h1><p>Organize candidatas autorizadas, prazos e próximos passos.</p></div><div class="module-grid"><article class="card"><h2><svg class="icon" aria-hidden="true"><use href="assets/icons.svg#recovery"></use></svg>Recuperação autorizada</h2><p>O CORE oferece sessões com janela inicial de 24 horas, extensão por prioridade e checkpoints. Sem uma chave correta ou fonte recuperável dela, não existe reconstrução geral do AES.</p><p class="subtle">Aqui você organiza a demonstração. Nenhuma tentativa é executada.</p><button class="btn btn-primary" data-nav="new">Nova investigação</button></article><article class="card"><h2><svg class="icon" aria-hidden="true"><use href="assets/icons.svg#shield"></use></svg>Chaves e certificados</h2><p>Inspeção de formato, estrutura e metadados; inventário limitado ao diretório autorizado. Senhas e material de chave privada ficam fora dos relatórios.</p><a class="text-link" href="https://github.com/oscaveras-a11y/JarvisEspecialista/blob/main/docs/pending-modules-beta.md" target="_blank" rel="noopener noreferrer">Consultar guia do beta <svg class="icon" aria-hidden="true"><use href="assets/icons.svg#arrow"></use></svg></a></article></div><section class="card"><div class="card-head"><h2>Investigações de recuperação</h2></div><div id="recovery-list" class="list"></div></section></section>
+ <section class="view" id="view-forensics" hidden><div class="section-heading"><p class="eyebrow">PERÍCIA DIGITAL</p><h1>Preserve a referência. Examine os detalhes.</h1><p>Inventários estáticos sobre cópias verificadas, com limites explícitos.</p></div><div class="module-grid"><article class="card"><h2><svg class="icon" aria-hidden="true"><use href="assets/icons.svg#folder"></use></svg>Discos e partições</h2><p>Inventário limitado de imagens MBR/GPT, com hash e referência de evidência. Sem montagem, escrita ou recuperação de arquivos apagados.</p><button class="btn" data-demo-tool="inventory-disk">Organizar tarefa demonstrativa</button></article><article class="card"><h2><svg class="icon" aria-hidden="true"><use href="assets/icons.svg#search"></use></svg>Capturas de protocolo</h2><p>Leitura de PCAP clássico com Ethernet, IPv4, TCP e UDP. Sem captura ativa, transmissão ou remontagem de fluxos.</p><button class="btn" data-demo-tool="inventory-pcap">Organizar tarefa demonstrativa</button></article></div><section class="card"><h2>Histórico e integridade</h2><p>Consulte os registros locais e seus hashes. Eles representam esta demonstração e não substituem custódia forense ou o relatório do CORE.</p><button class="btn" data-nav="logs">Ver registros</button></section></section>
+ <section class="view" id="view-tools" hidden><div class="section-heading"><p class="eyebrow">FERRAMENTAS</p><h1>Mais profundidade para sua análise.</h1><p>Integrações existentes no CORE, testadas com amostras sintéticas no GitHub.</p></div><div class="module-grid"><article class="card"><span class="badge badge-capability">Integrado ao CORE</span><h2>Ghidra</h2><p>Análise estática de ELF e PE e prévia limitada de funções. O arquivo analisado não é executado. Execução real do backend validada inicialmente em Linux.</p></article><article class="card"><span class="badge badge-capability">Integrado ao CORE</span><h2>Binwalk</h2><p>Identificação de estruturas em firmware sem extração e sem recursão automática. Disponibilidade e resultados dependem do ambiente de execução.</p></article></div><a class="btn btn-primary" href="https://github.com/oscaveras-a11y/JarvisEspecialista/actions/workflows/external-backends.yml" target="_blank" rel="noopener noreferrer">Ver testes no GitHub <svg class="icon" aria-hidden="true"><use href="assets/icons.svg#arrow"></use></svg></a></section>
+ <section class="view" id="view-agents" hidden><div class="section-heading"><p class="eyebrow">AGENTES</p><h1>Duas perspectivas. Evidências no centro.</h1><p>Propostas de revisão não encerram automaticamente uma investigação.</p></div><div class="module-grid"><article class="card"><h2><svg class="icon" aria-hidden="true"><use href="assets/icons.svg#robot"></use></svg>Codex</h2><p class="waiting"><i></i>Aguardando configuração</p><p>Revisão de metadados derivados, com autorização de envio explícita e histórico persistente no CORE.</p></article><article class="card"><h2><svg class="icon" aria-hidden="true"><use href="assets/icons.svg#robot"></use></svg>Claude</h2><p class="waiting"><i></i>Aguardando configuração</p><p>Revisão cruzada da proposta do primeiro agente, vinculada ao mesmo conjunto de evidências.</p></article></div><section class="card"><h2>Configuração pelo proprietário</h2><p>As credenciais são configuradas nos secrets do GitHub. Este painel não recebe nem armazena chaves dos provedores.</p><a class="btn" href="https://github.com/oscaveras-a11y/JarvisEspecialista/settings/secrets/actions" target="_blank" rel="noopener noreferrer">Abrir configuração no GitHub <svg class="icon" aria-hidden="true"><use href="assets/icons.svg#arrow"></use></svg></a></section></section>
+ <footer class="workspace-footer">Prévia visual • dados demonstrativos • sem execução real</footer>
+ </div>
+</main>
+</div>
+<div id="toast-stack" class="toast-stack" role="status" aria-live="polite"></div>
+<noscript>Ative o JavaScript para usar esta demonstração. Nenhum backend é executado nesta página.</noscript>
+</body></html>
