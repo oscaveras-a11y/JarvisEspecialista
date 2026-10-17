@@ -37,3 +37,11 @@ a `main` conforme ele entrega. Log atualizado por item.
 - **[FATO]** `Workflow.finalize` já exige evidência verificável, testes reproduzíveis, comparação com resultado esperado e documentação de limitações antes de "resolvido"; revisão independente obrigatória (bloqueia auto-revisão).
 - **[LACUNA→feito]** O escopo lista **7 estados possíveis**; `finalize` só aceitava 4 (faltavam "Aguardando informações" e "Aguardando autorização"). Adicionados como estados **não-terminais** (não exigem portões de evidência/revisão, como já era o caso de "Aguardando recursos"); `validated` permanece `false` para eles.
 - **[PENDENTE]** nada identificado; os 7 estados do escopo estão todos cobertos agora.
+
+## Item 15 — Interface do sistema (ímpar; Claude) — lacuna preenchida
+- **[FATO]** terminal funcional cobre: criar investigação (`investigate`), selecionar arquivo/definir objetivo/informar autorização e escopo (parte de `investigate`), acompanhar tarefas e progresso (`status`), visualizar hipóteses (`hypothesis list`), pausar/retomar/cancelar (`pause`/`resume`/`cancel`), consultar memória (`history`, `recall`), exportar relatórios (`report`).
+- **[LACUNA→feito]** "Ver logs" não tinha comando dedicado (só `status`, que não inclui o log de auditoria). Adicionado `cyber logs <caso>` (expõe `Core.audit` + `verify_audit` — o log bruto encadeado por hash, distinto do `custody`, que é uma visão derivada para perícia).
+- **[PENDENTE]** interface gráfica Windows (Fase 9) — corretamente posterior à validação do núcleo, como o escopo pede.
+
+## Correção de honestidade documental — docs/roadmap.md
+Durante a verificação, encontrada uma afirmação **desatualizada e falsa**: "Não há (...) buscas de vulnerabilidades, recuperação de senhas (...) nesta entrega" — mas os itens 7 e 9 desta sessão já implementam exatamente isso (de forma limitada/autorizada/estática). Corrigido no próprio `docs/roadmap.md` para refletir o estado real sem exagerar: recuperação de senha é só autoteste em arquivo próprio; auditoria de vulnerabilidade é só estática/autorizada, sem rede. O que permanece ausente (pesquisa web automática, extração de chaves, malware, gravação automotiva, varredura ativa) continua declarado como ausente.

@@ -33,6 +33,8 @@ def parser():
     inv.add_argument('--valid-hours', type=float, default=24)
     status = sub.add_parser('status', help='List cases or display one case')
     status.add_argument('case', nargs='?')
+    logs = sub.add_parser('logs', help='View the raw hash-linked audit log for a case')
+    logs.add_argument('case')
     for name in ('report', 'pause', 'resume', 'revoke', 'run'):
         cmd = sub.add_parser(name, help={'report': 'Generate technical report', 'pause': 'Pause at operation boundary', 'resume': 'Resume persistent investigation', 'revoke': 'Revoke operation permission', 'run': 'Run one persistent pending task'}[name])
         cmd.add_argument('case')
@@ -147,6 +149,8 @@ def main(argv=None):
                 result = {'id': core.investigate(args.project, args.objective, args.scope, args.owner, args.authorization, recovery=args.allow_recovery, valid_hours=args.valid_hours)}
             elif cmd == 'status':
                 result = {'investigation': core.get(args.case), 'tasks': core.tasks(args.case), 'checkpoints': core.checkpoints(args.case)} if args.case else [dict(r) for r in core.db.execute('SELECT id,project,state,paused,created FROM investigations ORDER BY created')]
+            elif cmd == 'logs':
+                result = {'audit': core.audit(args.case), 'chain_valid': core.verify_audit(args.case)}
             elif cmd in ('analyze-file', 'analyze-firmware', 'analyze-can'):
                 if core.get(args.case)['paused']:
                     raise CoreError('Investigation is paused')
