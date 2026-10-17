@@ -233,3 +233,32 @@ class OrchestrationBetaTests(unittest.TestCase):
         self.assertEqual(result['status'], 'blocked')
         self.assertEqual(self.core.tasks(self.case)[0]['status'], 'pending')
         self.assertEqual(self.core.tasks(self.case)[0]['attempts'], 0)
+
+    def test_agent_proposal_is_not_accepted_after_cancellation(self):
+        self.assertTrue(callable(getattr(self.core, 'cancel', None)), 'Persistent cancellation is missing')
+        from cyber_core.orchestrator import review_summary
+        other = Core(self.home)
+        self.addCleanup(other.close)
+        def late_review(*args, **kwargs):
+            other.cancel(self.case, reason='Stop cloud review')
+            return {'agent': 'synthetic-adapter', 'review': 'Late proposal', 'independent_validation': False}
+        with patch('cyber_core.orchestrator.CodexAdapter.review', side_effect=late_review):
+            with self.assertRaises(CoreError):
+                review_summary(self.core, self.case, allow_cloud=True)
+        self.assertFalse(any(e['event'] == 'agent_review_proposed' for e in self.core.audit(self.case)))
+
+    def test_batch_cancellation_is_reported_as_cancelled_not_failures(self):
+        self.assertTrue(callable(getattr(self.core, 'cancel', None)), 'Persistent cancellation is missing')
+        (self.inputs / 'second.bin').write_bytes(b'def')
+        original = self.core.run_one
+        def cancel_after_first(*args, **kwargs):
+            result = original(*args, **kwargs)
+            self.core.cancel(self.case, reason='Stop batch after first acquisition')
+            return result
+        with patch.object(self.core, 'run_one', side_effect=cancel_after_first):
+            result = self.core.assess_recovery(self.case, self.inputs)
+        self.assertEqual(result['status'], 'cancelled')
+        self.assertEqual(len(result['results']), 1)
+        self.assertEqual(len(result['cancelled_tasks']), 1)
+        self.assertFalse(result['pending_tasks'])
+        self.assertFalse(result['failures'])
