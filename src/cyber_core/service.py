@@ -648,6 +648,48 @@ class Core:
             audit(self.db, case, 'capture_analyzed', event)
         return result
 
+    def inspect_disk_image(self, case, path, *, sector_size=512, max_bytes=16 * 1024 * 1024, max_partitions=256):
+        # CORE wiring for forensics/disk.py (item 8), left as a separate step by
+        # the module's own author: authorize, pause guard, bounded acquisition of
+        # the WHOLE declared region up to max_bytes (the module needs the complete
+        # image to validate GPT CRCs, so there is no byte-range "peek"; the byte
+        # limit itself is the acquisition bound), persist for reconstruction.
+        row = self.authorize(case)
+        self._ensure_not_paused(case, row)
+        source = self.authorize(case, path)
+        if source.stat().st_size > min(self.max_bytes, max_bytes):
+            raise CoreError('Disk image exceeds byte limit')
+        data = source.read_bytes()
+        from cyber_core.forensics.disk import inspect_disk_image
+        try:
+            result = inspect_disk_image(data, sector_size=sector_size, max_bytes=max_bytes, max_partitions=max_partitions)
+        except ValueError as exc:
+            raise CoreError('Disk image inventory failed: ' + str(exc)) from exc
+        self._persist_side_analysis(case, 'disk_inventory', source, result)
+        with self.db:
+            self.authorize(case)
+            audit(self.db, case, 'disk_image_inspected', {'format': result.get('format'), 'sha256': result.get('sha256')})
+        return result
+
+    def inspect_pcap(self, case, path, *, max_bytes=16 * 1024 * 1024, max_packets=256):
+        # CORE wiring for protocols_pcap.py (item 10), same pattern as above.
+        row = self.authorize(case)
+        self._ensure_not_paused(case, row)
+        source = self.authorize(case, path)
+        if source.stat().st_size > min(self.max_bytes, max_bytes):
+            raise CoreError('PCAP file exceeds byte limit')
+        data = source.read_bytes()
+        from cyber_core.protocols_pcap import inspect_pcap
+        try:
+            result = inspect_pcap(data, max_bytes=max_bytes, max_packets=max_packets)
+        except ValueError as exc:
+            raise CoreError('PCAP inventory failed: ' + str(exc)) from exc
+        self._persist_side_analysis(case, 'pcap_inventory', source, result)
+        with self.db:
+            self.authorize(case)
+            audit(self.db, case, 'pcap_inspected', {'packets': len(result.get('packets', [])), 'sha256': result.get('sha256')})
+        return result
+
     def audit_crypto_implementation(self, case, path, *, max_sample=1048576):
         # Static audit of cryptographic implementation patterns (item 7: "auditar
         # a segurança de implementações criptográficas"). No execution, no key

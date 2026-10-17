@@ -105,6 +105,17 @@ def parser():
     capture.add_argument('case')
     capture.add_argument('path')
     capture.add_argument('--compare-to', help='Second authorized capture to compare')
+    disk = sub.add_parser('inspect-disk', help='Bounded, read-only MBR/GPT inventory of a raw disk image (no mount/write/recovery)')
+    disk.add_argument('case')
+    disk.add_argument('path')
+    disk.add_argument('--sector-size', type=int, default=512, choices=(512, 4096))
+    disk.add_argument('--max-bytes', type=int, default=16 * 1024 * 1024)
+    disk.add_argument('--max-partitions', type=int, default=256)
+    pcap = sub.add_parser('inspect-pcap', help='Bounded, read-only classic PCAP inventory (no live capture/network access)')
+    pcap.add_argument('case')
+    pcap.add_argument('path')
+    pcap.add_argument('--max-bytes', type=int, default=16 * 1024 * 1024)
+    pcap.add_argument('--max-packets', type=int, default=256)
     strings = sub.add_parser('strings', help='Extract bounded ASCII/UTF-16LE strings from an authorized file (static)')
     strings.add_argument('case')
     strings.add_argument('path')
@@ -129,7 +140,7 @@ def parser():
     sources.add_argument('case')
     side = sub.add_parser('side-analyses', help='List persisted side analyses (strings/differentiate/audit-config/capture) for a case')
     side.add_argument('case')
-    side.add_argument('--kind', help='Filter by kind: strings, differentiate, config_audit, crypto_audit, capture')
+    side.add_argument('--kind', help='Filter by kind: strings, differentiate, config_audit, crypto_audit, capture, disk_inventory, pcap_inventory')
     recall = sub.add_parser('recall', help='Recall prior knowledge by evidence SHA-256 or by investigation type')
     recall.add_argument('--sha256', help='Find prior investigations that analyzed this exact evidence hash')
     recall.add_argument('--type', dest='recall_type', help='List prior investigations of this type')
@@ -215,6 +226,11 @@ def main(argv=None):
                 result = core.audit_crypto_implementation(args.case, args.path)
             elif cmd == 'analyze-capture':
                 result = core.analyze_capture(args.case, args.path, second_path=args.compare_to)
+            elif cmd == 'inspect-disk':
+                result = core.inspect_disk_image(args.case, args.path, sector_size=args.sector_size,
+                                                 max_bytes=args.max_bytes, max_partitions=args.max_partitions)
+            elif cmd == 'inspect-pcap':
+                result = core.inspect_pcap(args.case, args.path, max_bytes=args.max_bytes, max_packets=args.max_packets)
             elif cmd == 'strings':
                 result = core.extract_strings(args.case, args.path, min_length=args.min_length, max_strings=args.max_strings)
             elif cmd == 'differentiate':
