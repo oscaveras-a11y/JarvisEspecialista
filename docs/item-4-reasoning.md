@@ -25,7 +25,7 @@ executa somente ferramentas autorizadas e compara observações aos critérios.
 | 14. Registrar conclusões | Runs, verifications, notas rotuladas e checkpoints; sem promoção automática para RESOLVIDO |
 | 15. Gerar relatório técnico | Relatório inclui snapshot de fatos, hipóteses, prioridades, inferências, desconhecidos, bloqueios e ciclos |
 
-Repetição dos mesmos bytes/teste/revisão não cria nova tarefa nem progresso.
+Na mesma estratégia, repetição dos mesmos bytes/teste/revisão não cria nova tarefa nem progresso. Outra hipótese/experimento exige registro e justificativa próprios.
 Uma revisão justificada da hipótese pode iniciar um novo ciclo. Campos de
 evidência são verificados novamente; tempo e quantidade de passos do ciclo
 são limitados. Interrupções retomam a mesma reserva e recuperam avaliações
@@ -75,6 +75,8 @@ nesta entrega; os exemplos documentam a API testada em runners GitHub.
   refutar hipótese de tamanho incorreto, revisar, liberar alternativa,
   validar controle de três bytes, gerar relatório, fechar/reabrir e
   reencontrar os hashes pela memória do Claude.
+
+A autorização de execução continua sendo a registrada no `investigate`: escopo, responsável, motivo, validade e revogação, além da permissão específica de recuperação quando aplicável. `authorization_basis` do candidato Claude mantém seu contrato próprio; resolver um bloqueio do motor não cria nem altera essa base.
 
 Resultado final e versão exata do candidato serão registrados após o CI.
 Essa validação cobre o contrato operacional do item 4; não conclui os módulos
