@@ -338,5 +338,17 @@ class ReasoningTests(unittest.TestCase):
         self.assertEqual(len(self.core.results(self.case)), 1)
 
 
+    def test_stored_outcome_cannot_unlock_an_alternative_without_reproducible_checks(self):
+        parent, _, _ = self.strategy(value=3)
+        alternative, _, _ = self.strategy(value=99, alternative_to=parent)
+        out = self.engine.step(self.case, self.source, actor='operator')
+        self.flow.review(self.case, out['run']['id'], reviewer='reviewer', decision='accepted',
+                          reason='Three-byte size checked')
+        self.core.db.execute("UPDATE experiment_runs SET outcome='refutes' WHERE id=?", (out['run']['id'],))
+        self.core.db.commit()
+        with self.assertRaises(CoreError):
+            self.engine.rank(self.case)
+
+
 if __name__ == '__main__':
     unittest.main()
