@@ -35,7 +35,7 @@ class ExternalCoreTests(unittest.TestCase):
 
     def test_relative_configuration_is_rejected_before_work(self):
         with self.assertRaises(CoreError):
-            Core(self.root / "other-store", external_tools={"binwalk": {"executable": "binwalk"}})
+            self.core.configure_external_tools({"binwalk": {"executable": "binwalk"}})
 
     def test_other_analysis_does_not_start_external_backends(self):
         self.core.external_tools = {"binwalk": {"executable": str(self.root / "missing-binwalk")}}
