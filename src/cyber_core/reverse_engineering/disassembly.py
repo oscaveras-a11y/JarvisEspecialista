@@ -78,7 +78,7 @@ def preview(data, metadata):
     except capstone.CsError:
         return _empty("decoder_failure", backend="capstone",
                       backend_version=capstone.__version__, **common)
-    return {"status": "decoded", "backend": "capstone",
+    return {"status": "decoded" if instructions else "no_instructions_decoded", "backend": "capstone",
             "backend_version": capstone.__version__, "instructions": instructions,
             "sample_bytes": len(sample), "decoded_bytes": consumed,
             "undecoded_bytes": len(sample) - consumed,
