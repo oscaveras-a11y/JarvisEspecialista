@@ -1,0 +1,59 @@
+name: Candidate corrections combined validation
+on:
+  push:
+    branches: [codex/candidate-corrections]
+  pull_request:
+    branches: ['claude/gifted-gates-kd07xv']
+    paths:
+      - '.github/workflows/candidate-corrections.yml'
+      - 'src/**'
+      - 'tests/**'
+permissions:
+  contents: read
+concurrency:
+  group: candidate-combined-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  combined:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-2022]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    env:
+      PYTHONUTF8: "1"
+      PYTHONUNBUFFERED: "1"
+      PIP_DISABLE_PIP_VERSION_CHECK: "1"
+      CYBER_REQUIRE_CAPSTONE: "1"
+      MAIN_SHA: 4ca8b44b5250c760302137e3033ddcc7f571214c
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Combine fixed main only in disposable runner
+        run: |
+          git cat-file -e "$MAIN_SHA^{commit}"
+          git -c user.name="Candidate validation" -c user.email="validation@example.invalid" merge --no-commit --no-ff "$MAIN_SHA"
+          git diff --check
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - name: Install on ephemeral runner
+        run: python -m pip install ".[reverse]"
+      - name: Dependencies and syntax
+        run: |
+          python -m pip check
+          python -m compileall -q src scripts tests
+      - name: Complete combined suite
+        run: python scripts/run-tests.py
+      - name: Core contract probes
+        run: python scripts/check-integration-contracts.py
+      - name: Reasoning-memory handoff
+        run: python scripts/check-reasoning-handoff.py
+      - name: Synthetic demonstration
+        run: python scripts/demo.py
