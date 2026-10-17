@@ -415,3 +415,36 @@ class Core:
             self.authorize(case)
             audit(self.db, case, 'self_test_recovery', {'recovered': result['recovered'], 'attempts': result['attempts'], 'status': result['status']})
         return result
+
+    def recall_by_hash(self, sha256, *, limit=50):
+        # Cross-investigation artifact recognition by SHA-256. Metadata only; never
+        # exposes evidence content or stored copy paths. Reuses prior knowledge (item 5).
+        if not isinstance(sha256, str) or len(sha256) != 64 or any(c not in '0123456789abcdefABCDEF' for c in sha256):
+            raise CoreError('A 64-character hex SHA-256 is required')
+        if not isinstance(limit, int) or not 1 <= limit <= 1000:
+            raise CoreError('Invalid recall limit')
+        needle = sha256.lower()
+        matches = []
+        for row in self.db.execute('SELECT task_id,case_id,data,created FROM results ORDER BY created DESC LIMIT 5000'):
+            try:
+                data = json.loads(row['data'])
+            except (ValueError, TypeError):
+                continue
+            if str(data.get('sha256', '')).lower() == needle:
+                matches.append({'case_id': row['case_id'], 'task_id': row['task_id'],
+                                'sha256': data.get('sha256'), 'format': data.get('format'),
+                                'size': data.get('size'), 'created': row['created']})
+                if len(matches) >= limit:
+                    break
+        return matches
+
+    def recall_by_type(self, investigation_type, *, limit=20):
+        # Prior investigations of a given type, to reuse approaches (item 5).
+        if not isinstance(investigation_type, str) or not investigation_type.strip():
+            raise CoreError('An investigation type is required')
+        if not isinstance(limit, int) or not 1 <= limit <= 100:
+            raise CoreError('Invalid recall limit')
+        rows = self.db.execute('SELECT t.case_id,i.objective,i.state,t.type,t.confidence,t.created '
+                               'FROM investigation_type t JOIN investigations i ON i.id=t.case_id '
+                               'WHERE t.type=? ORDER BY t.created DESC LIMIT ?', (investigation_type.strip(), limit))
+        return [dict(r) for r in rows]
