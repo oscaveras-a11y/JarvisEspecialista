@@ -18,6 +18,8 @@ def main():
             raw = handle.read(8 * 1024 * 1024 + 1)
         if len(raw) > 8 * 1024 * 1024:
             raise ValueError()
+        if hashlib.sha256(raw).hexdigest() != data["source_sha256"]:
+            raise ValueError()
         candidate = bytes.fromhex(data["candidate"])
         if not 1 <= len(candidate) <= 1024:
             raise ValueError()

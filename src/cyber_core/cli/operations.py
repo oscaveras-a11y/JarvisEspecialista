@@ -52,6 +52,8 @@ def configure(sub):
         if action == "work":
             parser.add_argument("--max-attempts",type=int,default=20)
             parser.add_argument("--max-seconds",type=float,default=30)
+        if action == "resume":
+            parser.add_argument("--reason",help="Required to retry a resource-limited local trial")
         if action == "extend":
             parser.add_argument("--hours",type=float,required=True)
             parser.add_argument("--reason",required=True)
@@ -96,4 +98,6 @@ def execute(core,args):
         return manager.get(args.case,args.job)
     if action == "extend":
         return manager.extend(args.case,args.job,hours=args.hours,reason=args.reason,priority=args.priority)
+    if action == "resume":
+        return manager.resume(args.case,args.job,reason=args.reason)
     return getattr(manager,action)(args.case,args.job)

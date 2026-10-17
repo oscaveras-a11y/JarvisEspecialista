@@ -87,14 +87,11 @@ def external_configuration(args):
 
 
 
-def main(argv=None):
+def _main(argv=None):
     core = None
     try:
         args = parser().parse_args(argv)
-        if args.command == 'keys' and args.keys_action == 'inspect':
-            from cyber_core.recovery import inspect_key
-            result = inspect_key(args.path, max_bytes=args.key_max_bytes)
-        elif args.command in ('doctor', 'agents'):
+        if args.command in ('doctor', 'agents'):
             result = doctor()
             if args.command == 'agents':
                 result = result['agents']
@@ -157,3 +154,21 @@ def main(argv=None):
     finally:
         if core is not None:
             core.close()
+
+
+def main(argv=None):
+    # Standalone metadata inspection does not create an operational database.
+    args = parser().parse_args(argv)
+    if args.command != "keys" or args.keys_action != "inspect":
+        return _main(argv)
+    try:
+        from cyber_core.recovery import inspect_key
+        result = inspect_key(args.path,max_bytes=args.key_max_bytes,timeout=args.timeout)
+        print(json.dumps(result,ensure_ascii=True,indent=2))
+        return 0
+    except (CoreError,OSError,ValueError) as exc:
+        message = str(exc) if isinstance(exc,CoreError) else "Invalid configuration or inaccessible local resource"
+        print("cyber: "+message,file=sys.stderr)
+        return 2
+    except KeyboardInterrupt:
+        return 130

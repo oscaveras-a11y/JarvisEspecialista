@@ -1,5 +1,6 @@
 """Authorized inventories and reportable metadata; no evidence execution."""
 import json
+import hashlib
 from uuid import uuid4
 from cyber_core.errors import CoreError
 from cyber_core.memory import audit, encoded, utc
@@ -64,8 +65,8 @@ def _acquire(core,case,path,maximum):
     result,_ = verified_result(core,case,task)
     with open(result["copy"],"rb") as handle:
         raw = handle.read(maximum+1)
-    if len(raw) > maximum:
-        raise CoreError("Inventory copy exceeds byte limit")
+    if len(raw) > maximum or len(raw) != result["size"] or hashlib.sha256(raw).hexdigest() != result["sha256"]:
+        raise CoreError("Inventory copy changed or exceeds byte limit")
     return raw,result
 
 def inventory_disk(core,case,path,*,max_bytes=16777216,max_partitions=256,sector_size=512):

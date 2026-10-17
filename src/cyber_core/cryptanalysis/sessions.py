@@ -6,6 +6,7 @@ import math
 import os
 from pathlib import Path
 import sys
+import stat
 import time
 from uuid import uuid4
 from cyber_core.agents.runner import run_bounded
@@ -24,7 +25,7 @@ CREATE TABLE IF NOT EXISTS recovery_sessions(
  status TEXT NOT NULL,attempts INTEGER NOT NULL DEFAULT 0,cursor INTEGER NOT NULL DEFAULT 0,
  token TEXT,lease_until REAL NOT NULL DEFAULT 0,result TEXT,created TEXT NOT NULL);
 """
-TERMINAL = {"succeeded", "exhausted", "cancelled"}
+TERMINAL = {"succeeded", "exhausted", "cancelled", "resource_limited"}
 
 def _number(value, low, high):
     return type(value) in (float, int) and math.isfinite(value) and low <= value <= high
@@ -61,12 +62,14 @@ class RecoverySessions:
 
     def get(self, case, job):
         self.core.get(case)
-        return self._public(self._row(case, job))
+        row = self._row(case, job)
+        self._validate(row)
+        return self._public(row)
 
     def jobs(self, case):
         self.core.get(case)
-        return [self._public(dict(row)) for row in self.db.execute(
-            "SELECT * FROM recovery_sessions WHERE case_id=? ORDER BY rowid", (case,))]
+        return [self.get(case,row["id"]) for row in self.db.execute(
+            "SELECT id FROM recovery_sessions WHERE case_id=? ORDER BY rowid", (case,))]
 
     def _event(self, case, event, data):
         self.db.execute("INSERT INTO checkpoints(case_id,event,data,created) VALUES(?,?,?,?)",
@@ -76,7 +79,8 @@ class RecoverySessions:
     def _progress(self, row):
         self._event(row["case_id"], "recovery_session_progress",
                     {"session": row["id"], "attempts": row["attempts"], "cursor": row["cursor"],
-                     "result_digest": result_digest(json.loads(row["result"])) if row["result"] else None})
+                     "result_digest": result_digest(json.loads(row["result"])) if row["result"] else None,
+                     "status": row["status"]})
 
     def _plan(self, row):
         return result_digest({k: row[k] for k in
@@ -86,23 +90,33 @@ class RecoverySessions:
         case, job = row["case_id"], row["id"]
         if not self.core.verify_audit(case) or self._plan(row) != row["plan_digest"]:
             raise CoreError("Recovery plan or audit integrity failed")
-        anchor, progress, deadline = None, None, None
+        anchor, progress, deadline, state = None, None, None, None
         for item in self.db.execute("SELECT event,data FROM audit WHERE case_id=? AND event LIKE 'recovery_session_%' ORDER BY id", (case,)):
             data = json.loads(item["data"])
             if data.get("session") != job:
                 continue
             if item["event"] == "recovery_session_created":
-                anchor, deadline = data.get("plan_digest"), data.get("deadline")
+                anchor, deadline, state = data.get("plan_digest"), data.get("deadline"), "pending"
             elif item["event"] == "recovery_session_extended":
                 deadline = data["deadline"]
+                state = data["status"]
             elif item["event"] == "recovery_session_progress":
-                progress = data
-            elif item["event"] == "recovery_session_cancelled" and row["status"] != "cancelled":
-                raise CoreError("Cancelled recovery session cannot be resumed")
+                progress = {k:v for k,v in data.items() if k != "status"}
+                state = data["status"]
+            elif item["event"] in ("recovery_session_paused","recovery_session_resumed","recovery_session_cancelled"):
+                state = {"recovery_session_paused":"paused","recovery_session_resumed":"pending","recovery_session_cancelled":"cancelled"}[item["event"]]
+            elif item["event"] == "recovery_session_checkpoint":
+                state = data["status"]
         expected = {"session":job, "attempts":row["attempts"],"cursor":row["cursor"],
                     "result_digest": result_digest(json.loads(row["result"])) if row["result"] else None}
         if anchor != row["plan_digest"] or deadline != row["deadline"] or progress != expected:
             raise CoreError("Recovery checkpoint differs from audited plan")
+        if row["status"] != state and not (row["status"] == "running" and state in ("pending","running")):
+            raise CoreError("Recovery status differs from audited state")
+        if (row["status"] == "succeeded") != (row["result"] is not None):
+            raise CoreError("Recovery result and status are inconsistent")
+        if row["status"] == "exhausted" and row["cursor"] != row["total_candidates"]:
+            raise CoreError("Recovery exhaustion differs from checkpoint")
 
     def _material(self, case, path, secret, maximum=100000):
         source = self.core.authorize(case, path, recovery=True)
@@ -181,19 +195,33 @@ class RecoverySessions:
             raise
         return self.get(case,job)
 
-    def _control(self, case, job, action):
+    def _cleanup(self, row):
+        if not row.get("token"):
+            return
+        stage = storage_root(self.core.home/"recovery-staging")/(row["id"]+"-"+row["token"]+".pending")
+        output = storage_root(self.core.home/"cases"/row["case_id"]/"recovered")/(row["id"]+"-"+row["token"]+".recovered")
+        for path in (stage,output):
+            if path.exists():
+                local_path(path).unlink()
+
+    def _control(self, case, job, action, reason=None):
         with self.db:
             self.db.execute("BEGIN IMMEDIATE")
-            self._ready(case)
+            self.core.get(case) if action == "cancel" else self._ready(case)
             row = self._row(case,job)
             self._validate(row)
-            if row["status"] in TERMINAL:
+            if row["status"] in TERMINAL and not (row["status"] == "resource_limited" and action == "resume"):
                 if action == "cancel" and row["status"] == "cancelled":
                     return self._public(row)
                 raise CoreError("Recovery session is terminal")
             state = {"pause":"paused","resume":"pending","cancel":"cancelled"}[action]
-            if action == "resume" and row["status"] != "paused":
+            if action == "resume" and row["status"] == "resource_limited":
+                if not isinstance(reason,str) or not 1 <= len(reason.strip()) <= 1000:
+                    raise CoreError("Resource-limited trial requires an explicit retry reason")
+            elif action == "resume" and row["status"] != "paused":
                 raise CoreError("Only paused recovery sessions can resume")
+            if action == "cancel":
+                self._cleanup(row)
             self.db.execute("UPDATE recovery_sessions SET status=?,token=NULL,lease_until=0 WHERE id=?", (state,job))
             self._event(case,"recovery_session_"+{"pause":"paused","resume":"resumed","cancel":"cancelled"}[action],{"session":job})
         return self.get(case,job)
@@ -201,8 +229,8 @@ class RecoverySessions:
     def pause(self,case,job):
         return self._control(case,job,"pause")
 
-    def resume(self,case,job):
-        return self._control(case,job,"resume")
+    def resume(self,case,job,*,reason=None):
+        return self._control(case,job,"resume",reason)
 
     def cancel(self,case,job):
         return self._control(case,job,"cancel")
@@ -222,7 +250,7 @@ class RecoverySessions:
                 raise CoreError("Recovery cumulative time window exceeded")
             state = "pending" if row["status"] == "deadline" else row["status"]
             self.db.execute("UPDATE recovery_sessions SET deadline=?,status=? WHERE id=?", (deadline,state,job))
-            self._event(case,"recovery_session_extended",{"session":job,"deadline":deadline,"priority":True,"reason":reason.strip()})
+            self._event(case,"recovery_session_extended",{"session":job,"deadline":deadline,"status":state,"priority":True,"reason":reason.strip()})
         return self.get(case,job)
 
     def _stop(self,case,job,token):
@@ -248,12 +276,14 @@ class RecoverySessions:
                 raise CoreError("Recovery worker already holds a live lease")
             if row["deadline"] <= time.time():
                 self.db.execute("UPDATE recovery_sessions SET status='deadline',token=NULL,lease_until=0 WHERE id=?", (job,))
+                self._event(case,"recovery_session_checkpoint",{"session":job,"status":"deadline","attempts":row["attempts"]})
                 return self.get(case,job)
+            self._cleanup(row)
             token = uuid4().hex
             self.db.execute("UPDATE recovery_sessions SET status='running',token=?,lease_until=? WHERE id=?",
                             (token,time.time()+max_seconds+30,job))
             self._event(case,"recovery_session_claimed",{"session":job})
-        scratch = None
+        scratch, published_path = None, None
         stop_at = time.monotonic()+max_seconds
         try:
             artifact,_ = verified_result(self.core,case,row["task_id"])
@@ -261,20 +291,37 @@ class RecoverySessions:
             if not hmac.compare_digest(commitment,row["material_commitment"]) or len(values) != row["total_candidates"]:
                 raise CoreError("Recovery candidate material changed")
             output_folder = storage_root(self.core.home/"cases"/case/"recovered")
+            stage_folder = storage_root(self.core.home/"recovery-staging")
             completed = 0
             while row["cursor"] < len(values) and completed < max_attempts:
                 if self._stop(case,job,token) or time.monotonic() >= stop_at:
                     break
                 value = values[row["cursor"]]
                 candidate = bytes.fromhex(value.decode("ascii")) if row["mode"] == "ccaes1" else value
-                scratch = output_folder/(job+"-"+token+"-"+uuid4().hex+".recovered")
-                request = {"mode":row["mode"],"source":artifact["copy"],"candidate":candidate.hex(),"output":str(scratch)}
-                remaining = min(stop_at-time.monotonic(),row["deadline"]-time.time(),self.core.timeout,10)
+                scratch = stage_folder/(job+"-"+token+".pending")
+                request = {"mode":row["mode"],"source":artifact["copy"],"candidate":candidate.hex(),"output":str(scratch),"source_sha256":artifact["sha256"]}
+                remaining = min(stop_at-time.monotonic(),row["deadline"]-time.time(),self.core.timeout)
                 if remaining <= 0:
                     break
-                response = run_bounded([sys.executable,"-I",str(Path(__file__).with_name("recovery_trial.py"))],
+                try:
+                    response = run_bounded([sys.executable,"-I",str(Path(__file__).with_name("recovery_trial.py"))],
                                        encoded(request),cwd=output_folder,timeout=remaining,max_output=4096,
-                                       should_stop=lambda:self._stop(case,job,token))
+                                           should_stop=lambda:self._stop(case,job,token))
+                except CoreError:
+                    if self._stop(case,job,token):
+                        break
+                    with self.db:
+                        self.db.execute("BEGIN IMMEDIATE")
+                        self._ready(case)
+                        current = self._row(case,job)
+                        self._validate(current)
+                        if self._stop(case,job,token):
+                            break
+                        row["attempts"] += 1
+                        row["status"] = "resource_limited"
+                        self.db.execute("UPDATE recovery_sessions SET status='resource_limited',attempts=? WHERE id=?", (row["attempts"],job))
+                        self._progress(row)
+                    break
                 result = json.loads(response["stdout"])
                 if type(result.get("matched")) is not bool or any(k not in
                     ("matched","authenticated","sha256","size","algorithm","private_material_validated") for k in result):
@@ -289,17 +336,25 @@ class RecoverySessions:
                         if len(plain) != result["size"] or hashlib.sha256(plain).hexdigest() != result.get("sha256"):
                             raise CoreError("Recovery output integrity failed")
                         published = {k:result[k] for k in ("authenticated","sha256","size","algorithm")}
-                        published["output"] = str(scratch)
+                        published_path = output_folder/(job+"-"+token+".recovered")
+                        published["output"] = str(published_path)
                     else:
                         if result.get("private_material_validated") is not True:
                             raise CoreError("Private key validation missing")
                         published = {"private_material_validated":True,"algorithm":result["algorithm"]}
+                if published_path is not None:
+                    with self.db:
+                        self.db.execute("BEGIN IMMEDIATE")
+                        if self._stop(case,job,token):
+                            break
+                        self._ready(case)
+                        self._event(case,"recovery_session_publication_reserved",{"session":job,"output":str(published_path)})
                 with self.db:
                     self.db.execute("BEGIN IMMEDIATE")
-                    self._ready(case)
                     current = self._row(case,job)
                     if self._stop(case,job,token):
                         break
+                    self._ready(case)
                     self._validate(current)
                     verified_result(self.core,case,row["task_id"])
                     row["cursor"] += 1
@@ -309,10 +364,12 @@ class RecoverySessions:
                     self.db.execute("UPDATE recovery_sessions SET cursor=?,attempts=?,status=?,result=? WHERE id=?",
                                     (row["cursor"],row["attempts"],state,payload,job))
                     row.update(status=state,result=payload)
+                    if published_path is not None:
+                        os.replace(scratch,published_path)
                     self._progress(row)
                 completed += 1
                 if published:
-                    scratch = None
+                    scratch, published_path = None, None
                     break
                 scratch.unlink(missing_ok=True)
                 scratch = None
@@ -321,13 +378,19 @@ class RecoverySessions:
         finally:
             if scratch is not None:
                 scratch.unlink(missing_ok=True)
+            if published_path is not None:
+                # An interrupt can occur just after SQLite commits. Preserve a committed output.
+                durable = self._row(case,job)
+                if durable["status"] != "succeeded" or not durable["result"] or json.loads(durable["result"]).get("output") != str(published_path):
+                    published_path.unlink(missing_ok=True)
             with self.db:
                 self.db.execute("BEGIN IMMEDIATE")
                 current = self._row(case,job)
                 if current["token"] == token:
                     state = current["status"]
                     if state == "running":
-                        state = "deadline" if current["deadline"] <= time.time() else "pending"
+                        state = ("cancelled" if self.core.get(case)["state"] == "CANCELADO" else
+                                 "deadline" if current["deadline"] <= time.time() else "pending")
                     self.db.execute("UPDATE recovery_sessions SET status=?,token=NULL,lease_until=0 WHERE id=?", (state,job))
                     self._event(case,"recovery_session_checkpoint",{"session":job,"status":state,"attempts":current["attempts"]})
         return self.get(case,job)

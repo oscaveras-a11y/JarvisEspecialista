@@ -27,7 +27,8 @@ def scan_keys(core, case, directory, *, max_files=100, recursive=False,
         if size > 1024 * 1024:
             skipped += 1
             continue
-        result = inspect_key(path)
+        result = inspect_key(path,timeout=min(30,core.timeout-(time.monotonic()-started)),
+                             should_stop=lambda: core.get(case)["paused"] or not core.authorize(case,recovery=True))
         if result["material_kind"] != "unknown":
             candidates.append({"path": str(path), **result})
     result = {"candidates": candidates, "files_examined": len(files), "skipped": skipped,

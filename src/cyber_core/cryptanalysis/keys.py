@@ -4,6 +4,9 @@ import datetime
 import hashlib
 import os
 import stat
+import sys
+import json
+import math
 from pathlib import Path
 from cryptography import x509
 from cryptography.exceptions import UnsupportedAlgorithm
@@ -125,7 +128,9 @@ def inspect_data(data, *, complete=True):
                       certificate_currently_valid=before <= now <= after)
     return result
 
-def inspect_key(path, *, max_bytes=MAX_BYTES):
+def inspect_key(path, *, max_bytes=MAX_BYTES, timeout=30, should_stop=None):
+    if type(timeout) not in (int,float) or not math.isfinite(timeout) or not 0 < timeout <= 3600:
+        raise CoreError("Invalid key inspection timeout")
     if type(max_bytes) is not int or not 1 <= max_bytes <= MAX_BYTES:
         raise CoreError("Invalid key inspection byte limit")
     source = local_path(path)
@@ -139,4 +144,12 @@ def inspect_key(path, *, max_bytes=MAX_BYTES):
             (before.st_ino, before.st_size, before.st_mtime_ns) !=
             (after.st_ino, after.st_size, after.st_mtime_ns)):
         raise CoreError("Key input changed or exceeds byte limit")
-    return {**inspect_data(data), "sha256": hashlib.sha256(data).hexdigest(), "size": len(data)}
+    from cyber_core.agents.runner import run_bounded
+    digest = hashlib.sha256(data).hexdigest()
+    response = run_bounded([sys.executable,"-I",str(Path(__file__).with_name("keys_child.py"))],
+                           json.dumps({"source":str(source),"sha256":digest,"max_bytes":max_bytes}),
+                           cwd=source.parent,timeout=timeout,max_output=16384,should_stop=should_stop)
+    result = json.loads(response["stdout"])
+    if not isinstance(result,dict) or "material_kind" not in result:
+        raise CoreError("Invalid key metadata response")
+    return {**result,"sha256":digest,"size":len(data)}
