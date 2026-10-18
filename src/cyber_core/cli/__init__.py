@@ -84,15 +84,23 @@ def parser():
     zipcrack = sub.add_parser('recover-zip-password', help='Authorized real recovery of a ZIP file\'s password (classic PKZIP encryption only)')
     zipcrack.add_argument('case')
     zipcrack.add_argument('path')
-    zipcrack.add_argument('--wordlist', required=True, help='Local file with one candidate password per line')
-    zipcrack.add_argument('--max-candidates', type=int, default=10000, help='Maximum candidate passwords to try')
-    zipcrack.add_argument('--max-seconds', type=float, default=30)
+    zipcrack.add_argument('--wordlist', required=True,
+                          help='Local file with one candidate password per line, or the literal "rockyou" '
+                               'to use the bundled 14,344,391-password breach list')
+    zipcrack.add_argument('--max-candidates', type=int, default=None,
+                          help='Maximum candidate passwords to try (default: 10000, or the full bundled list size with --wordlist rockyou)')
+    zipcrack.add_argument('--max-seconds', type=float, default=None,
+                          help='Time budget in seconds (default: 30, or 21600 with --wordlist rockyou)')
     recoverpw = sub.add_parser('recover-password', help='Recuperar senhas: detects the file format (ZIP, PDF, ...) and tries real recovery; reports unsupported formats honestly')
     recoverpw.add_argument('case')
     recoverpw.add_argument('path')
-    recoverpw.add_argument('--wordlist', required=True, help='Local file with one candidate password per line')
-    recoverpw.add_argument('--max-candidates', type=int, default=10000, help='Maximum candidate passwords to try')
-    recoverpw.add_argument('--max-seconds', type=float, default=30)
+    recoverpw.add_argument('--wordlist', required=True,
+                           help='Local file with one candidate password per line, or the literal "rockyou" '
+                                'to use the bundled 14,344,391-password breach list')
+    recoverpw.add_argument('--max-candidates', type=int, default=None,
+                           help='Maximum candidate passwords to try (default: 10000, or the full bundled list size with --wordlist rockyou)')
+    recoverpw.add_argument('--max-seconds', type=float, default=None,
+                           help='Time budget in seconds (default: 30, or 21600 with --wordlist rockyou)')
     analyze = sub.add_parser('analyze-file', help='Acquire verified copy and analyze statically')
     analyze.add_argument('case')
     analyze.add_argument('path')
@@ -251,13 +259,33 @@ def _main(argv=None):
                 candidates = [line for line in wordlist.read_text(encoding='utf-8', errors='replace').splitlines() if line]
                 result = core.self_test_recovery(args.case, args.path, candidates, max_attempts=args.max_candidates, max_seconds=args.max_seconds)
             elif cmd == 'recover-zip-password':
-                wordlist = local_path(args.wordlist)
-                candidates = [line for line in wordlist.read_text(encoding='utf-8', errors='replace').splitlines() if line]
-                result = core.recover_zip_password(args.case, args.path, candidates, max_attempts=args.max_candidates, max_seconds=args.max_seconds)
+                from cyber_core.cryptanalysis.wordlists import BUILTIN_WORDLIST_ENTRIES
+                builtin = args.wordlist == 'rockyou'
+                max_attempts = args.max_candidates if args.max_candidates is not None else (
+                    BUILTIN_WORDLIST_ENTRIES if builtin else 10000)
+                max_seconds = args.max_seconds if args.max_seconds is not None else (21600 if builtin else 30)
+                if builtin:
+                    result = core.recover_zip_password(args.case, args.path, max_attempts=max_attempts,
+                                                        max_seconds=max_seconds, use_builtin_wordlist=True)
+                else:
+                    wordlist = local_path(args.wordlist)
+                    candidates = [line for line in wordlist.read_text(encoding='utf-8', errors='replace').splitlines() if line]
+                    result = core.recover_zip_password(args.case, args.path, candidates, max_attempts=max_attempts,
+                                                        max_seconds=max_seconds)
             elif cmd == 'recover-password':
-                wordlist = local_path(args.wordlist)
-                candidates = [line for line in wordlist.read_text(encoding='utf-8', errors='replace').splitlines() if line]
-                result = core.recover_password(args.case, args.path, candidates, max_attempts=args.max_candidates, max_seconds=args.max_seconds)
+                from cyber_core.cryptanalysis.wordlists import BUILTIN_WORDLIST_ENTRIES
+                builtin = args.wordlist == 'rockyou'
+                max_attempts = args.max_candidates if args.max_candidates is not None else (
+                    BUILTIN_WORDLIST_ENTRIES if builtin else 10000)
+                max_seconds = args.max_seconds if args.max_seconds is not None else (21600 if builtin else 30)
+                if builtin:
+                    result = core.recover_password(args.case, args.path, max_attempts=max_attempts,
+                                                    max_seconds=max_seconds, use_builtin_wordlist=True)
+                else:
+                    wordlist = local_path(args.wordlist)
+                    candidates = [line for line in wordlist.read_text(encoding='utf-8', errors='replace').splitlines() if line]
+                    result = core.recover_password(args.case, args.path, candidates, max_attempts=max_attempts,
+                                                    max_seconds=max_seconds)
             elif cmd == 'run':
                 result = core.run_one(args.case)
             elif cmd == 'custody':

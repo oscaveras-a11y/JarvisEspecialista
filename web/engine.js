@@ -48,17 +48,22 @@ async function sendEngineFile(id,tool){
  if(file.size>liveClient.capabilities.max_file_bytes)throw Error('O limite por arquivo é 4 MiB.');
  const payload={};
  if(tool==='recover-password'){
-  const candidates=document.getElementById('task-candidates').value.split('\n').map(line=>line.replace(/\r$/,'')).filter(Boolean);
-  if(!candidates.length)throw Error('Informe ao menos uma senha candidata, uma por linha.');
-  if(candidates.length>5000)throw Error('No máximo 5000 senhas candidatas por envio.');
-  payload.candidates=candidates;
+  if(document.getElementById('task-wordlist-builtin').checked){
+   payload.wordlist='rockyou';
+  }else{
+   const candidates=document.getElementById('task-candidates').value.split('\n').map(line=>line.replace(/\r$/,'')).filter(Boolean);
+   if(!candidates.length)throw Error('Informe ao menos uma senha candidata (uma por linha) ou marque a lista embutida.');
+   if(candidates.length>5000)throw Error('No máximo 5000 senhas candidatas por envio.');
+   payload.candidates=candidates;
+  }
  }
  const content=await new Promise((resolve,reject)=>{
   const reader=new FileReader();reader.onload=()=>resolve(String(reader.result).split(',')[1]||'');
   reader.onerror=()=>reject(Error('Não foi possível ler o arquivo selecionado.'));reader.readAsDataURL(file);
  });
  await liveClient.request('/cases/'+id+'/files',{name:file.name,tool,content_base64:content,...payload});
- document.getElementById('task-file').value='';document.getElementById('task-candidates').value='';await refreshEngine();
+ document.getElementById('task-file').value='';document.getElementById('task-candidates').value='';
+ document.getElementById('task-wordlist-builtin').checked=false;await refreshEngine();
 }
 function renderEngineResults(){
  const c=getCase(state.activeCase),element=document.getElementById('engine-results');
@@ -106,9 +111,16 @@ function prepareEngineUI(){
  for(const option of [...document.getElementById('task-tool').options])if(!['analyze-file','analyze-firmware','assess-recovery','recover-password','inventory-disk','inventory-pcap'].includes(option.value))option.remove();
  document.querySelector('#task-tool option[value="assess-recovery"]').textContent='Avaliar recuperação (sem tentar senha)';
  document.getElementById('task-tool').addEventListener('change',event=>{
-  document.getElementById('task-candidates').hidden=event.target.value!=='recover-password';
+  const recovering=event.target.value==='recover-password';
+  document.getElementById('task-candidates').hidden=!recovering;
+  document.getElementById('task-wordlist-builtin-label').hidden=!recovering;
  });
- document.getElementById('task-candidates').hidden=document.getElementById('task-tool').value!=='recover-password';
+ const recoveringNow=document.getElementById('task-tool').value==='recover-password';
+ document.getElementById('task-candidates').hidden=!recoveringNow;
+ document.getElementById('task-wordlist-builtin-label').hidden=!recoveringNow;
+ document.getElementById('task-wordlist-builtin').addEventListener('change',event=>{
+  document.getElementById('task-candidates').disabled=event.target.checked;
+ });
  document.getElementById('engine-results-card').hidden=false;
  document.getElementById('engine-run-pending').hidden=false;
  document.getElementById('engine-refresh').hidden=false;

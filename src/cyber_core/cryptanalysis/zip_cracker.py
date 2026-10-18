@@ -64,7 +64,12 @@ def attempt_zip_password(path, candidates, *, max_attempts, deadline):
             tried += 1
             try:
                 archive.read(target, pwd=candidate.encode('utf-8', errors='surrogateescape'))
-            except RuntimeError:
+            except (RuntimeError, zipfile.BadZipFile):
+                # RuntimeError: ZipCrypto's 1-byte header check rejected the
+                # candidate outright. BadZipFile: that check has a ~1/256
+                # chance of a false positive, so with large wordlists a wrong
+                # password occasionally passes it, decompresses to garbage,
+                # and fails the CRC-32 check instead — also just "wrong".
                 continue
             except NotImplementedError:
                 return {'recovered': False, 'attempts': tried, 'status': 'unsupported_encryption_method'}

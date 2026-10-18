@@ -27,6 +27,11 @@ MAX_FILE = 4 * 1024 * 1024
 MAX_BODY = 6 * 1024 * 1024
 TOOLS = {"analyze-file", "analyze-firmware", "assess-recovery", "inventory-disk", "inventory-pcap", "recover-password"}
 MAX_CANDIDATES_WEB = 5000
+# The bundled wordlist (14,344,391 real breached passwords) is run through
+# the panel with a far longer budget than a hand-typed list: it's executed
+# async in the worker thread, polled from the UI, so a long run never holds
+# the HTTP connection open.
+BUILTIN_WORDLIST_MAX_SECONDS = 3600
 ASSETS = {"index.html", "app.js", "engine.js", "styles.css",
           "assets/icons.svg", "assets/core-shield.svg"}
 CASE_ROUTE = re.compile(r"/api/cases/([a-f0-9]{32})/(files|pause|resume|cancel|report|run)")
@@ -158,22 +163,28 @@ class Application:
         return {"id": identifier}
 
     def submit_file(self, identifier, data):
-        only(data, {"name", "tool", "content_base64", "candidates"})
+        only(data, {"name", "tool", "content_base64", "candidates", "wordlist"})
         name, tool = text(data, "name", 160), text(data, "tool", 64)
         if not re.fullmatch(r"[\w .()-]{1,160}", name) or name in {".", ".."} or ".." in name:
             raise HTTPFault(400, "Nome de arquivo inválido")
         if tool not in TOOLS:
             raise HTTPFault(400, "Análise não permitida")
-        candidates = None
+        candidates, use_builtin_wordlist = None, False
         if tool == "recover-password":
-            raw_candidates = data.get("candidates")
-            if not isinstance(raw_candidates, list) or not 1 <= len(raw_candidates) <= MAX_CANDIDATES_WEB:
-                raise HTTPFault(400, "Forneça de 1 a " + str(MAX_CANDIDATES_WEB) + " senhas candidatas")
-            candidates = []
-            for item in raw_candidates:
-                if not isinstance(item, str) or not item or len(item) > 1024:
-                    raise HTTPFault(400, "Senha candidata inválida")
-                candidates.append(item)
+            if data.get("wordlist") == "rockyou":
+                if "candidates" in data:
+                    raise HTTPFault(400, "Não envie senhas candidatas junto com a lista embutida")
+                use_builtin_wordlist = True
+            else:
+                raw_candidates = data.get("candidates")
+                if not isinstance(raw_candidates, list) or not 1 <= len(raw_candidates) <= MAX_CANDIDATES_WEB:
+                    raise HTTPFault(400, "Forneça de 1 a " + str(MAX_CANDIDATES_WEB) +
+                                    " senhas candidatas, ou use a lista embutida (rockyou)")
+                candidates = []
+                for item in raw_candidates:
+                    if not isinstance(item, str) or not item or len(item) > 1024:
+                        raise HTTPFault(400, "Senha candidata inválida")
+                    candidates.append(item)
         encoded = data.get("content_base64")
         if not isinstance(encoded, str):
             raise HTTPFault(400, "Conteúdo do arquivo ausente")
@@ -205,7 +216,9 @@ class Application:
             self.last_error = None
             if tool == "recover-password":
                 self.last_recovery = None
-            self.worker = threading.Thread(target=self.execute, args=(identifier, tool, source, task, candidates), daemon=True)
+            self.worker = threading.Thread(target=self.execute,
+                                           args=(identifier, tool, source, task, candidates, use_builtin_wordlist),
+                                           daemon=True)
             self.worker.start()
             return {"accepted": True, "task": task}
         except BaseException:
@@ -214,7 +227,7 @@ class Application:
             self.job_lock.release()
             raise
 
-    def execute(self, identifier, tool, source=None, task=None, candidates=None):
+    def execute(self, identifier, tool, source=None, task=None, candidates=None, use_builtin_wordlist=False):
         try:
             with self.core() as core:
                 if tool == "inventory-disk":
@@ -224,7 +237,12 @@ class Application:
                     from cyber_core.operations import inventory_pcap
                     inventory_pcap(core, identifier, source, max_bytes=MAX_FILE)
                 elif tool == "recover-password":
-                    result = core.recover_password(identifier, source, candidates, max_attempts=100000, max_seconds=180)
+                    if use_builtin_wordlist:
+                        from cyber_core.cryptanalysis.wordlists import BUILTIN_WORDLIST_ENTRIES
+                        result = core.recover_password(identifier, source, max_attempts=BUILTIN_WORDLIST_ENTRIES,
+                                                        max_seconds=BUILTIN_WORDLIST_MAX_SECONDS, use_builtin_wordlist=True)
+                    else:
+                        result = core.recover_password(identifier, source, candidates, max_attempts=100000, max_seconds=180)
                     self.last_recovery = dict(result)
                 elif tool == "pending":
                     core.run_queue(identifier, max_tasks=20, max_seconds=300)

@@ -36,8 +36,15 @@ def detect_format(path):
 
 
 def attempt_password(path, candidates, *, max_attempts, deadline):
-    if not isinstance(candidates, (list, tuple)) or not 1 <= len(candidates) <= 100000:
-        raise CoreError('Provide between 1 and 100000 candidate passwords')
+    # A plain list/tuple is bounded here (a sane upper bound for something a
+    # caller typed or uploaded by hand); a generator — e.g. the bundled
+    # wordlist, which has no fixed length worth materializing — is bounded
+    # by max_attempts/deadline instead, enforced below by each cracker.
+    if isinstance(candidates, (list, tuple)):
+        if not 1 <= len(candidates) <= 100000:
+            raise CoreError('Provide between 1 and 100000 candidate passwords')
+    elif candidates is None or not hasattr(candidates, '__iter__'):
+        raise CoreError('Provide candidate passwords as a list or an iterable')
     identifier = detect_format(path)
     if identifier == 'zip':
         from cyber_core.cryptanalysis.zip_cracker import attempt_zip_password

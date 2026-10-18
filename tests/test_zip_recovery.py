@@ -4,6 +4,7 @@ import time
 import unittest
 import zipfile
 from pathlib import Path
+from unittest.mock import patch
 
 from cyber_core.service import Core, CoreError
 from cyber_core.cryptanalysis.zip_cracker import attempt_zip_password
@@ -119,6 +120,30 @@ class ZipRecoveryServiceTests(unittest.TestCase):
         self.core.set_authorization_basis(case, kind='owner_consent', authority='dono', reference='termo', examiner='op', scope_note='arquivo proprio')
         with self.assertRaises(CoreError):
             self.core.recover_zip_password(case, str(self.archive), ['minha-senha-real'])
+
+    def test_builtin_wordlist_is_streamed_from_the_bundled_module_not_a_fixed_list(self):
+        # Exercises the real wiring (service -> zip_cracker) against the
+        # actual bundled generator, without running the full 14.3M-entry
+        # list in the test suite: patch its source to a short generator
+        # that still proves no candidates/max 100000 list is required.
+        self.core.set_authorization_basis(self.case, kind='owner_consent', authority='dono', reference='termo', examiner='op', scope_note='arquivo proprio')
+        with patch('cyber_core.cryptanalysis.wordlists.iter_builtin_wordlist',
+                  return_value=iter(['nope', 'minha-senha-real', 'other'])):
+            out = self.core.recover_zip_password(self.case, str(self.archive), max_attempts=100, max_seconds=10,
+                                                 use_builtin_wordlist=True)
+        self.assertTrue(out['recovered'])
+        self.assertEqual(out['password'], 'minha-senha-real')
+        blob = json.dumps(self.core.audit(self.case))
+        self.assertNotIn('minha-senha-real', blob)
+        self.assertIn('wordlist', blob)
+        self.assertIn('rockyou', blob)
+
+    def test_builtin_wordlist_and_explicit_candidates_are_mutually_exclusive(self):
+        self.core.set_authorization_basis(self.case, kind='owner_consent', authority='dono', reference='termo', examiner='op', scope_note='arquivo proprio')
+        with self.assertRaises(CoreError):
+            self.core.recover_zip_password(self.case, str(self.archive), ['minha-senha-real'], use_builtin_wordlist=True)
+        with self.assertRaises(CoreError):
+            self.core.recover_zip_password(self.case, str(self.archive))
 
 
 if __name__ == '__main__':
