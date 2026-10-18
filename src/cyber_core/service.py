@@ -494,6 +494,32 @@ class Core:
             audit(self.db, case, 'self_test_recovery', {'recovered': result['recovered'], 'attempts': result['attempts'], 'status': result['status']})
         return result
 
+    def recover_zip_password(self, case, path, candidates, *, max_attempts=10000, max_seconds=30):
+        # Real recovery, not a self-test: the whole point is to hand back a
+        # lost password, so a match is returned to the caller (never written
+        # to the audit trail). Requires owner_consent, same bar as
+        # self_test_recovery and make_lab_envelope, because trying many
+        # candidate passwords against a file is sensitive even when bounded.
+        row = self.authorize(case, recovery=True)
+        self._ensure_not_paused(case, row)
+        basis = self.db.execute('SELECT kind FROM authorization_basis WHERE case_id=?', (case,)).fetchone()
+        if basis is None or basis['kind'] != 'owner_consent':
+            raise CoreError('ZIP password recovery requires an owner_consent authorization basis')
+        if not isinstance(candidates, (list, tuple)) or not 1 <= len(candidates) <= 100000:
+            raise CoreError('Provide between 1 and 100000 candidate passwords')
+        if not 0 < max_attempts <= 100000 or not 0 < max_seconds <= 3600:
+            raise CoreError('Invalid recovery limits')
+        source = self.authorize(case, path, recovery=True)
+        if source.stat().st_size > self.max_bytes:
+            raise CoreError('ZIP file exceeds byte limit')
+        from cyber_core.cryptanalysis.zip_cracker import attempt_zip_password
+        result = attempt_zip_password(source, candidates, max_attempts=max_attempts, deadline=time.monotonic() + max_seconds)
+        with self.db:
+            self.authorize(case)
+            audit(self.db, case, 'zip_password_recovery', {'recovered': result['recovered'], 'attempts': result['attempts'],
+                                                            'status': result['status'], 'source': str(source)})
+        return result
+
     def make_lab_envelope(self, case, output_path, *, passphrase, content):
         # Create a CCPW1 lab target on the operator's OWN scope, to exercise the
         # recovery self-test end to end. Requires owner_consent; passphrase not logged.

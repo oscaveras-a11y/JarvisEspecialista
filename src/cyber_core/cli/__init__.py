@@ -81,6 +81,12 @@ def parser():
     selftest.add_argument('--wordlist', required=True, help='Local file with one candidate passphrase per line')
     selftest.add_argument('--max-candidates', type=int, default=10000, help='Maximum candidate passphrases to try')
     selftest.add_argument('--max-seconds', type=float, default=30)
+    zipcrack = sub.add_parser('recover-zip-password', help='Authorized real recovery of a ZIP file\'s password (classic PKZIP encryption only)')
+    zipcrack.add_argument('case')
+    zipcrack.add_argument('path')
+    zipcrack.add_argument('--wordlist', required=True, help='Local file with one candidate password per line')
+    zipcrack.add_argument('--max-candidates', type=int, default=10000, help='Maximum candidate passwords to try')
+    zipcrack.add_argument('--max-seconds', type=float, default=30)
     analyze = sub.add_parser('analyze-file', help='Acquire verified copy and analyze statically')
     analyze.add_argument('case')
     analyze.add_argument('path')
@@ -238,6 +244,10 @@ def _main(argv=None):
                 wordlist = local_path(args.wordlist)
                 candidates = [line for line in wordlist.read_text(encoding='utf-8', errors='replace').splitlines() if line]
                 result = core.self_test_recovery(args.case, args.path, candidates, max_attempts=args.max_candidates, max_seconds=args.max_seconds)
+            elif cmd == 'recover-zip-password':
+                wordlist = local_path(args.wordlist)
+                candidates = [line for line in wordlist.read_text(encoding='utf-8', errors='replace').splitlines() if line]
+                result = core.recover_zip_password(args.case, args.path, candidates, max_attempts=args.max_candidates, max_seconds=args.max_seconds)
             elif cmd == 'run':
                 result = core.run_one(args.case)
             elif cmd == 'custody':
