@@ -494,30 +494,48 @@ class Core:
             audit(self.db, case, 'self_test_recovery', {'recovered': result['recovered'], 'attempts': result['attempts'], 'status': result['status']})
         return result
 
-    def recover_zip_password(self, case, path, candidates, *, max_attempts=10000, max_seconds=30):
-        # Real recovery, not a self-test: the whole point is to hand back a
-        # lost password, so a match is returned to the caller (never written
-        # to the audit trail). Requires owner_consent, same bar as
-        # self_test_recovery and make_lab_envelope, because trying many
-        # candidate passwords against a file is sensitive even when bounded.
+    def _authorize_password_recovery(self, case, path, candidates, max_attempts, max_seconds):
+        # Shared gate for every real (non-self-test) password recovery route:
+        # the whole point is to hand back a lost password, so a match is
+        # returned to the caller — never written to the audit trail. Requires
+        # owner_consent, same bar as self_test_recovery/make_lab_envelope,
+        # because trying many candidate passwords is sensitive even bounded.
         row = self.authorize(case, recovery=True)
         self._ensure_not_paused(case, row)
         basis = self.db.execute('SELECT kind FROM authorization_basis WHERE case_id=?', (case,)).fetchone()
         if basis is None or basis['kind'] != 'owner_consent':
-            raise CoreError('ZIP password recovery requires an owner_consent authorization basis')
+            raise CoreError('Password recovery requires an owner_consent authorization basis')
         if not isinstance(candidates, (list, tuple)) or not 1 <= len(candidates) <= 100000:
             raise CoreError('Provide between 1 and 100000 candidate passwords')
         if not 0 < max_attempts <= 100000 or not 0 < max_seconds <= 3600:
             raise CoreError('Invalid recovery limits')
         source = self.authorize(case, path, recovery=True)
         if source.stat().st_size > self.max_bytes:
-            raise CoreError('ZIP file exceeds byte limit')
+            raise CoreError('File exceeds byte limit')
+        return source
+
+    def recover_zip_password(self, case, path, candidates, *, max_attempts=10000, max_seconds=30):
+        source = self._authorize_password_recovery(case, path, candidates, max_attempts, max_seconds)
         from cyber_core.cryptanalysis.zip_cracker import attempt_zip_password
         result = attempt_zip_password(source, candidates, max_attempts=max_attempts, deadline=time.monotonic() + max_seconds)
         with self.db:
             self.authorize(case)
             audit(self.db, case, 'zip_password_recovery', {'recovered': result['recovered'], 'attempts': result['attempts'],
                                                             'status': result['status'], 'source': str(source)})
+        return result
+
+    def recover_password(self, case, path, candidates, *, max_attempts=10000, max_seconds=30):
+        # Format-agnostic entry point: detects the file type and routes to
+        # whichever recovery implementation exists for it (zip, pdf, ...),
+        # or reports honestly that the format isn't supported yet.
+        source = self._authorize_password_recovery(case, path, candidates, max_attempts, max_seconds)
+        from cyber_core.cryptanalysis.password_recovery import attempt_password
+        result = attempt_password(source, candidates, max_attempts=max_attempts, deadline=time.monotonic() + max_seconds)
+        with self.db:
+            self.authorize(case)
+            audit(self.db, case, 'password_recovery', {'recovered': result['recovered'], 'attempts': result['attempts'],
+                                                        'status': result['status'], 'format_id': result.get('format_id'),
+                                                        'source': str(source)})
         return result
 
     def make_lab_envelope(self, case, output_path, *, passphrase, content):

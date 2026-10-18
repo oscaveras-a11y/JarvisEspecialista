@@ -127,9 +127,11 @@
             <option value="strings">strings</option>
             <option value="differentiate">differentiate</option>
             <option value="assess-recovery">assess-recovery</option>
+            <option value="recover-password">Recuperar senhas</option>
           </select>
           <input type="file" id="task-file" aria-label="Arquivo autorizado (até 4 MiB)" hidden>
           <input id="task-path" aria-label="Caminho demonstrativo" placeholder="caminho do arquivo autorizado" required>
+          <textarea id="task-candidates" aria-label="Senhas candidatas, uma por linha" placeholder="uma senha candidata por linha" hidden></textarea>
           <button type="submit" class="btn btn-primary">Enfileirar</button>
         </form>
         <div class="form-actions"><button class="btn" type="button" id="engine-refresh" hidden>Atualizar motor</button><button class="btn" type="button" id="engine-run-pending" hidden>Executar pendentes</button></div>
