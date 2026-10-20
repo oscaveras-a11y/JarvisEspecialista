@@ -11,12 +11,14 @@ from cyber_core.errors import CoreError
 SAMPLE_BYTES = 64
 
 # Formats this dispatcher can actually attempt passwords against.
-_HANDLERS = ('zip', 'pdf')
+_HANDLERS = ('zip', 'pdf', '7z')
 
 _UNSUPPORTED_NOTES = {
-    'rar5': 'RAR5 encryption is not yet supported by this recovery tool.',
-    'rar4': 'RAR4 encryption is not yet supported by this recovery tool.',
-    '7z': '7-Zip AES-256 encryption is not yet supported by this recovery tool.',
+    'rar5': 'RAR5 encryption is not yet supported by this recovery tool: real-world RAR archives need '
+            'either the proprietary unrar decompressor or a from-scratch reimplementation of its '
+            'compression format, neither of which this tool bundles yet.',
+    'rar4': 'RAR4 encryption is not yet supported by this recovery tool (same limitation as RAR5: no '
+            'bundled RAR decompressor).',
     'ole-cfb': 'Encrypted legacy Office documents (.doc/.xls/.ppt) are not yet supported by this recovery tool.',
     'luks': 'LUKS volume recovery is not yet supported by this recovery tool.',
     'openssl-salted': 'OpenSSL "Salted__" envelopes declare no cipher/KDF in the header; not yet supported.',
@@ -52,6 +54,9 @@ def attempt_password(path, candidates, *, max_attempts, deadline):
     elif identifier == 'pdf':
         from cyber_core.cryptanalysis.pdf_cracker import attempt_pdf_password
         result = attempt_pdf_password(path, candidates, max_attempts=max_attempts, deadline=deadline)
+    elif identifier == '7z':
+        from cyber_core.cryptanalysis.sevenzip_cracker import attempt_7z_password
+        result = attempt_7z_password(path, candidates, max_attempts=max_attempts, deadline=deadline)
     else:
         note = _UNSUPPORTED_NOTES.get(identifier, 'No password-recovery implementation exists yet for this format.')
         return {'recovered': False, 'attempts': 0, 'status': 'unsupported_format', 'format_id': identifier, 'note': note}
