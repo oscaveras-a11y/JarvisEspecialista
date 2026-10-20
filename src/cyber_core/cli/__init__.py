@@ -90,7 +90,7 @@ def parser():
     zipcrack.add_argument('--max-candidates', type=int, default=None,
                           help='Maximum candidate passwords to try (default: 10000, or the full bundled list size with --wordlist rockyou)')
     zipcrack.add_argument('--max-seconds', type=float, default=None,
-                          help='Time budget in seconds (default: 30, or 21600 with --wordlist rockyou)')
+                          help='Time budget in seconds (default: 30, or 86400 / 24h with --wordlist rockyou)')
     recoverpw = sub.add_parser('recover-password', help='Recuperar senhas: detects the file format (ZIP, PDF, ...) and tries real recovery; reports unsupported formats honestly')
     recoverpw.add_argument('case')
     recoverpw.add_argument('path')
@@ -100,7 +100,7 @@ def parser():
     recoverpw.add_argument('--max-candidates', type=int, default=None,
                            help='Maximum candidate passwords to try (default: 10000, or the full bundled list size with --wordlist rockyou)')
     recoverpw.add_argument('--max-seconds', type=float, default=None,
-                           help='Time budget in seconds (default: 30, or 21600 with --wordlist rockyou)')
+                           help='Time budget in seconds (default: 30, or 86400 / 24h with --wordlist rockyou)')
     analyze = sub.add_parser('analyze-file', help='Acquire verified copy and analyze statically')
     analyze.add_argument('case')
     analyze.add_argument('path')
@@ -263,7 +263,7 @@ def _main(argv=None):
                 builtin = args.wordlist == 'rockyou'
                 max_attempts = args.max_candidates if args.max_candidates is not None else (
                     BUILTIN_WORDLIST_ENTRIES if builtin else 10000)
-                max_seconds = args.max_seconds if args.max_seconds is not None else (21600 if builtin else 30)
+                max_seconds = args.max_seconds if args.max_seconds is not None else (86400 if builtin else 30)
                 if builtin:
                     result = core.recover_zip_password(args.case, args.path, max_attempts=max_attempts,
                                                         max_seconds=max_seconds, use_builtin_wordlist=True)
@@ -277,7 +277,7 @@ def _main(argv=None):
                 builtin = args.wordlist == 'rockyou'
                 max_attempts = args.max_candidates if args.max_candidates is not None else (
                     BUILTIN_WORDLIST_ENTRIES if builtin else 10000)
-                max_seconds = args.max_seconds if args.max_seconds is not None else (21600 if builtin else 30)
+                max_seconds = args.max_seconds if args.max_seconds is not None else (86400 if builtin else 30)
                 if builtin:
                     result = core.recover_password(args.case, args.path, max_attempts=max_attempts,
                                                     max_seconds=max_seconds, use_builtin_wordlist=True)

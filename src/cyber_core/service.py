@@ -496,9 +496,11 @@ class Core:
 
     # Raising these from the self-test caps (100000 attempts / 1h) lets a
     # real run cover the full bundled rockyou list (14,344,391 entries) in
-    # one call; still bounded, never unlimited.
+    # one call; still bounded, never unlimited. 24h covers even PDFs with
+    # AES-256/revision 6 encryption, whose deliberately slow KDF runs the
+    # full list at ~200 attempts/s (~20h) rather than ZIP's ~6 minutes.
     MAX_RECOVERY_ATTEMPTS = 20_000_000
-    MAX_RECOVERY_SECONDS = 21600
+    MAX_RECOVERY_SECONDS = 86400
 
     def _authorize_password_recovery(self, case, path, candidates, max_attempts, max_seconds, *, use_builtin_wordlist=False):
         # Shared gate for every real (non-self-test) password recovery route:
