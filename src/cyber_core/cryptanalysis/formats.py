@@ -74,7 +74,7 @@ def _zip(raw, candidate):
                         total += len(chunk)
                         if total > MAX_EXPANDED:
                             raise ValueError("Expanded byte limit")
-        except (RuntimeError, pyzipper.BadZipFile):
+        except (RuntimeError, pyzipper.BadZipFile, zlib.error, lzma.LZMAError, OSError, EOFError):
             return False
     return True
 
@@ -91,8 +91,14 @@ def _seven(raw, candidate):
             protected = True
         if not protected:
             return False
-        with py7zr.SevenZipFile(io.BytesIO(raw), password=candidate.decode("utf-8"),
-                               max_extract_size=MAX_EXPANDED) as archive:
+        try:
+            opened = py7zr.SevenZipFile(io.BytesIO(raw), password=candidate.decode("utf-8"),
+                                       max_extract_size=MAX_EXPANDED)
+        except (TypeError, ValueError, EOFError):
+            # py7zr can report an incorrect encrypted-header password as
+            # TypeError while parsing the unsuccessfully decrypted header.
+            return False
+        with opened as archive:
             members = archive.list()
             _members(members, lambda item: item.uncompressed)
             files = [item for item in members if item.is_file]
@@ -154,10 +160,12 @@ def _office(raw, candidate):
         raise ValueError("Unsupported Office encryption")
     try:
         office.load_key(password=candidate.decode("utf-8"), verify_password=True)
-        plain = BoundedBuffer()
-        office.decrypt(plain, verify_integrity=office.type == "agile")
     except InvalidKeyError:
         return False
+    # A verifier match followed by corrupt payload is not a wrong password.
+    # Leave the session at a retryable failure rather than exhausting the list.
+    plain = BoundedBuffer()
+    office.decrypt(plain, verify_integrity=office.type == "agile")
     plain.seek(0)
     with zipfile.ZipFile(plain) as archive:
         members = archive.infolist()
