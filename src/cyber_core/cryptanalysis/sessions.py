@@ -11,6 +11,7 @@ import time
 from uuid import uuid4
 from cyber_core.agents.runner import run_bounded
 from cyber_core.errors import CoreError
+from cyber_core.cryptanalysis.formats import MODES, VALIDATION, select_mode
 from cyber_core.memory import audit, encoded, utc
 from cyber_core.permissions import local_path, storage_root
 from cyber_core.verification.artifacts import verified_result, result_digest
@@ -187,7 +188,7 @@ class RecoverySessions:
 
     def start(self, case, source, material, *, mode="ccaes1", hours=24, max_candidates=100000):
         self._ready(case)
-        if mode not in ("ccaes1","ssh-private") or not _number(hours, 1/3600, 24):
+        if mode not in (*MODES, "auto") or not _number(hours, 1/3600, 24):
             raise CoreError("Invalid recovery mode or initial time window")
         if type(max_candidates) is not int or not 1 <= max_candidates <= 100000:
             raise CoreError("Invalid recovery candidate limit")
@@ -197,12 +198,9 @@ class RecoverySessions:
             raise CoreError("Target and candidate material must differ")
         with target.open("rb") as handle:
             header = handle.read(64)
-        if (target.stat().st_size > min(self.core.max_bytes, 8*1024*1024) or
-            (mode == "ccaes1" and not header.startswith(b"CCAES1")) or
-            (mode == "ssh-private" and not header.startswith((b"-----BEGIN OPENSSH PRIVATE KEY-----",
-                 b"-----BEGIN ENCRYPTED PRIVATE KEY-----",b"-----BEGIN RSA PRIVATE KEY-----",
-                 b"-----BEGIN EC PRIVATE KEY-----",b"-----BEGIN PRIVATE KEY-----")))):
+        if target.stat().st_size > min(self.core.max_bytes, 8*1024*1024):
             raise CoreError("Unsupported or oversized recovery input")
+        mode = select_mode(mode, header)
         job, secret = uuid4().hex, os.urandom(32)
         values, commitment = self._material(case, material_path, secret, max_candidates)
         if mode == "ccaes1":
@@ -376,7 +374,8 @@ class RecoverySessions:
                     break
                 result = json.loads(response["stdout"])
                 if type(result.get("matched")) is not bool or any(k not in
-                    ("matched","authenticated","sha256","size","algorithm","private_material_validated") for k in result):
+                    ("matched","authenticated","sha256","size","algorithm","private_material_validated",
+                     "password_validated","format","validation") for k in result):
                     raise CoreError("Invalid recovery trial response")
                 published = None
                 if result["matched"]:
@@ -390,6 +389,12 @@ class RecoverySessions:
                         published = {k:result[k] for k in ("authenticated","sha256","size","algorithm")}
                         published_path = output_folder/(job+"-"+token+".recovered")
                         published["output"] = str(published_path)
+                    elif row["mode"] in VALIDATION:
+                        if (result.get("password_validated") is not True or result.get("format") != row["mode"]
+                                or result.get("validation") != VALIDATION[row["mode"]]):
+                            raise CoreError("Password validation contract missing")
+                        published = {"password_validated": True, "format": row["mode"],
+                                     "validation": VALIDATION[row["mode"]]}
                     else:
                         if result.get("private_material_validated") is not True:
                             raise CoreError("Private key validation missing")
