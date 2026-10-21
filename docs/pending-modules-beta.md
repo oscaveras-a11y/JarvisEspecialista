@@ -27,7 +27,7 @@ As sessões recebem somente candidatas fornecidas pelo proprietário, dentro do 
 
 CCAES1: uma chave candidata de 32 bytes, codificada como 64 caracteres hexadecimais por linha. O arquivo deve ter sido fornecido/autorizado pelo proprietário. Saída somente após autenticação GCM, SHA-256 e verificação do claim. Sem chave correta ou fonte recuperável dela não existe reconstrução geral do AES a partir do texto cifrado.
 
-ssh-private: uma senha UTF-8 por linha, preservando espaços. Valida a estrutura com a candidata, sem exportar a chave privada descriptografada nem revelar a senha encontrada. Senha perdida e chave privada perdida são problemas diferentes. Material ausente continua dependendo de cópia legítima. ZIP/PDF e demais contêineres permanecem na triagem, sem recuperação de senha implementada nesta entrega.
+ssh-private: uma senha UTF-8 por linha, preservando espaços. Valida a estrutura com a candidata, sem exportar a chave privada descriptografada nem revelar a senha encontrada. Senha perdida e chave privada perdida são problemas diferentes. Material ausente continua dependendo de cópia legítima. Os modos adicionais `zip`, `7z`, `pdf`, `office` e `pkcs12` validam candidatas em processos limitados; veja [cobertura, ferramentas e limites](recovery-multiformat.md). Eles confirmam a candidata, sem exportar senha ou arquivo desbloqueado. RAR e formatos proprietários continuam sem backend validado.
 
 Limites: alvo de até 8 MiB (também limitado pelo CORE), candidatas até 8 MiB, 100000 linhas e 1024 bytes por linha, sem linhas vazias. Inspeção de chaves: 1 MiB. Biblioteca cryptography com suporte SSH/bcrypt. RSA mantém validação estrutural padrão; parsers e tentativas rodam em processo filho limitado. Não se executa o arquivo analisado.
 
@@ -38,6 +38,15 @@ Timeout/falha de recursos em uma tentativa gera resource_limited, sem repetiçã
 Os resultados transitórios ficam em diretório exclusivo por claim. Reserva de publicação é auditada antes da publicação final; claims interrompidos são reconciliados antes de perder sua identidade de limpeza. Estado, contadores e resultados exibidos são conferidos contra a auditoria. Auditoria encadeada não é assinatura digital nem armazenamento imutável.
 
 Um job hospedado pelo GitHub tem limite de seis horas: uma janela de 24h não significa um job contínuo de 24h. Operação real prolongada requer armazenamento durável autorizado e continuidade entre trabalhadores; essa infraestrutura não foi provisionada neste beta. [Limites oficiais](https://docs.github.com/en/enterprise-cloud%40latest/actions/reference/limits).
+
+## Ferramentas adicionais por formato
+
+    cyber recovery-formats
+    cyber recovery-session start CASE ARQUIVO --candidates LISTA --mode auto
+
+O inventário distingue suporte implementado e dependência disponível. O ambiente remoto usa o extra `recovery`; “Multi-format recovery validation” instala e testa esse extra nos runners Windows/Linux. `auto` seleciona pelo cabeçalho; PFX/P12 exige `--mode pkcs12`. ZIP cobre ZipCrypto/WinZip AES; 7z cobre conteúdo e cabeçalho protegidos; PDF usa o verificador Standard; Office cobre OOXML Agile/Standard, não os formatos binários antigos; PKCS12 valida chaves/certificados. Nem todo esquema/variante dessas famílias é compatível.
+
+Arquivos sem senha não confirmam uma candidata arbitrária. Novos modos não extraem arquivos em disco nem exportam chaves privadas; conteúdo de ZIP/7z/Office é lido apenas para verificar integridade, dentro de limites. PDF confirma senha, sem declarar integridade/renderização completa. Falha de parser, recursos ou dependência não equivale a senha descoberta. Todas as regras de autorização, checkpoint, pausa e cancelamento continuam aplicadas.
 
 ## Inventários de perícia e protocolo
 
