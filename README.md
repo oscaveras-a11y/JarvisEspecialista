@@ -30,7 +30,8 @@ GitHub Actions valida o software em ambientes temporários; a plataforma ainda n
 - Integração opcional de Ghidra/Binwalk reais ao CORE e relatório, com [ensaios somente no GitHub](docs/real-tools-core.md).
 - Prévia opcional de instruções com Capstone para arquiteturas declaradas compatíveis, limitada a bytes respaldados pelo arquivo; nunca executa o binário.
 - Análise e comparação de logs CAN clássicos, sem acesso a barramentos ou transmissão.
-- Recuperação autenticada AES-GCM somente do envelope sintético de laboratório `CCAES1`, quando material legítimo está disponível.
+- Recuperação autenticada AES-GCM do envelope sintético de laboratório `CCAES1`, quando material legítimo está disponível.
+- Sessões persistentes para validar candidatas em SSH/PEM, ZIP/ZIP AES, 7z, PDF, Office OOXML e PFX/P12, com [ferramentas opcionais e cobertura explícita](docs/recovery-multiformat.md). Os novos validadores não exportam senha nem arquivo desbloqueado.
 
 Uma assinatura não comprova validade integral do formato; alta entropia não comprova criptografia. A triagem não demonstra descriptografia e não há promessa universal de recuperação.
 
