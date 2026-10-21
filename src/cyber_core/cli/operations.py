@@ -1,5 +1,6 @@
 """Argument wiring for durable recovery, key metadata, inventories and agent jobs."""
 def configure(sub):
+    sub.add_parser("recovery-formats", help="Show supported recovery formats and available dependencies")
     keys = sub.add_parser("keys",help="Inspect key metadata or inventory an authorized directory")
     actions = keys.add_subparsers(dest="keys_action",required=True)
     inspect = actions.add_parser("inspect")
@@ -44,7 +45,7 @@ def configure(sub):
         if action == "start":
             parser.add_argument("path")
             parser.add_argument("--candidates",required=True)
-            parser.add_argument("--mode",choices=("ccaes1","ssh-private"),default="ccaes1")
+            parser.add_argument("--mode",choices=("auto","ccaes1","ssh-private","zip","7z","pdf","office","pkcs12"),default="ccaes1")
             parser.add_argument("--hours",type=float,default=24)
             parser.add_argument("--max-candidates",type=int,default=100000)
         elif action != "list":
@@ -59,9 +60,12 @@ def configure(sub):
             parser.add_argument("--reason",required=True)
             parser.add_argument("--priority",action="store_true")
 
-COMMANDS = ("keys","inventory-disk","inventory-pcap","agent-jobs","recovery-session")
+COMMANDS = ("recovery-formats","keys","inventory-disk","inventory-pcap","agent-jobs","recovery-session")
 
 def execute(core,args):
+    if args.command == "recovery-formats":
+        from cyber_core.cryptanalysis.formats import inventory
+        return inventory()
     if args.command == "keys":
         from cyber_core.recovery import scan_keys
         return scan_keys(core,args.case,args.path,max_files=args.max_files,
