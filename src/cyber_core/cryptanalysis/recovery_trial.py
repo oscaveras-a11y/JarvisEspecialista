@@ -1,5 +1,6 @@
 """Fixed local recovery trial. Receives one secret by stdin; emits metadata only."""
 import hashlib
+import contextlib
 import json
 import os
 from pathlib import Path
@@ -51,7 +52,9 @@ def main():
                 result = {"matched": True, "private_material_validated": True,
                           "algorithm": type(key).__name__.lstrip("_")}
         else:
-            raise ValueError()
+            from cyber_core.cryptanalysis.formats import validate_password
+            with open(os.devnull, "w") as quiet, contextlib.redirect_stdout(quiet), contextlib.redirect_stderr(quiet):
+                result = validate_password(mode, raw, candidate)
         print(json.dumps(result, ensure_ascii=True))
         return 0
     except BaseException:
