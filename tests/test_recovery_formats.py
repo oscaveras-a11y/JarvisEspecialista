@@ -6,6 +6,8 @@ from pathlib import Path
 import subprocess
 import sys
 import tempfile
+import struct
+import zlib
 import unittest
 import zipfile
 
@@ -178,3 +180,84 @@ class MultiFormatRecoveryTests(unittest.TestCase):
                 done = self.manager.work(self.case, job, max_attempts=2, max_seconds=60)
                 self.assertNotEqual(done["status"], "succeeded")
                 self.assertIsNone(done["result"])
+
+    def test_office_fixture_password_and_integrity_are_valid(self):
+        import msoffcrypto
+        source = self.fixture("office")
+        office = msoffcrypto.OfficeFile(io.BytesIO(source.read_bytes()))
+        try:
+            office.load_key(password=self.password, verify_password=True)
+        except Exception as error:
+            self.fail("Synthetic Office password verifier failed: " + type(error).__name__)
+        try:
+            office.decrypt(io.BytesIO(), verify_integrity=True)
+        except Exception as error:
+            self.fail("Synthetic Office payload integrity failed: " + type(error).__name__)
+
+    def test_header_encrypted_7z_wrong_password_is_a_normal_failed_trial(self):
+        import py7zr
+        source = self.fixture("7z", variant="headers")
+        try:
+            py7zr.SevenZipFile(io.BytesIO(source.read_bytes()), password="wrong")
+        except Exception as error:
+            # Report only the exception class; never candidate text or exception messages.
+            print("Synthetic 7z wrong-password exception class:", type(error).__name__)
+        done = self.manager.work(self.case, self.start("7z", source)["id"], max_attempts=1, max_seconds=60)
+        self.assertEqual(done["status"], "pending")
+
+    def test_zipcrypto_false_header_match_does_not_block_later_correct_password(self):
+        # Build a small ZipCrypto fixture in memory; no password goes to argv.
+        password = self.password.encode()
+        plain = b"synthetic zipcrypto deflated payload" * 4
+        stream = io.BytesIO()
+        with zipfile.ZipFile(stream, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+            archive.writestr("synthetic.txt", plain)
+        raw = bytearray(stream.getvalue())
+        crc, compressed = struct.unpack_from("<II", raw, 14)
+        name_len, extra_len = struct.unpack_from("<HH", raw, 26)
+        offset = 30 + name_len + extra_len
+        header = bytes(range(11)) + bytes([crc >> 24])
+        def crc_byte(value, byte):
+            value ^= byte
+            for _ in range(8):
+                value = (value >> 1) ^ (0xedb88320 if value & 1 else 0)
+            return value
+        keys = [0x12345678, 0x23456789, 0x34567890]
+        def update(byte):
+            keys[0] = crc_byte(keys[0], byte)
+            keys[1] = ((keys[1] + (keys[0] & 255)) * 134775813 + 1) & 0xffffffff
+            keys[2] = crc_byte(keys[2], keys[1] >> 24)
+        for byte in password:
+            update(byte)
+        encrypted = bytearray()
+        for byte in header + raw[offset:offset+compressed]:
+            temp = keys[2] | 2
+            encrypted.append(byte ^ (((temp * (temp ^ 1)) >> 8) & 255))
+            update(byte)
+        raw[offset:offset+compressed] = encrypted
+        struct.pack_into("<H", raw, 6, 1)
+        struct.pack_into("<I", raw, 18, compressed + 12)
+        central = raw.index(b"PK\x01\x02", offset + len(encrypted))
+        struct.pack_into("<H", raw, central + 8, 1)
+        struct.pack_into("<I", raw, central + 20, compressed + 12)
+        end = raw.index(b"PK\x05\x06", central)
+        struct.pack_into("<I", raw, end + 16, central)
+        source = self.scope / "legacy.zip"
+        source.write_bytes(raw)
+        wrong = None
+        for number in range(10000):
+            candidate = ("synthetic-wrong-" + str(number)).encode()
+            decrypt = zipfile._ZipDecrypter(candidate)
+            if decrypt(encrypted[:12])[-1] != crc >> 24:
+                continue
+            try:
+                zlib.decompress(decrypt(encrypted[12:]), -15)
+            except zlib.error:
+                wrong = candidate
+                break
+        self.assertIsNotNone(wrong, "Synthetic header collision not found within deterministic bound")
+        self.material.write_bytes(wrong + b"\n" + password + b"\n")
+        job = self.start("zip", source)["id"]
+        done = self.manager.work(self.case, job, max_attempts=2, max_seconds=60)
+        self.assertEqual(done["status"], "succeeded")
+        self.assertEqual(done["attempts"], 2)
