@@ -67,6 +67,8 @@ class MultiFormatRecoveryTests(unittest.TestCase):
             with zipfile.ZipFile(plain, "w") as archive:
                 archive.writestr("[Content_Types].xml",
                     '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"/>')
+                # Avoid the upstream mini-stream encryption generator bug (#105).
+                archive.writestr("padding.bin", b"synthetic" * 1024)
                 archive.writestr("word/document.xml",
                     '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"/>')
             if encrypted:
