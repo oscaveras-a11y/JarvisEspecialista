@@ -55,3 +55,9 @@ Run 39884244921: ZIP/John corrigido preservando argv[0] do symlink zip2john; Has
 falhou por ausência de libOpenCL (POCL instalado sem loader porque recommends está
 desativado). Provisionamento agora exige ocl-icd-libopencl1, clinfo e backend-info.
 A entrega permanece em validação até a execução final das seis ferramentas passar.
+
+Run 39885404783 comprovou carregamento OpenCL/POCL após instalar o loader, mas
+atingiu o limite de provisionamento enquanto baixava dependências Qt pelo mirror
+Azure HTTP (libpocl de 16,2 MB levou 301 s). O runner passa a usar mirror Ubuntu
+oficial via HTTPS, DIE sem recommends e limite de preparo de 15 minutos. Suíte
+real e demo não executam se a preparação falhar; falha de preparo continua vermelha.

@@ -3,13 +3,20 @@
 set -euo pipefail
 root="$RUNNER_TEMP/cyber-external-tools"
 mkdir -p "$root"
+# Only the disposable Actions runner is changed. Its Azure HTTP mirror was
+# transferring packages at tens of KiB/s; retain signed Ubuntu packages via HTTPS.
+for source_list in /etc/apt/apt-mirrors*.txt /etc/apt/sources.list /etc/apt/sources.list.d/*.sources /etc/apt/sources.list.d/*.list; do
+  if [ -f "$source_list" ]; then
+    sudo sed -i 's|http://azure.archive.ubuntu.com/ubuntu|https://archive.ubuntu.com/ubuntu|g' "$source_list"
+  fi
+done
 sudo apt-get -o Acquire::Retries=2 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 update -qq
 sudo apt-get -o Acquire::Retries=2 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 install -y --no-install-recommends hashcat ocl-icd-libopencl1 pocl-opencl-icd clinfo qpdf openssl build-essential libssl-dev zlib1g-dev pkg-config libgmp-dev libpcap-dev libbz2-dev libmagic1
 # The loader is separate from the POCL vendor runtime when recommends are disabled.
 clinfo --list
 hashcat --backend-info
 curl --fail --location --connect-timeout 30 --max-time 180 --retry 2 https://github.com/horsicq/DIE-engine/releases/download/3.10/die_3.10_Ubuntu_24.04_amd64.deb --output "$root/die.deb"
-sudo apt-get install -y "$root/die.deb"
+sudo apt-get -o Acquire::Retries=2 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 install -y --no-install-recommends "$root/die.deb"
 timeout 180 git clone --filter=blob:none https://github.com/openwall/john.git "$root/john"
 timeout 180 git -C "$root/john" checkout --detach 5184bc0b8c105f8c5978b112e723d65b2de3e63e
 (

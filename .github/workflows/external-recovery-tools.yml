@@ -43,15 +43,16 @@ jobs:
           python-version: '3.12'
       - run: python -m pip install '.[reverse,recovery]'
       - name: Provision six real CLIs on ephemeral runner
-        timeout-minutes: 10
+        id: provision
+        timeout-minutes: 15
         run: bash scripts/setup-external-recovery-tools.sh
       - name: Diagnose synthetic CLI readiness
         run: python scripts/probe-external-recovery.py
       - name: Real encrypted-file and identification contracts
         run: python scripts/run-tests.py test_external_recovery_tools.py
       - name: Complete suite with six real tools
-        if: ${{ !cancelled() }}
+        if: ${{ !cancelled() && steps.provision.outcome == 'success' }}
         run: python scripts/run-tests.py
       - name: Synthetic demonstration
-        if: ${{ !cancelled() }}
+        if: ${{ !cancelled() && steps.provision.outcome == 'success' }}
         run: python scripts/demo.py
