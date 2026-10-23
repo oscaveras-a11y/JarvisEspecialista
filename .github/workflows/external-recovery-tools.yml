@@ -1,16 +1,19 @@
-name: Six external recovery tools
+name: Eight real tools together
 on:
   pull_request:
     branches: [main]
     paths:
       - 'src/cyber_core/**'
       - 'tests/test_external_recovery_tools.py'
+      - 'tests/test_recovery_rar5.py'
+      - 'scripts/setup-reverse-tools-actions.sh'
+      - 'scripts/check-real-backends.py'
       - 'scripts/setup-external-recovery-tools.sh'
       - '.github/workflows/external-recovery-tools.yml'
 permissions:
   contents: read
 concurrency:
-  group: six-tools-${{ github.ref }}
+  group: eight-tools-${{ github.ref }}
   cancel-in-progress: true
 jobs:
   contracts:
@@ -30,6 +33,7 @@ jobs:
     timeout-minutes: 40
     env:
       CYBER_REQUIRE_EXTERNAL_TOOLS: '1'
+      CYBER_REQUIRE_RAR5: '1'
       PYTHONUTF8: '1'
       PYTHONUNBUFFERED: '1'
       OMP_NUM_THREADS: '2'
@@ -42,15 +46,25 @@ jobs:
         with:
           python-version: '3.12'
       - run: python -m pip install '.[reverse,recovery]'
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
       - name: Provision six real CLIs on ephemeral runner
         id: provision
         timeout-minutes: 15
         run: bash scripts/setup-external-recovery-tools.sh
+      - name: Provision Ghidra and Binwalk in the same runner
+        run: bash scripts/setup-reverse-tools-actions.sh
+      - name: Require real decompilation and Binwalk results through CORE
+        run: python scripts/check-real-backends.py
+      - name: Require real RAR5 operations
+        run: python scripts/run-tests.py test_recovery_rar5.py
       - name: Diagnose synthetic CLI readiness
         run: python scripts/probe-external-recovery.py
       - name: Real encrypted-file and identification contracts
         run: python scripts/run-tests.py test_external_recovery_tools.py
-      - name: Complete suite with six real tools
+      - name: Complete suite with all eight real tools
         if: ${{ !cancelled() && steps.provision.outcome == 'success' }}
         run: python scripts/run-tests.py
       - name: Synthetic demonstration
