@@ -79,9 +79,11 @@ class ProtocolServiceTests(unittest.TestCase):
 
     def test_cut_mid_record_is_not_counted_as_a_complete_message(self):
         # Regression: the sample cap previously cut mid-record and that partial
-        # tail could be misread as a (wrong) complete message.
+        # tail could be misread as a (wrong) complete message. write_bytes (not
+        # write_text) keeps the byte count exact across platforms, since
+        # Path.write_text() translates '\n' to '\r\n' on Windows.
         cap = self.scope / 'cap.txt'
-        cap.write_text('010203\n', encoding='utf-8')
+        cap.write_bytes(b'010203\n')
         result = self.core.analyze_capture(self.case, str(cap), max_sample=2)
         self.assertEqual(result['messages'], 0)
         self.assertTrue(result['partial_record_discarded'])
@@ -90,11 +92,13 @@ class ProtocolServiceTests(unittest.TestCase):
     def test_paired_captures_keep_independent_truncation_flags(self):
         # Regression: both sides of a comparison previously shared a single
         # truncation flag, so a large first file could wrongly mark an untruncated
-        # second file as truncated too.
+        # second file as truncated too. write_bytes (not write_text) keeps the byte
+        # count exact across platforms, since Path.write_text() translates '\n' to
+        # '\r\n' on Windows, which would silently cross the max_sample boundary.
         first = self.scope / 'a.txt'
-        first.write_text('01\n02\n', encoding='utf-8')
+        first.write_bytes(b'01\n02\n')
         second = self.scope / 'b.txt'
-        second.write_text('03\n', encoding='utf-8')
+        second.write_bytes(b'03\n')
         result = self.core.analyze_capture(self.case, str(first), second_path=str(second), max_sample=3)
         self.assertTrue(result['first']['sample_truncated'])
         self.assertFalse(result['second']['sample_truncated'])
