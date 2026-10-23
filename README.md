@@ -32,6 +32,7 @@ GitHub Actions valida o software em ambientes temporários; a plataforma ainda n
 - Análise e comparação de logs CAN clássicos, sem acesso a barramentos ou transmissão; analisador genérico passivo de capturas hex, com truncamento de amostra sinalizado explicitamente.
 - Recuperação autenticada AES-GCM somente do envelope sintético de laboratório `CCAES1`, quando material legítimo está disponível. Autoteste de recuperação de senha em envelope próprio `CCPW1` (nunca contra material de terceiros); demonstrações reais de RSA-OAEP, ECDH (X25519) e ChaCha20-Poly1305 com chaves efêmeras geradas na hora.
 - Auditoria estática e autorizada de configuração (segredos expostos, ajustes inseguros) e de padrões de implementação criptográfica (modo ECB, IV estático, chave fixa) — sem teste ativo, sem rede; valores sensíveis sempre redigidos.
+- Varredura opcional de assinaturas YARA sobre amostra autorizada, com [biblioteca `yara-python`](docs/yara-scan.md); conteúdo correspondido nunca é exposto, só identificador de regra/string e offset.
 - Extração limitada de strings ASCII/UTF-16LE; diferenciação estática entre codificação, compressão, criptografia e dados estruturados.
 - CORE com classificação de tipo de investigação, plano de execução, decomposição em tarefas e atribuição de executor (broker local; agentes só recebem metadados derivados).
 - Linha do tempo/cadeia de custódia derivada da trilha de auditoria; log de auditoria bruto consultável; reaproveitamento de conhecimento por hash de evidência ou tipo de investigação entre casos.
@@ -53,6 +54,7 @@ O sandbox do CLI é dependência externa. Nomes de revisores são declarações,
 - [Revisão das 21 seções e pendências, com versões examinadas](docs/2026-10-17-project-status-report.md)
 - [Item 6: estruturas ELF/PE](docs/item-6-binary-structure.md)
 - [Item 6: prévia opcional Capstone](docs/item-6-capstone.md)
+- [Item 9: varredura opcional YARA](docs/yara-scan.md)
 
 - [Referência técnica da CLI para uso futuro](docs/cli-reference.md)
 - [Orquestração beta: worker, pausa, cancelamento e limites](docs/orchestration-beta.md)

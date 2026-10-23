@@ -19,6 +19,7 @@ def parser():
     p.add_argument('--ghidra-home', help='Trusted absolute Ghidra 12.1.4 path on the runner')
     p.add_argument('--java-home', help='Trusted absolute JDK path; required with --ghidra-home')
     p.add_argument('--binwalk-executable', help='Trusted absolute Binwalk 3.1.0 executable path on the runner')
+    p.add_argument('--yara-rules', help='Trusted absolute path to a .yar/.yara rule file or directory of rules')
     p.add_argument('--home', default=os.environ.get('CYBER_HOME', str(default)), help='Protected storage outside the repository')
     p.add_argument('--max-bytes', type=int, default=int(os.environ.get('CYBER_MAX_BYTES', defaults['max_bytes'])))
     p.add_argument('--timeout', type=float, default=float(os.environ.get('CYBER_TIMEOUT', defaults['timeout_seconds'])),
@@ -126,6 +127,11 @@ def parser():
     auditcrypto = sub.add_parser('audit-crypto', help='Static audit of cryptographic implementation patterns (ECB, static IV, hardcoded keys, weak RNG/hash)')
     auditcrypto.add_argument('case')
     auditcrypto.add_argument('path')
+    yarascan = sub.add_parser('scan-yara', help='Static YARA signature scan over an authorized sample (no execution/network); requires --yara-rules')
+    yarascan.add_argument('case')
+    yarascan.add_argument('path')
+    yarascan.add_argument('--max-sample', type=int, default=1048576)
+    yarascan.add_argument('--yara-timeout', type=float, default=10)
     capture = sub.add_parser('analyze-capture', help='Passively analyze a generic hex protocol capture (no bus/network access)')
     capture.add_argument('case')
     capture.add_argument('path')
@@ -165,7 +171,7 @@ def parser():
     sources.add_argument('case')
     side = sub.add_parser('side-analyses', help='List persisted side analyses (strings/differentiate/audit-config/capture) for a case')
     side.add_argument('case')
-    side.add_argument('--kind', help='Filter by kind: strings, differentiate, config_audit, crypto_audit, capture, disk_inventory, pcap_inventory')
+    side.add_argument('--kind', help='Filter by kind: strings, differentiate, config_audit, crypto_audit, capture, disk_inventory, pcap_inventory, yara_scan')
     recall = sub.add_parser('recall', help='Recall prior knowledge by evidence SHA-256 or by investigation type')
     recall.add_argument('--sha256', help='Find prior investigations that analyzed this exact evidence hash')
     recall.add_argument('--type', dest='recall_type', help='List prior investigations of this type')
@@ -294,6 +300,10 @@ def _main(argv=None):
                 result = core.audit_config(args.case, args.path)
             elif cmd == 'audit-crypto':
                 result = core.audit_crypto_implementation(args.case, args.path)
+            elif cmd == 'scan-yara':
+                if args.yara_rules:
+                    core.configure_yara_rules(args.yara_rules)
+                result = core.scan_with_yara(args.case, args.path, max_sample=args.max_sample, timeout=args.yara_timeout)
             elif cmd == 'analyze-capture':
                 result = core.analyze_capture(args.case, args.path, second_path=args.compare_to)
             elif cmd == 'inspect-disk':
