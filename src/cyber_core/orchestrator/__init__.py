@@ -18,7 +18,7 @@ def review_summary(core, case, *, allow_cloud=False):
     core.db.execute('BEGIN IMMEDIATE')
     try:
         core.authorize(case)
-        if core.get(case)['agent_calls'] >= 5:
+        if core.get(case)['agent_calls'] >= core.agent_calls_per_case:
             raise CoreError('Agent call budget exhausted')
         core.db.execute('UPDATE investigations SET agent_calls=agent_calls+1 WHERE id=?', (case,))
         audit(core.db, case, 'cloud_summary_authorized', {'fields': ['size', 'entropy', 'format', 'copy_verified']})

@@ -7,10 +7,11 @@ name = "cyber-core"
 version = "0.1.0"
 description = "Authorized local investigation engine"
 requires-python = ">=3.12"
-dependencies = ["cryptography[ssh]>=50.0.2,<51"]
+dependencies = ["cryptography[ssh]>=50.0.2,<51", "pikepdf>=10.0.0,<11", "py7zr>=1.1.0,<2"]
 
 [project.optional-dependencies]
 reverse = ["capstone>=5.0.9,<6"]
+vulnerability = ["yara-python>=4.5.0,<5"]
 
 [project.scripts]
 cyber = "cyber_core.cli:main"
@@ -20,3 +21,4 @@ where = ["src"]
 
 [tool.setuptools.package-data]
 "cyber_core.reverse_engineering" = ["ghidra_scripts/*.java"]
+"cyber_core" = ["data/wordlists/*.gz"]

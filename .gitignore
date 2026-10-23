@@ -15,3 +15,12 @@ private/
 .cyber/
 test-output/
 environment_probe.py
+
+# Portfólio (Node/JS e logs de laboratório)
+venv/
+node_modules/
+*.log
+
+# Resultados locais do Playwright (tests/web.spec.cjs)
+playwright-report/
+test-results/

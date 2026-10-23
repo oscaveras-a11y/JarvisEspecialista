@@ -43,7 +43,7 @@ jobs:
       PYTHONUNBUFFERED: "1"
       PIP_DISABLE_PIP_VERSION_CHECK: "1"
       CYBER_REQUIRE_CAPSTONE: "1"
-      CANDIDATE_SHA: e22435d8919673a5d4f157b2fa529757d00aebe8
+      CANDIDATE_SHA: 3ab10856366c12087f36090cf10d3717524e2f80
     defaults:
       run:
         shell: bash

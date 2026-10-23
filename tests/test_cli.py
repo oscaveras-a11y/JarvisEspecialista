@@ -39,6 +39,18 @@ class CLITests(unittest.TestCase):
         self.assertTrue(Path(report['path']).is_file())
         self.assertEqual(self.cli('status', case)['tasks'][0]['status'], 'done')
 
+    def test_logs_exposes_raw_audit_trail(self):
+        self.cli('init')
+        case = self.cli('investigate', '--project', 'demo', '--objective', 'synthetic', '--scope', str(self.inputs), '--owner', 'owner', '--authorization', 'Synthetic lab')['id']
+        source = self.inputs / 'sample.bin'
+        source.write_bytes(b'\x7fELF' + bytes(range(256)) * 16)
+        self.cli('analyze-file', case, str(source))
+        logs = self.cli('logs', case)
+        self.assertTrue(logs['chain_valid'])
+        events = [entry['event'] for entry in logs['audit']]
+        self.assertIn('authorization_registered', events)
+        self.assertIn('analysis_verified', events)
+
     def test_help_and_unsupported_module(self):
         self.cli('analyze-can', success=False)
         run = subprocess.run([sys.executable, '-m', 'cyber_core', '--help'], capture_output=True, text=True, timeout=30)
