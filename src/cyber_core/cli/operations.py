@@ -1,6 +1,11 @@
 """Argument wiring for durable recovery, key metadata, inventories and agent jobs."""
 def configure(sub):
     sub.add_parser("recovery-formats", help="Show supported recovery formats and available dependencies")
+    external = sub.add_parser("external-analyze", help="Static external identification of verified evidence")
+    external.add_argument("case")
+    external.add_argument("path")
+    external.add_argument("--tool", choices=("die", "unblob"), required=True)
+    sub.add_parser("external-tools", help="Show configured external tool availability")
     keys = sub.add_parser("keys",help="Inspect key metadata or inventory an authorized directory")
     actions = keys.add_subparsers(dest="keys_action",required=True)
     inspect = actions.add_parser("inspect")
@@ -45,11 +50,14 @@ def configure(sub):
         if action == "start":
             parser.add_argument("path")
             parser.add_argument("--candidates",required=True)
-            parser.add_argument("--mode",choices=("auto","ccaes1","ssh-private","zip","7z","pdf","office","pkcs12"),default="ccaes1")
+            parser.add_argument("--mode",choices=("auto","ccaes1","ssh-private","zip","7z","pdf","office","pkcs12","qpdf-pdf","openssl-pkcs12","hashcat-sha256","john-sha256","john-zip","hashcat-zip-aes"),default="ccaes1")
             parser.add_argument("--hours",type=float,default=24)
             parser.add_argument("--max-candidates",type=int,default=100000)
         elif action != "list":
             parser.add_argument("job")
+        if action == "show":
+            parser.add_argument("--show-password", action="store_true",
+                                help="Explicitly display the recovered candidate from the verified original list")
         if action == "work":
             parser.add_argument("--max-attempts",type=int,default=20)
             parser.add_argument("--max-seconds",type=float,default=30)
@@ -60,9 +68,15 @@ def configure(sub):
             parser.add_argument("--reason",required=True)
             parser.add_argument("--priority",action="store_true")
 
-COMMANDS = ("recovery-formats","keys","inventory-disk","inventory-pcap","agent-jobs","recovery-session")
+COMMANDS = ("external-analyze","external-tools","recovery-formats","keys","inventory-disk","inventory-pcap","agent-jobs","recovery-session")
 
 def execute(core,args):
+    if args.command == "external-analyze":
+        from cyber_core.external_tools import analyze_tool
+        return analyze_tool(core,args.case,args.path,tool=args.tool)
+    if args.command == "external-tools":
+        from cyber_core.external_tools import tool_inventory
+        return tool_inventory()
     if args.command == "recovery-formats":
         from cyber_core.cryptanalysis.formats import inventory
         return inventory()
@@ -99,6 +113,8 @@ def execute(core,args):
     if action == "list":
         return manager.jobs(args.case)
     if action == "show":
+        if args.show_password:
+            return {**manager.get(args.case,args.job), **manager.reveal_password(args.case,args.job)}
         return manager.get(args.case,args.job)
     if action == "extend":
         return manager.extend(args.case,args.job,hours=args.hours,reason=args.reason,priority=args.priority)

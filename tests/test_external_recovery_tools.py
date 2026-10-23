@@ -42,6 +42,55 @@ class ToolInventoryContracts(unittest.TestCase):
         with self.assertRaises(CoreError):
             external_configuration("arbitrary-shell")
 
+class ExternalFailureContracts(unittest.TestCase):
+    def test_malformed_and_partial_analysis_is_rejected(self):
+        from cyber_core.external_tools_child import normalize_die, normalize_unblob
+        with self.assertRaises(CoreError):
+            normalize_die({"detects": "truncated"})
+        with self.assertRaises(CoreError):
+            normalize_unblob([{"task": {"path": "/target"}, "reports": [
+                {"__typename__": "ChunkReport", "start_offset": 0, "end_offset": 100,
+                 "handler_name": "tar", "extraction_reports": []}], "subtasks": []}], Path("/target"), 10)
+        with self.assertRaises(CoreError):
+            normalize_unblob([{"task": {"path": "/target"}, "reports": [],
+                              "subtasks": [{"path": "/unexpected"}]}], Path("/target"), 10)
+
+    @unittest.skipUnless(sys.platform == "linux", "Linux CLI runtime")
+    def test_raw_failure_output_and_environment_are_not_exposed(self):
+        from cyber_core.external_tool_runtime import Runner
+        with tempfile.TemporaryDirectory() as folder:
+            with patch.dict(os.environ, {"GITHUB_TOKEN": "synthetic-private-token",
+                                       "ANTHROPIC_API_KEY": "synthetic-private-key"}):
+                runner = Runner(Path(folder), 5)
+            self.assertNotIn("GITHUB_TOKEN", runner.env)
+            self.assertNotIn("ANTHROPIC_API_KEY", runner.env)
+            with self.assertRaises(CoreError) as caught:
+                runner.run([sys.executable, "-c", "import sys; print('synthetic-secret'); sys.exit(2)"])
+            self.assertNotIn("synthetic-secret", str(caught.exception))
+
+    @unittest.skipUnless(sys.platform == "linux", "Linux CLI runtime")
+    def test_output_limit_is_failure_instead_of_partial_success(self):
+        from cyber_core.external_tool_runtime import Runner
+        with tempfile.TemporaryDirectory() as folder:
+            runner = Runner(Path(folder), 5)
+            with self.assertRaises(CoreError):
+                runner.run([sys.executable, "-c", "print('X'*8192)"], output_limit=32)
+
+    @unittest.skipUnless(sys.platform == "linux", "Linux CLI runtime")
+    def test_cli_success_without_password_match_is_not_success(self):
+        from cyber_core.external_tools_child import trial
+        from pypdf import PdfWriter
+        writer = PdfWriter()
+        writer.add_blank_page(width=72, height=72)
+        writer.encrypt("synthetic-right", algorithm="AES-256")
+        raw = io.BytesIO()
+        writer.write(raw)
+        with patch("cyber_core.external_tools_child.version", return_value="1.2.3"), \
+             patch("cyber_core.external_tools_child.Runner.run", return_value=(0, b"", b"")):
+            result = trial("qpdf-pdf", raw.getvalue(), b"synthetic-wrong",
+                           {"executable": sys.executable})
+        self.assertEqual(result, {"matched": False})
+
 @unittest.skipUnless(os.environ.get("CYBER_REQUIRE_EXTERNAL_TOOLS") == "1",
                      "Real six-tool integration executes in its dedicated Linux Actions workflow")
 class RealExternalRecoveryTests(unittest.TestCase):

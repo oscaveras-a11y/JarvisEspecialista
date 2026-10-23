@@ -12,19 +12,18 @@ from cyber_core.errors import CoreError
 
 TOOLS = ("hashcat","john","qpdf","openssl","die","unblob")
 ENV_NAMES = {tool:"CYBER_"+tool.upper()+"_EXECUTABLE" for tool in TOOLS}
-MODES = {"qpdf-pdf":"qpdf", "openssl-pkcs12":"openssl", "openssl-aes256cbc":"openssl",
+MODES = {"qpdf-pdf":"qpdf", "openssl-pkcs12":"openssl", 
          "hashcat-sha256":"hashcat", "john-sha256":"john",
          "john-zip":"john", "hashcat-zip-aes":"hashcat"}
 VALIDATION = {mode: text for mode,text in (
     ("qpdf-pdf","QPDF password and decrypted PDF structure verified"),
     ("openssl-pkcs12","OpenSSL PKCS12 password and key/certificate structure verified"),
-    ("openssl-aes256cbc","OpenSSL AES-256-CBC PBKDF2-SHA256/10000 and expected plaintext SHA256"),
     ("hashcat-sha256","Hashcat single SHA256 candidate independently verified"),
     ("john-sha256","John Jumbo single SHA256 candidate independently verified"),
     ("john-zip","John Jumbo ZIP candidate and archive integrity independently verified"),
     ("hashcat-zip-aes","Hashcat WinZip AES candidate and archive integrity independently verified"))}
 SIGNATURES = {"qpdf-pdf":(b"%PDF-",), "openssl-pkcs12":(b"0",),
-              "openssl-aes256cbc":(b"Salted__",), "hashcat-sha256":None,"john-sha256":None,
+              "hashcat-sha256":None,"john-sha256":None,
               "john-zip":(b"PK\x03\x04",), "hashcat-zip-aes":(b"PK\x03\x04",)}
 
 def executable(value):

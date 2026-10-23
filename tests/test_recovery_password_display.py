@@ -59,3 +59,42 @@ class PasswordDisplayTests(unittest.TestCase):
         self.assertTrue(args.show_password)
         plain = parser().parse_args(["recovery-session", "show", self.case, self.job])
         self.assertFalse(plain.show_password)
+
+class ExternalLateResultTests(unittest.TestCase):
+    @unittest.skipUnless(__import__("sys").platform == "linux", "Linux external profiles")
+    def test_pause_and_cancel_during_external_trial_discard_late_success(self):
+        import hashlib
+        import sys
+        from unittest.mock import patch
+        from cyber_core.external_tool_runtime import VALIDATION
+        for action in ("pause", "cancel"):
+            with self.subTest(action=action), tempfile.TemporaryDirectory() as folder:
+                root = Path(folder)
+                scope = root / "scope"
+                scope.mkdir()
+                source = scope / "digest"
+                source.write_text(hashlib.sha256(b"synthetic-password").hexdigest())
+                material = scope / "candidates"
+                material.write_bytes(b"synthetic-password\n")
+                core = Core(root / "state")
+                try:
+                    case = core.investigate("synthetic", "late response", str(scope), "owner",
+                                            "synthetic only", recovery=True, valid_hours=24)
+                    manager = RecoverySessions(core)
+                    with patch.dict(__import__("os").environ, {"CYBER_JOHN_EXECUTABLE": sys.executable}):
+                        job = manager.start(case, source, material, mode="john-sha256")["id"]
+                        def late(*args, **kwargs):
+                            if action == "pause":
+                                core.pause(case)
+                            else:
+                                manager.cancel(case, job)
+                            return {"stdout": json.dumps({"matched": True, "password_validated": True,
+                                "format": "john-sha256", "validation": VALIDATION["john-sha256"],
+                                "backend_version": "1.2.3", "backend_sha256": "a"*64})}
+                        with patch("cyber_core.cryptanalysis.sessions.run_bounded", side_effect=late):
+                            result = manager.work(case, job)
+                        self.assertIn(result["status"], ("paused", "cancelled"))
+                        self.assertIsNone(result["result"])
+                        self.assertEqual(result["attempts"], 0)
+                finally:
+                    core.close()
