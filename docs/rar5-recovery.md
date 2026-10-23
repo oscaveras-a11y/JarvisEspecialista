@@ -23,8 +23,10 @@ de recuperação, preservando a consulta explícita da senha confirmada.
 orçamento agregado de 2^22 iterações por candidata. Metadados visíveis: até
 16 MiB declarados expandidos. Cabeçalhos cifrados não permitem conferir esse
 tamanho sem descriptografia. Não há descompressão neste perfil.
-RAR4, SFX, multipartes, verificadores ausentes e versões de criptografia não
-reconhecidas são recusados. Sem promessa de reparo ou recuperação universal.
+RAR4, SFX, multipartes identificáveis em metadados visíveis, verificadores ausentes
+e versões de criptografia não reconhecidas são recusados. Cabeçalhos cifrados
+confirmam somente seu verificador global: não determinam volumes, membros ou senhas
+individuais do conteúdo. Sem promessa de reparo ou recuperação universal.
 
 ## Plano de implementação
 1. Publicar contratos negativos e workflow com fixtures RAR5 reais geradas no runner.

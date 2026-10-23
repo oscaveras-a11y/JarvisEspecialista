@@ -30,6 +30,7 @@ python -m venv "$root/unblob"
   echo "CYBER_HASHCAT_EXECUTABLE=$(command -v hashcat)"
   echo "CYBER_JOHN_EXECUTABLE=$root/john/run/john"
   echo "CYBER_ZIP2JOHN_EXECUTABLE=$root/john/run/zip2john"
+  echo "CYBER_RAR2JOHN_EXECUTABLE=$root/john/run/rar2john"
   echo "CYBER_QPDF_EXECUTABLE=$(command -v qpdf)"
   echo "CYBER_OPENSSL_EXECUTABLE=$(command -v openssl)"
   echo "CYBER_DIE_EXECUTABLE=$(command -v diec)"
@@ -41,3 +42,10 @@ qpdf --version
 openssl version
 diec --version
 "$root/unblob/bin/unblob" --version
+
+if [[ "${CYBER_REQUIRE_RAR5:-0}" == 1 ]]; then
+  sudo apt-get -o Acquire::Retries=2 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 install -y --no-install-recommends rar
+  echo "CYBER_RAR_FIXTURE_EXECUTABLE=$(command -v rar)" >> "$GITHUB_ENV"
+  # No customer data or secrets; RAR is only a fixture generator in this runner.
+  rar | head -n 3 || true
+fi

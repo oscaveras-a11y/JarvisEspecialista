@@ -14,17 +14,18 @@ TOOLS = ("hashcat","john","qpdf","openssl","die","unblob")
 ENV_NAMES = {tool:"CYBER_"+tool.upper()+"_EXECUTABLE" for tool in TOOLS}
 MODES = {"qpdf-pdf":"qpdf", "openssl-pkcs12":"openssl", 
          "hashcat-sha256":"hashcat", "john-sha256":"john",
-         "john-zip":"john", "hashcat-zip-aes":"hashcat"}
+         "john-zip":"john", "hashcat-zip-aes":"hashcat", "john-rar5":"john"}
 VALIDATION = {mode: text for mode,text in (
     ("qpdf-pdf","QPDF password and decrypted PDF structure verified"),
     ("openssl-pkcs12","OpenSSL PKCS12 password and key/certificate structure verified"),
     ("hashcat-sha256","Hashcat single SHA256 candidate independently verified"),
     ("john-sha256","John Jumbo single SHA256 candidate independently verified"),
+    ("john-rar5","John Jumbo and native RAR5 password-check verifier; payload integrity not verified"),
     ("john-zip","John Jumbo ZIP candidate and archive integrity independently verified"),
     ("hashcat-zip-aes","Hashcat WinZip AES candidate and archive integrity independently verified"))}
 SIGNATURES = {"qpdf-pdf":(b"%PDF-",), "openssl-pkcs12":(b"0",),
               "hashcat-sha256":None,"john-sha256":None,
-              "john-zip":(b"PK\x03\x04",), "hashcat-zip-aes":(b"PK\x03\x04",)}
+              "john-rar5":(b"Rar!\x1a\x07\x01\x00",), "john-zip":(b"PK\x03\x04",), "hashcat-zip-aes":(b"PK\x03\x04",)}
 
 def executable(value):
     if not isinstance(value,str) or not value or not Path(value).is_absolute():
@@ -47,6 +48,9 @@ def external_configuration(tool):
     converter = os.environ.get("CYBER_ZIP2JOHN_EXECUTABLE")
     if tool in ("john","hashcat") and converter:
         config["converter"] = executable(converter)
+    rar_converter = os.environ.get("CYBER_RAR2JOHN_EXECUTABLE")
+    if tool == "john" and rar_converter:
+        config["rar_converter"] = executable(rar_converter)
     return config
 
 def tool_inventory():

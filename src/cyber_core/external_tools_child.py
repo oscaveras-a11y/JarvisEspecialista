@@ -27,12 +27,14 @@ def read_small(path, maximum=262144):
         raise CoreError("External result exceeds limit")
     return value
 
-def validate_config(config, tool, *, converter=False):
-    if not isinstance(config, dict) or set(config) - {"executable", "converter"}:
+def validate_config(config, tool, *, converter=False, rar_converter=False):
+    if not isinstance(config, dict) or set(config) - {"executable", "converter", "rar_converter"}:
         raise CoreError("Invalid external configuration")
     result = {"executable": executable(config.get("executable"))}
     if converter:
         result["converter"] = executable(config.get("converter"))
+    if rar_converter:
+        result["converter"] = executable(config.get("rar_converter"))
     return result
 
 def trial(mode, raw, candidate, config, *, timeout=60, scratch_parent=None):
@@ -42,7 +44,7 @@ def trial(mode, raw, candidate, config, *, timeout=60, scratch_parent=None):
     if not isinstance(candidate, bytes) or not 1 <= len(candidate) <= maximum or any(c in candidate for c in (b"\r", b"\n", b"\0")):
         raise CoreError("External candidate is unsupported")
     tool = MODES[mode]
-    config = validate_config(config, tool, converter=mode in ("john-zip", "hashcat-zip-aes"))
+    config = validate_config(config, tool, converter=mode in ("john-zip", "hashcat-zip-aes"), rar_converter=mode == "john-rar5")
     with tempfile.TemporaryDirectory(prefix="external-", dir=scratch_parent) as directory:
         root = Path(directory)
         runner = Runner(root, timeout)
@@ -75,6 +77,14 @@ def trial(mode, raw, candidate, config, *, timeout=60, scratch_parent=None):
                 hashes = private_file(root, "hashes", target.lower() + b"\n")
                 independently = hashlib.sha256(candidate).hexdigest().encode() == target.lower()
                 format_name, hash_mode = "Raw-SHA256", "1400"
+            elif mode == "john-rar5":
+                from cyber_core.cryptanalysis.rar5 import password_records, converter_hashes, verify_records
+                records = password_records(raw)
+                _, converted, _ = runner.run([config["converter"], source])
+                rar_hashes = converter_hashes(converted, records)
+                hashes = private_file(root, "hashes", b"\n".join(rar_hashes) + b"\n")
+                independently = verify_records(records, candidate)
+                format_name, hash_mode = "RAR5", None
             else:
                 _, converted, _ = runner.run([config["converter"], source])
                 # One bounded WinZip AES verifier; archive names never become options.
@@ -89,6 +99,9 @@ def trial(mode, raw, candidate, config, *, timeout=60, scratch_parent=None):
                 runner.run([path, "--format=" + format_name, "--wordlist=" + str(wordlist),
                             "--pot=" + str(pot), "--session=" + str(root / "session"), hashes], allowed=(0, 1))
                 found = pot.exists() and bool(read_small(pot))
+                if mode == "john-rar5":
+                    from cyber_core.cryptanalysis.rar5 import pot_matches
+                    found = pot.exists() and pot_matches(read_small(pot), rar_hashes)
             else:
                 output = root / "matches"
                 code, _, _ = runner.run([path, "--quiet", "--potfile-disable", "--logfile-disable",
@@ -105,6 +118,8 @@ def trial(mode, raw, candidate, config, *, timeout=60, scratch_parent=None):
         result = {"matched": True, "password_validated": True, "format": mode,
                   "validation": VALIDATION[mode], "backend_version": backend_version,
                   "backend_sha256": digest}
+        if mode == "john-rar5":
+            result["payload_integrity_verified"] = False
         if "converter" in config:
             result["converter_sha256"] = binary_digest(config["converter"])
         return result

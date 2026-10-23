@@ -105,13 +105,15 @@ class RealRar5RecoveryTests(unittest.TestCase):
         self.material = self.scope / "candidates"
         self.material.write_bytes(b"wrong\n" + self.password + b"\n")
 
-    def fixture(self, *, headers=False, compressed=False, name="sample.rar", member="synthetic.txt", password=None):
+    def fixture(self, *, headers=False, compressed=False, name="sample.rar", member="synthetic.txt", password=None, protected=True):
         source = self.scope / name
         (self.scope / member).write_bytes(b"Synthetic payload only\n" * 40)
         secret = password or self.password
         # Password prompt and confirmation use stdin, never argv.
-        command = [os.environ["CYBER_RAR_FIXTURE_EXECUTABLE"], "a", "-idq", "-m3" if compressed else "-m0",
-                   "-hp" if headers else "-p", str(source), member]
+        command = [os.environ["CYBER_RAR_FIXTURE_EXECUTABLE"], "a", "-idq", "-m3" if compressed else "-m0"]
+        if protected:
+            command.append("-hp" if headers else "-p")
+        command += [str(source), member]
         result = subprocess.run(command, input=secret + b"\n" + secret + b"\n",
             cwd=self.scope, env={"PATH": "/usr/bin:/bin", "HOME": str(self.root), "LANG": "C.UTF-8", "LC_ALL": "C.UTF-8"},
             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=30)
@@ -160,6 +162,11 @@ class RealRar5RecoveryTests(unittest.TestCase):
             job = self.manager.start(self.case, source, self.material, mode=mode)["id"]
             result = self.manager.work(self.case, job, max_seconds=120)
             self.assertEqual(result["status"], "exhausted", result)
+
+        from cyber_core.cryptanalysis.formats import validate_password
+        plain = self.fixture(name="plain.rar", protected=False)
+        with self.assertRaises(CoreError):
+            validate_password("rar5", plain.read_bytes(), self.password)
 
     def test_real_changed_evidence_and_pause_do_not_publish(self):
         from cyber_core.verification.artifacts import verified_result

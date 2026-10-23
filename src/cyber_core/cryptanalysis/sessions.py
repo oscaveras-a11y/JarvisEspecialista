@@ -411,7 +411,7 @@ class RecoverySessions:
                 result = json.loads(response["stdout"])
                 if type(result.get("matched")) is not bool or any(k not in
                     ("matched","authenticated","sha256","size","algorithm","private_material_validated",
-                     "password_validated","format","validation","backend_version","backend_sha256","converter_sha256") for k in result):
+                     "password_validated","format","validation","backend_version","backend_sha256","converter_sha256","payload_integrity_verified") for k in result):
                     raise CoreError("Invalid recovery trial response")
                 published = None
                 if result["matched"]:
@@ -431,6 +431,10 @@ class RecoverySessions:
                             raise CoreError("Password validation contract missing")
                         published = {"password_validated": True, "format": row["mode"],
                                      "validation": VALIDATION[row["mode"]]}
+                        if row["mode"] in ("rar5", "john-rar5"):
+                            if result.get("payload_integrity_verified") is not False:
+                                raise CoreError("RAR5 payload integrity scope missing")
+                            published["payload_integrity_verified"] = False
                         if row["mode"] in EXTERNAL_MODES:
                             import re
                             if (not isinstance(result.get("backend_version"), str) or

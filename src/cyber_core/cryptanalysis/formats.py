@@ -7,14 +7,15 @@ import zipfile
 
 from cyber_core.errors import CoreError
 
-MODES = ("ccaes1", "ssh-private", "zip", "7z", "pdf", "office", "pkcs12")
+MODES = ("ccaes1", "ssh-private", "zip", "7z", "pdf", "office", "pkcs12", "rar5")
 MODULES = {"ccaes1": "cryptography", "ssh-private": "cryptography", "zip": "pyzipper",
-           "7z": "py7zr", "pdf": "pypdf", "office": "msoffcrypto", "pkcs12": "cryptography"}
+           "7z": "py7zr", "pdf": "pypdf", "office": "msoffcrypto", "pkcs12": "cryptography", "rar5": "cryptography"}
 VALIDATION = {"zip": "all encrypted members read; CRC or AES authentication checked",
               "7z": "encrypted payload decoded; all regular member CRCs checked",
               "pdf": "PDF Standard security password verifier",
               "office": "Office password verifier and decrypted OOXML ZIP integrity",
-              "pkcs12": "PKCS12 password and contained key/certificate parsing"}
+              "pkcs12": "PKCS12 password and contained key/certificate parsing",
+              "rar5": "RAR5 password-check verifier; payload integrity not verified"}
 MAX_EXPANDED = 16 * 1024 * 1024
 MAX_MEMBERS = 256
 SIGNATURES = {"ccaes1": (b"CCAES1",),
@@ -23,13 +24,13 @@ SIGNATURES = {"ccaes1": (b"CCAES1",),
                               b"-----BEGIN PRIVATE KEY-----"),
               "zip": (b"PK\x03\x04", b"PK\x05\x06"), "7z": (b"7z\xbc\xaf\x27\x1c",),
               "pdf": (b"%PDF-",), "office": (bytes.fromhex("d0cf11e0a1b11ae1"),),
-              "pkcs12": (b"0",)}
+              "pkcs12": (b"0",), "rar5": (b"Rar!\x1a\x07\x01\x00",)}
 
 def inventory():
     result = {mode: {"available": importlib.util.find_spec(module) is not None,
                      "dependency": module, "operation": "password_validation" if mode in VALIDATION else mode}
               for mode, module in MODULES.items()}
-    result["rar"] = {"available": False, "reason": "No validated RAR password backend in this release"}
+    result["rar"] = {"available": False, "reason": "Use rar5 for RAR5; no validated RAR4 backend in this release"}
     return result
 
 def select_mode(mode, header):
@@ -198,9 +199,13 @@ def _pkcs12(raw, candidate):
     return key is not None or certificate is not None or bool(extras)
 
 def validate_password(mode, raw, candidate):
-    validators = {"zip": _zip, "7z": _seven, "pdf": _pdf, "office": _office, "pkcs12": _pkcs12}
+    from cyber_core.cryptanalysis.rar5 import verify_password as _rar5
+    validators = {"rar5": _rar5, "zip": _zip, "7z": _seven, "pdf": _pdf, "office": _office, "pkcs12": _pkcs12}
     if mode not in validators:
         raise ValueError("Unsupported password validator")
     if not validators[mode](raw, candidate):
         return {"matched": False}
-    return {"matched": True, "password_validated": True, "format": mode, "validation": VALIDATION[mode]}
+    result = {"matched": True, "password_validated": True, "format": mode, "validation": VALIDATION[mode]}
+    if mode == "rar5":
+        result["payload_integrity_verified"] = False
+    return result

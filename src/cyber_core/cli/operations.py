@@ -50,7 +50,7 @@ def configure(sub):
         if action == "start":
             parser.add_argument("path")
             parser.add_argument("--candidates",required=True)
-            parser.add_argument("--mode",choices=("auto","ccaes1","ssh-private","zip","7z","pdf","office","pkcs12","qpdf-pdf","openssl-pkcs12","hashcat-sha256","john-sha256","john-zip","hashcat-zip-aes"),default="ccaes1")
+            parser.add_argument("--mode",choices=("auto","ccaes1","ssh-private","zip","7z","pdf","office","pkcs12","qpdf-pdf","openssl-pkcs12","hashcat-sha256","john-sha256","john-zip","hashcat-zip-aes","rar5","john-rar5"),default="ccaes1")
             parser.add_argument("--hours",type=float,default=24)
             parser.add_argument("--max-candidates",type=int,default=100000)
         elif action != "list":

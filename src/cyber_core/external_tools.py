@@ -18,6 +18,8 @@ def select_external_mode(mode, header):
     config = external_configuration(MODES[mode])
     if mode in ("john-zip", "hashcat-zip-aes") and "converter" not in config:
         raise CoreError("ZIP converter unavailable")
+    if mode == "john-rar5" and "rar_converter" not in config:
+        raise CoreError("RAR5 converter unavailable")
     return mode
 
 def external_trial(mode, raw, candidate, config, *, timeout=60, scratch_parent=None):

@@ -51,7 +51,7 @@ def main():
             if key is not None:
                 result = {"matched": True, "private_material_validated": True,
                           "algorithm": type(key).__name__.lstrip("_")}
-        elif mode in ("qpdf-pdf", "openssl-pkcs12", "hashcat-sha256", "john-sha256", "john-zip", "hashcat-zip-aes"):
+        elif mode in ("qpdf-pdf", "openssl-pkcs12", "hashcat-sha256", "john-sha256", "john-zip", "hashcat-zip-aes", "john-rar5"):
             from cyber_core.external_tools import external_trial
             with open(os.devnull, "w") as quiet, contextlib.redirect_stdout(quiet), contextlib.redirect_stderr(quiet):
                 result = external_trial(mode, raw, candidate, data["config"],
