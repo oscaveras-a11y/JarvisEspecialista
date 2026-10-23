@@ -44,6 +44,23 @@ class PasswordDisplayTests(unittest.TestCase):
         self.assertNotIn(self.password, self.core.report(self.case).read_text(encoding="utf-8"))
         self.assertTrue(self.core.verify_audit(self.case))
 
+    def test_cli_prints_password_only_with_the_explicit_option(self):
+        import contextlib
+        import io
+        from cyber_core.cli import main
+        self.manager.work(self.case, self.job)
+        base = ["--home", str(self.core.home), "recovery-session", "show", self.case, self.job]
+        output = io.StringIO()
+        with contextlib.redirect_stdout(output):
+            code = main(base)
+        self.assertEqual(code, 0)
+        self.assertNotIn(self.password, output.getvalue())
+        output = io.StringIO()
+        with contextlib.redirect_stdout(output):
+            code = main(base + ["--show-password"])
+        self.assertEqual(code, 0)
+        self.assertEqual(json.loads(output.getvalue())["password"], self.password)
+
     def test_changed_material_and_paused_case_cannot_reveal(self):
         self.manager.work(self.case, self.job)
         self.core.pause(self.case)
@@ -51,6 +68,21 @@ class PasswordDisplayTests(unittest.TestCase):
             self.manager.reveal_password(self.case, self.job)
         self.core.resume(self.case)
         self.material.write_text("wrong\nreplacement\n")
+        with self.assertRaises(CoreError):
+            self.manager.reveal_password(self.case, self.job)
+
+    def test_revoked_authorization_cannot_reveal(self):
+        self.manager.work(self.case, self.job)
+        self.core.revoke(self.case)
+        with self.assertRaises(CoreError):
+            self.manager.reveal_password(self.case, self.job)
+
+    def test_changed_verified_copy_cannot_reveal(self):
+        from cyber_core.verification.artifacts import verified_result
+        self.manager.work(self.case, self.job)
+        row = self.manager._row(self.case, self.job)
+        artifact, _ = verified_result(self.core, self.case, row["task_id"])
+        Path(artifact["copy"]).write_bytes(b"changed synthetic evidence")
         with self.assertRaises(CoreError):
             self.manager.reveal_password(self.case, self.job)
 

@@ -92,7 +92,7 @@ def trial(mode, raw, candidate, config, *, timeout=60, scratch_parent=None):
             else:
                 output = root / "matches"
                 code, _, _ = runner.run([path, "--quiet", "--potfile-disable", "--logfile-disable",
-                    "--restore-disable", "--session=cyber", "-a", "0", "-m", hash_mode,
+                    "--restore-disable", "--wordlist-autohex-disable", "--session=cyber", "-a", "0", "-m", hash_mode,
                     "--outfile", output, "--outfile-format", "2", hashes, wordlist], allowed=(0, 1))
                 found = code == 0 and output.exists() and bool(read_small(output))
             if found != independently:

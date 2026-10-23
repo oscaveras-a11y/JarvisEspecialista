@@ -31,6 +31,15 @@ class ToolInventoryContracts(unittest.TestCase):
             self.assertFalse(item["available"])
             self.assertIn("reason", item)
 
+    @unittest.skipUnless(sys.platform == "linux", "Linux applet symlinks")
+    def test_applet_symlink_keeps_its_invocation_name(self):
+        from cyber_core.external_tool_runtime import executable
+        with tempfile.TemporaryDirectory() as folder:
+            applet = Path(folder) / "zip2john"
+            applet.symlink_to(sys.executable)
+            self.assertEqual(executable(str(applet)), str(applet))
+            self.assertNotEqual(executable(str(applet)), str(applet.resolve()))
+
     def test_relative_executable_and_unknown_mode_are_rejected(self):
         try:
             from cyber_core.external_tools import external_configuration
@@ -174,6 +183,13 @@ class RealExternalRecoveryTests(unittest.TestCase):
 
     def test_hashcat_sha256_wrong_and_correct_using_real_cpu_backend(self):
         source = self.scope / "sha256.txt"
+        source.write_text(hashlib.sha256(self.password).hexdigest() + "\n")
+        self.check_session("hashcat-sha256", source)
+
+    def test_hashcat_treats_hex_looking_candidate_as_literal_password(self):
+        self.password = b"$HEX[6162]"
+        self.material.write_bytes(b"synthetic-wrong\n" + self.password + b"\n")
+        source = self.scope / "literal-sha256.txt"
         source.write_text(hashlib.sha256(self.password).hexdigest() + "\n")
         self.check_session("hashcat-sha256", source)
 

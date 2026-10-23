@@ -29,8 +29,12 @@ SIGNATURES = {"qpdf-pdf":(b"%PDF-",), "openssl-pkcs12":(b"0",),
 def executable(value):
     if not isinstance(value,str) or not value or not Path(value).is_absolute():
         raise CoreError("External tool requires an absolute trusted executable")
-    path = Path(value).resolve()
-    if not path.is_file() or not os.access(path,os.X_OK) or path.suffix.lower() in (".cmd",".bat",".sh",".ps1"):
+    # John Jumbo selects zip2john by argv[0]; resolving the final symlink
+    # changes the program's operation. Resolve only its parent directory.
+    supplied = Path(value)
+    path = supplied.parent.resolve() / supplied.name
+    resolved = path.resolve()
+    if not path.is_file() or not os.access(path,os.X_OK) or any(p.suffix.lower() in (".cmd",".bat",".sh",".ps1") for p in (path, resolved)):
         raise CoreError("External tool executable unavailable")
     return str(path)
 

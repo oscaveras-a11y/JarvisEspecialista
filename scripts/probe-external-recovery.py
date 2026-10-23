@@ -19,7 +19,8 @@ def main():
         hashes = root / "hashes"
         hashes.write_text(hashlib.sha256(password).hexdigest() + "\n")
         zip_config = external_configuration("john")
-        converted = __import__("subprocess").run([zip_config["converter"], str(source)], capture_output=True, timeout=10)
+        converted = __import__("subprocess").run([zip_config["converter"], str(source)], capture_output=True, timeout=10,
+            env={"PATH": "/usr/bin:/bin", "HOME": str(root), "LANG": "C.UTF-8"})
         print("zip2john exit", converted.returncode, "zip2 marker", b"$zip2$" in converted.stdout)
         import re
         matches = re.findall(rb"\$zip2\$[^\r\n]*?\$/zip2\$", converted.stdout)
