@@ -30,7 +30,9 @@ GitHub Actions valida o software em ambientes temporários; a plataforma ainda n
 - Integração opcional de Ghidra/Binwalk reais ao CORE e relatório, com [ensaios somente no GitHub](docs/real-tools-core.md).
 - Prévia opcional de instruções com Capstone para arquiteturas declaradas compatíveis, limitada a bytes respaldados pelo arquivo; nunca executa o binário.
 - Análise e comparação de logs CAN clássicos, sem acesso a barramentos ou transmissão.
-- Recuperação autenticada AES-GCM somente do envelope sintético de laboratório `CCAES1`, quando material legítimo está disponível.
+- Recuperação autenticada AES-GCM do envelope sintético de laboratório `CCAES1`, com material legítimo disponível.
+- Sessões autorizadas com candidatas fornecidas para ZIP, 7z, PDF, Office OOXML e PKCS12/PFX, além de verificação de senha RAR5; cobertura e limites em [recuperação multiformato](docs/recovery-multiformat.md) e [RAR5](docs/rar5-recovery.md).
+- [Oito ferramentas reais no mesmo ambiente](docs/eight-real-tools.md): Ghidra, Binwalk, Hashcat, John Jumbo, QPDF, OpenSSL, Detect It Easy e Unblob, com operações sintéticas exigidas no GitHub Actions. São chamadas sob demanda; o teste não mantém servidor online.
 
 Uma assinatura não comprova validade integral do formato; alta entropia não comprova criptografia. A triagem não demonstra descriptografia e não há promessa universal de recuperação.
 
