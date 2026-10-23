@@ -7,6 +7,7 @@ from cyber_core.errors import CoreError
 from cyber_core.service import Core
 from cyber_core.cryptanalysis.sessions import RecoverySessions
 
+@unittest.skipUnless(__import__("importlib.util", fromlist=["find_spec"]).find_spec("pypdf"), "Recovery extra required")
 class PasswordDisplayTests(unittest.TestCase):
     def setUp(self):
         from pypdf import PdfWriter

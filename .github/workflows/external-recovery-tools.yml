@@ -46,6 +46,9 @@ jobs:
         run: bash scripts/setup-external-recovery-tools.sh
       - name: Real encrypted-file and identification contracts
         run: python scripts/run-tests.py test_external_recovery_tools.py
+      - name: Diagnose failed synthetic CLI contracts
+        if: ${{ failure() }}
+        run: python scripts/probe-external-recovery.py
       - name: Complete suite with six real tools
         if: ${{ !cancelled() }}
         run: python scripts/run-tests.py

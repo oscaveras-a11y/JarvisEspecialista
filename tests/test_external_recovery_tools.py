@@ -43,6 +43,13 @@ class ToolInventoryContracts(unittest.TestCase):
             external_configuration("arbitrary-shell")
 
 class ExternalFailureContracts(unittest.TestCase):
+    def test_hashcat_version_keeps_the_major_version_after_v_prefix(self):
+        from cyber_core.external_tool_runtime import version
+        from unittest.mock import Mock
+        runner = Mock()
+        runner.run.return_value = (0, b"v6.2.6\n", b"")
+        self.assertEqual(version(runner, "hashcat", "/trusted/hashcat"), "6.2.6")
+
     def test_malformed_and_partial_analysis_is_rejected(self):
         from cyber_core.external_tools_child import normalize_die, normalize_unblob
         with self.assertRaises(CoreError):
@@ -76,7 +83,7 @@ class ExternalFailureContracts(unittest.TestCase):
             with self.assertRaises(CoreError):
                 runner.run([sys.executable, "-c", "print('X'*8192)"], output_limit=32)
 
-    @unittest.skipUnless(sys.platform == "linux", "Linux CLI runtime")
+    @unittest.skipUnless(sys.platform == "linux" and importlib.util.find_spec("pypdf"), "Linux and recovery extra")
     def test_cli_success_without_password_match_is_not_success(self):
         from cyber_core.external_tools_child import trial
         from pypdf import PdfWriter

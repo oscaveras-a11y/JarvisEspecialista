@@ -148,7 +148,7 @@ def version(runner,tool,path):
     args = {"hashcat":["--version"],"john":["--list=build-info"],"qpdf":["--version"],
             "openssl":["version"],"die":["--version"],"unblob":["--version"]}[tool]
     _,stdout,stderr = runner.run([path,*args])
-    match = re.search(rb"\b\d+(?:\.\d+){1,3}\b",stdout+stderr)
+    match = re.search(rb"(?<![0-9.])\d+(?:\.\d+){1,3}(?![0-9.])",stdout+stderr)
     if not match:
         raise CoreError("External tool version not recognized")
     return match.group().decode("ascii")
