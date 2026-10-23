@@ -81,6 +81,8 @@ class RealExternalRecoveryTests(unittest.TestCase):
         self.assertIn(job, report)
         self.assertTrue(self.core.verify_audit(self.case))
         self.assertEqual("output" in done["result"], output)
+        self.assertEqual(self.manager.reveal_password(self.case, job)["password"], self.password.decode())
+        self.assertNotIn(self.password.decode(), self.core.report(self.case).read_text(encoding="utf-8"))
         return done
 
     def test_all_six_real_tools_are_available(self):
@@ -92,15 +94,14 @@ class RealExternalRecoveryTests(unittest.TestCase):
         self.assertEqual(set(inventory), {"hashcat","john","qpdf","openssl","die","unblob"})
         self.assertTrue(all(item["available"] for item in inventory.values()), inventory)
 
-    def test_qpdf_wrong_correct_and_unlocked_pdf_is_published(self):
-        from pypdf import PdfWriter, PdfReader
+    def test_qpdf_wrong_correct_without_plaintext_export(self):
+        from pypdf import PdfWriter
         writer = PdfWriter()
         writer.add_blank_page(width=72, height=72)
         writer.encrypt(self.password.decode(), algorithm="AES-256")
         source = self.scope / "locked.pdf"
         writer.write(source)
-        done = self.check_session("qpdf-pdf", source, output=True)
-        self.assertFalse(PdfReader(done["result"]["output"]).is_encrypted)
+        self.check_session("qpdf-pdf", source)
 
     def test_openssl_pkcs12_wrong_and_correct(self):
         source = self.scope / "certificate.p12"
@@ -109,22 +110,11 @@ class RealExternalRecoveryTests(unittest.TestCase):
             serialization.BestAvailableEncryption(self.password)))
         self.check_session("openssl-pkcs12", source)
 
-    def test_openssl_aes_cbc_requires_expected_hash_and_publishes_verified_plaintext(self):
+    def test_openssl_aes_cbc_is_not_a_supported_profile(self):
         source = self.scope / "encrypted.openssl"
-        plain = self.scope / "plain"
-        payload = b"synthetic plaintext for OpenSSL only\n"
-        plain.write_bytes(payload)
-        result = subprocess.run([os.environ["CYBER_OPENSSL_EXECUTABLE"], "enc", "-aes-256-cbc",
-            "-pbkdf2", "-iter", "10000", "-md", "sha256", "-salt", "-pass", "stdin",
-            "-in", str(plain), "-out", str(source)], input=self.password + b"\n",
-            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=30)
-        self.assertEqual(result.returncode, 0)
+        source.write_bytes(b"Salted__" + b"synthetic" * 8)
         with self.assertRaises(CoreError):
             self.manager.start(self.case, source, self.material, mode="openssl-aes256cbc")
-        done = self.check_session("openssl-aes256cbc", source, output=True,
-                                 expected_sha256=hashlib.sha256(payload).hexdigest())
-        self.assertEqual(Path(done["result"]["output"]).read_bytes(), payload)
-        self.assertNotIn("authenticated", done["result"])
 
     def test_hashcat_sha256_wrong_and_correct_using_real_cpu_backend(self):
         source = self.scope / "sha256.txt"
