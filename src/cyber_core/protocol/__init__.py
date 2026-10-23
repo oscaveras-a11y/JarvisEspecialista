@@ -22,6 +22,12 @@ def analyze_capture(text, *, max_messages=200000):
     messages, skipped = 0, 0
     lengths, ids, payloads = {}, {}, set()
     truncated = False
+    # _MAX_DISTINCT bounds how many distinct ids/payloads get tallied; previously
+    # hitting that cap was silent (an already-known id kept counting, but a NEW id
+    # or payload past the cap was just dropped with no signal). Fix: keep counting
+    # already-known ids past the cap (no data loss for what we DO track), and
+    # report explicitly when a new distinct id/payload had to be dropped.
+    ids_truncated, payloads_truncated = False, False
     for raw in text.splitlines():
         line = raw.strip()
         if not line:
@@ -42,13 +48,19 @@ def analyze_capture(text, *, max_messages=200000):
         payload = bytes.fromhex(hexstr)
         messages += 1
         lengths[len(payload)] = lengths.get(len(payload), 0) + 1
-        if ident is not None and len(ids) < _MAX_DISTINCT:
-            ids[ident] = ids.get(ident, 0) + 1
-        if len(payloads) < _MAX_DISTINCT:
-            payloads.add(hexstr.lower())
+        if ident is not None:
+            if ident in ids or len(ids) < _MAX_DISTINCT:
+                ids[ident] = ids.get(ident, 0) + 1
+            else:
+                ids_truncated = True
+        normalized = hexstr.lower()
+        if normalized in payloads or len(payloads) < _MAX_DISTINCT:
+            payloads.add(normalized)
+        else:
+            payloads_truncated = True
     return {'messages': messages, 'skipped': skipped, 'unique_payloads': len(payloads),
             'length_histogram': dict(sorted(lengths.items())), 'id_histogram': ids,
-            'truncated': truncated,
+            'truncated': truncated, 'ids_truncated': ids_truncated, 'payloads_truncated': payloads_truncated,
             'limitations': ['Análise passiva de captura textual; nenhum barramento/rede foi acessado.',
                             'Reconhece enquadramento e padrões, não valida semântica do protocolo.']}
 
@@ -56,16 +68,25 @@ def analyze_capture(text, *, max_messages=200000):
 def compare_captures(first_text, second_text, *, max_messages=200000):
     first = analyze_capture(first_text, max_messages=max_messages)
     second = analyze_capture(second_text, max_messages=max_messages)
-    a = {p for p in _payload_set(first_text, max_messages)}
-    b = {p for p in _payload_set(second_text, max_messages)}
+    a, a_truncated = _payload_set(first_text, max_messages)
+    b, b_truncated = _payload_set(second_text, max_messages)
+    only_in_first, only_in_second = sorted(a - b), sorted(b - a)
+    # The comparison itself can be incomplete for reasons beyond either side's own
+    # 'truncated'/'payloads_truncated': the distinct-payload sets used HERE for the
+    # set difference have their own _MAX_DISTINCT cap, and the diff lists below are
+    # independently capped at 1000 entries each.
+    comparison_truncated = (first['truncated'] or second['truncated'] or
+                            first['payloads_truncated'] or second['payloads_truncated'] or
+                            a_truncated or b_truncated or
+                            len(only_in_first) > 1000 or len(only_in_second) > 1000)
     return {'first': first, 'second': second,
-            'only_in_first': sorted(a - b)[:1000], 'only_in_second': sorted(b - a)[:1000],
-            'common_unique_payloads': len(a & b),
+            'only_in_first': only_in_first[:1000], 'only_in_second': only_in_second[:1000],
+            'common_unique_payloads': len(a & b), 'comparison_truncated': comparison_truncated,
             'limitations': first['limitations']}
 
 
 def _payload_set(text, max_messages):
-    out, count = set(), 0
+    out, count, dropped = set(), 0, False
     for raw in text.splitlines():
         line = raw.strip()
         if not line or count >= max_messages:
@@ -77,6 +98,9 @@ def _payload_set(text, max_messages):
         hexstr = _SEP.sub('', line)
         if hexstr and len(hexstr) % 2 == 0 and all(c in _HEX for c in hexstr):
             count += 1
-            if len(out) < _MAX_DISTINCT:
-                out.add(hexstr.lower())
-    return out
+            normalized = hexstr.lower()
+            if normalized in out or len(out) < _MAX_DISTINCT:
+                out.add(normalized)
+            else:
+                dropped = True
+    return out, dropped
