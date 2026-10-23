@@ -1,0 +1,47 @@
+name: RAR5 recovery coverage
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'src/cyber_core/**'
+      - 'tests/test_recovery_rar5.py'
+      - 'scripts/setup-external-recovery-tools.sh'
+      - '.github/workflows/rar5-recovery.yml'
+permissions:
+  contents: read
+concurrency:
+  group: rar5-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  real_rar5:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    env:
+      CYBER_REQUIRE_RAR5: '1'
+      CYBER_REQUIRE_EXTERNAL_TOOLS: '1'
+      PYTHONUTF8: '1'
+      PYTHONUNBUFFERED: '1'
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - run: python -m pip install '.[reverse,recovery]'
+      - name: Provision real tools and synthetic RAR generator
+        id: provision
+        timeout-minutes: 15
+        run: bash scripts/setup-external-recovery-tools.sh
+      - name: Require RAR5-only fixture generator
+        run: |
+          test -n "$CYBER_RAR_FIXTURE_EXECUTABLE"
+          test -x "$CYBER_RAR_FIXTURE_EXECUTABLE"
+      - name: Native and John RAR5 contracts with real encrypted archives
+        run: python scripts/run-tests.py test_recovery_rar5.py
+      - name: Complete suite with real tools
+        if: ${{ !cancelled() && steps.provision.outcome == 'success' }}
+        run: python scripts/run-tests.py
+      - name: Synthetic demonstration
+        if: ${{ !cancelled() && steps.provision.outcome == 'success' }}
+        run: python scripts/demo.py

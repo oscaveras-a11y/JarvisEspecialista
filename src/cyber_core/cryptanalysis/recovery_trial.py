@@ -1,5 +1,6 @@
 """Fixed local recovery trial. Receives one secret by stdin; emits metadata only."""
 import hashlib
+import contextlib
 import json
 import os
 from pathlib import Path
@@ -50,8 +51,15 @@ def main():
             if key is not None:
                 result = {"matched": True, "private_material_validated": True,
                           "algorithm": type(key).__name__.lstrip("_")}
+        elif mode in ("qpdf-pdf", "openssl-pkcs12", "hashcat-sha256", "john-sha256", "john-zip", "hashcat-zip-aes", "john-rar5"):
+            from cyber_core.external_tools import external_trial
+            with open(os.devnull, "w") as quiet, contextlib.redirect_stdout(quiet), contextlib.redirect_stderr(quiet):
+                result = external_trial(mode, raw, candidate, data["config"],
+                                        timeout=data["timeout"], scratch_parent=data["scratch"])
         else:
-            raise ValueError()
+            from cyber_core.cryptanalysis.formats import validate_password
+            with open(os.devnull, "w") as quiet, contextlib.redirect_stdout(quiet), contextlib.redirect_stderr(quiet):
+                result = validate_password(mode, raw, candidate)
         print(json.dumps(result, ensure_ascii=True))
         return 0
     except BaseException:
