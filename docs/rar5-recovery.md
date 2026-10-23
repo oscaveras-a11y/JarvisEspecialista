@@ -43,3 +43,14 @@ permanecem os do pacote Ubuntu. Só dados inventados são usados no CI.
 
 Referências: https://www.rarlab.com/technote.htm e UnRAR crypt5.cpp;
 John Jumbo rar5_fmt_plug.c e rar2john.c no commit fixado pelo PR #24.
+
+## Primeira execução real
+
+Commit aec03c0c: run 39889269511 confirmou RAR5 real nos modos nativo e John,
+conteúdo/cabeçalhos, comprimido/armazenado, ausência de match e mistura de senhas.
+O teste de evidência alterada estava deixando a sessão pausada: retomar o caso
+não retoma automaticamente a sessão. O roteiro foi corrigido para retomar
+explicitamente a sessão antes de adulterar sua cópia e testar a recusa.
+A rodada final inclui esse roteiro, contratos nativos Windows/Linux e a
+canonicalização do IV feita pelo John. Sem alteração de código de produção
+para contornar a falha do teste.

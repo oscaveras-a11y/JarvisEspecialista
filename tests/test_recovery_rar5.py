@@ -55,13 +55,13 @@ class Rar5StructuralContracts(unittest.TestCase):
         broken = bytearray(encrypted_header())
         broken[8] ^= 1
         for raw in (bytes(broken), encrypted_header(bad_check=True)):
-            with self.subTest(raw_size=len(raw)), self.assertRaises((CoreError, ValueError)):
+            with self.subTest(raw_size=len(raw)), self.assertRaises(CoreError):
                 validate_password("rar5", raw, b"synthetic-password")
 
     def test_absent_verifier_and_truncated_header_are_rejected(self):
         from cyber_core.cryptanalysis.formats import validate_password
         for raw in (encrypted_header(flags=0), encrypted_header()[:18], MAGIC + b"\0"*4 + b"\x80"*4):
-            with self.subTest(size=len(raw)), self.assertRaises((CoreError, ValueError)):
+            with self.subTest(size=len(raw)), self.assertRaises(CoreError):
                 validate_password("rar5", raw, b"synthetic-password")
 
     def test_kdf_and_volume_limits_fail_before_expensive_work(self):
@@ -70,14 +70,33 @@ class Rar5StructuralContracts(unittest.TestCase):
         crypt = b"\0\x01\x1f" + bytes(16) + bytes(12)
         volume = MAGIC + block(1, 0, b"\x01") + block(5, 0, b"\0")
         for raw in (MAGIC + block(4, 0, crypt) + bytes(48), volume):
-            with self.assertRaises((CoreError, ValueError)):
+            with self.assertRaises(CoreError):
                 validate_password("rar5", raw, b"synthetic-password")
 
     def test_rar4_and_unencrypted_rar5_do_not_claim_password_success(self):
         from cyber_core.cryptanalysis.formats import validate_password
         for raw in (b"Rar!\x1a\x07\0" + bytes(80), MAGIC + block(1, 0, b"\0") + block(5, 0, b"\0")):
-            with self.assertRaises((CoreError, ValueError)):
+            with self.assertRaises(CoreError):
                 validate_password("rar5", raw, b"synthetic-password")
+
+    def test_converter_must_match_original_parameters_and_john_canonical_iv(self):
+        from cyber_core.cryptanalysis.rar5 import password_records, converter_hashes, pot_matches
+        records = password_records(encrypted_header())
+        salt, count, iv, check = records[0]
+        value = ("$rar5$16$%s$%d$%s$8$%s" % (salt.hex(), count, iv.hex(), check.hex())).encode()
+        hashes = converter_hashes(b"target:" + value + b"\n", records)
+        fields = value.split(b"$")
+        self.assertEqual(fields[5], iv.hex().encode())
+        self.assertEqual(fields[7], check.hex().encode())
+        fields[5] = b"0" * 32
+        canonical = b"$".join(fields)
+        self.assertTrue(pot_matches(canonical + b":synthetic-password\n", hashes))
+        self.assertFalse(pot_matches(b"", hashes))
+        self.assertFalse(pot_matches(value + b":synthetic-password\n", hashes))
+        changed = list(records[0])
+        changed[0] = bytes(16)
+        with self.assertRaises(CoreError):
+            converter_hashes(b"target:" + value + b"\n", [tuple(changed)])
 
     def test_external_profile_requires_its_rar_converter(self):
         import sys
@@ -85,6 +104,54 @@ class Rar5StructuralContracts(unittest.TestCase):
         with patch.dict(os.environ, {"CYBER_JOHN_EXECUTABLE": sys.executable}, clear=True):
             with self.assertRaises(CoreError):
                 select_external_mode("john-rar5", MAGIC)
+
+class NativeRar5SessionContracts(unittest.TestCase):
+    def setUp(self):
+        from cyber_core.service import Core
+        from cyber_core.cryptanalysis.sessions import RecoverySessions
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        root = Path(self.tmp.name)
+        self.scope = root / "scope"
+        self.scope.mkdir()
+        self.source = self.scope / "synthetic-verifier.rar"
+        self.source.write_bytes(encrypted_header())
+        self.material = self.scope / "candidates"
+        self.material.write_bytes(b"wrong\nsynthetic-password\n")
+        self.core = Core(root / "state")
+        self.addCleanup(self.core.close)
+        self.case = self.core.investigate("synthetic", "RAR5 session contract", str(self.scope),
+            "owner", "Synthetic verifier vector; not an archive payload test", recovery=True, valid_hours=24)
+        self.manager = RecoverySessions(self.core)
+
+    def test_auto_mode_durable_result_and_explicit_display_on_both_platforms(self):
+        job = self.manager.start(self.case, self.source, self.material, mode="auto")["id"]
+        wrong = self.manager.work(self.case, job, max_attempts=1)
+        self.assertEqual(wrong["status"], "pending")
+        result = self.manager.work(self.case, job, max_attempts=1)
+        self.assertEqual(result["status"], "succeeded")
+        self.assertEqual(result["mode"], "rar5")
+        self.assertFalse(result["result"]["payload_integrity_verified"])
+        self.assertNotIn("output", result["result"])
+        self.assertEqual(self.manager.reveal_password(self.case, job)["password"], "synthetic-password")
+        self.assertNotIn("synthetic-password", json.dumps(result))
+        self.assertNotIn("synthetic-password", self.core.report(self.case).read_text(encoding="utf-8"))
+        self.assertTrue(self.core.verify_audit(self.case))
+
+    def test_damaged_verifier_does_not_exhaust_candidates(self):
+        self.source.write_bytes(encrypted_header(bad_check=True))
+        job = self.manager.start(self.case, self.source, self.material, mode="rar5")["id"]
+        result = self.manager.work(self.case, job)
+        self.assertEqual(result["status"], "resource_limited")
+        self.assertEqual(self.manager._row(self.case, job)["cursor"], 0)
+        self.assertIsNone(result["result"])
+
+    def test_cli_accepts_native_and_john_modes(self):
+        from cyber_core.cli import parser
+        for mode in ("rar5", "john-rar5"):
+            args = parser().parse_args(["recovery-session", "start", self.case, str(self.source),
+                                        "--candidates", str(self.material), "--mode", mode])
+            self.assertEqual(args.mode, mode)
 
 @unittest.skipUnless(os.environ.get("CYBER_REQUIRE_RAR5") == "1", "Real RAR5 fixtures run only in dedicated Linux Actions")
 class RealRar5RecoveryTests(unittest.TestCase):
@@ -177,6 +244,7 @@ class RealRar5RecoveryTests(unittest.TestCase):
             self.manager.work(self.case, job)
         self.assertEqual(self.manager.get(self.case, job)["attempts"], 0)
         self.core.resume(self.case)
+        self.manager.resume(self.case, job)
         artifact, _ = verified_result(self.core, self.case, self.manager._row(self.case, job)["task_id"])
         Path(artifact["copy"]).write_bytes(b"corrupted synthetic evidence")
         with self.assertRaises(CoreError):
