@@ -21,24 +21,37 @@
 - Parser/saída truncada não pode virar resultado completo.
 
 ### Task1: contratos e workflow
-- [ ] Criar tests/test_external_recovery_tools.py com chamadas reais e contratos de disponibilidade/escopo.
-- [ ] Criar workflow próprio; observar falhas antes do código.
-- [ ] Provisionar ferramentas só no runner e registrar versões.
+- [x] Criar tests/test_external_recovery_tools.py com chamadas reais e contratos de disponibilidade/escopo.
+- [x] Criar workflow próprio; observar falhas antes do código.
+- [x] Provisionar ferramentas só no runner e registrar versões.
 
 ### Task2: runtime, identificação e persistência
 Files: src/cyber_core/external_tools.py, external_tools_child.py, cli/operations.py, cli/__init__.py.
 Interface: tool_inventory() -> dict; analyze_tool(core,case,path,tool) -> resultado auditável.
-- [ ] Implementar seleção de executáveis absolutos e perfis allowlist, subprocessos limitados, parsing DIE/Unblob.
-- [ ] Provar cópia verificada, pausa/cancelamento, integridade e relatório.
+- [x] Implementar seleção de executáveis absolutos e perfis allowlist, subprocessos limitados, parsing DIE/Unblob.
+- [x] Provar cópia verificada, pausa/cancelamento, integridade e relatório.
 
 ### Task3: recuperação
 Files: cryptanalysis/formats.py, recovery_trial.py, sessions.py, external_tools.py.
 Interface: external_trial(mode,raw,candidate,config) -> dict matched/password_validated/format/validation.
-- [ ] Integrar os seis modos de tentativa e configuração confiável do ambiente.
-- [ ] Verificar senha incorreta/correta para QPDF/OpenSSL/John/Hashcat e ZIP real.
-- [ ] Manter todos os testes de sessão existentes.
+- [x] Integrar os seis modos de tentativa e configuração confiável do ambiente.
+- [x] Verificar senha incorreta/correta para QPDF/OpenSSL/John/Hashcat e ZIP real.
+- [x] Manter todos os testes de sessão existentes.
 
 ### Task4: conclusão
-- [ ] Suíte completa + demo em Linux/Windows e CLIs reais em Linux.
-- [ ] Revisão independente; regressões reproduzidas antes das correções.
-- [ ] Registrar recibos de CI e limites no PR; não fazer merge automático.
+- [ ] Concluir rodada final de CLIs reais em Linux; formatos internos, suíte e demo em Linux/Windows já passaram no commit 1a7c3ab.
+- [x] Revisão independente; regressões reproduzidas antes das correções.
+- [ ] Registrar recibo final do CI no PR; manter sem merge automático.
+
+## Escopo adicional confirmado em 2026-10-22
+
+Exibição explícita de senhas com recovery-session show --show-password, sem cópia
+persistida em banco/relatórios. Testes do comando completo, pausa, revogação, HMAC
+da lista e evidência alterada estão implementados. Documentação: external-password-display.md.
+
+## Diagnóstico reproduzido
+
+Run 39884244921: ZIP/John corrigido preservando argv[0] do symlink zip2john; Hashcat
+falhou por ausência de libOpenCL (POCL instalado sem loader porque recommends está
+desativado). Provisionamento agora exige ocl-icd-libopencl1, clinfo e backend-info.
+A entrega permanece em validação até a execução final das seis ferramentas passar.
