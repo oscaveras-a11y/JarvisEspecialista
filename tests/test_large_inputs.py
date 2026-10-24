@@ -45,6 +45,12 @@ class LargeInputTests(unittest.TestCase):
         self.assertEqual(digest(path), expected)
         path.unlink()  # also proves mappings/handles are closed on Windows
 
+    def test_900_mib_analysis(self):
+        path = sparse(self.root / 'over800.bin', 900 * MIB)
+        result = analyze_firmware(path, max_bytes=1024 * MIB)
+        self.assertEqual(result['size_bytes'], 900 * MIB)
+        self.assertEqual(result['sha256'], digest(path))
+
     def test_250_mib_pe_keeps_header_validation(self):
         pe = bytearray(224)
         pe[:2] = b'MZ'
