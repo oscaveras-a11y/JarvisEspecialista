@@ -16,7 +16,9 @@ import time
 
 from cyber_core.errors import CoreError
 
-MAX_INPUT = 64 * 1024 * 1024
+from cyber_core.analysis_process.limits import MAX_INPUT_BYTES
+
+MAX_INPUT = MAX_INPUT_BYTES
 MAX_JSON = 2 * 1024 * 1024
 MAX_SCRATCH = 64 * 1024 * 1024
 MAX_STDIO = 256 * 1024
