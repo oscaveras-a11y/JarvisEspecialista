@@ -44,7 +44,12 @@ class CLITests(unittest.TestCase):
         case = self.cli('investigate', '--project', 'demo', '--objective', 'synthetic', '--scope', str(self.inputs), '--owner', 'owner', '--authorization', 'Synthetic lab')['id']
         destination = self.inputs / 'rockyou.txt'
         result = self.cli('materialize-wordlist', case, str(destination), '--limit', '5')
-        self.assertEqual(result, {'path': str(destination), 'source': 'rockyou', 'lines': 5})
+        self.assertEqual(result['source'], 'rockyou')
+        self.assertEqual(result['lines'], 5)
+        # Compare by identity, not literal string: on Windows the authorized
+        # path can come back through its 8.3 short-name alias (RUNNER~1 vs
+        # runneradmin), which is still the same file.
+        self.assertTrue(Path(result['path']).samefile(destination))
         self.assertEqual(destination.read_text().splitlines(), ['123456', '12345', '123456789', 'password', 'iloveyou'])
         self.cli('materialize-wordlist', case, str(destination), '--limit', '5', success=False)
 

@@ -21,7 +21,12 @@ class WordlistMaterializationTests(unittest.TestCase):
         with patch('cyber_core.cryptanalysis.wordlists.iter_builtin_wordlist',
                   return_value=iter(['alpha', 'beta', 'gamma', 'delta'])):
             out = self.core.materialize_wordlist(self.case, str(self.scope / 'rockyou.txt'), limit=2)
-        self.assertEqual(out, {'path': str(self.scope / 'rockyou.txt'), 'source': 'rockyou', 'lines': 2})
+        self.assertEqual(out['source'], 'rockyou')
+        self.assertEqual(out['lines'], 2)
+        # Compare by identity, not literal string: on Windows the authorized
+        # path can come back through its 8.3 short-name alias (RUNNER~1 vs
+        # runneradmin), which is still the same file.
+        self.assertTrue(Path(out['path']).samefile(self.scope / 'rockyou.txt'))
         self.assertEqual((self.scope / 'rockyou.txt').read_text().splitlines(), ['alpha', 'beta'])
 
     def test_uses_the_real_bundled_rockyou_list_by_default(self):
