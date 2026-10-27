@@ -1,5 +1,12 @@
 """Argument wiring for durable recovery, key metadata, inventories and agent jobs."""
 def configure(sub):
+    installer = sub.add_parser("installer", help="List or extract selected NSIS files without running the installer")
+    installer.add_argument("case")
+    installer.add_argument("path")
+    installer.add_argument("--seven-zip", required=True)
+    installer.add_argument("--extract", action="store_true")
+    installer.add_argument("--max-extracted-bytes", type=int, default=1073741824)
+    installer.add_argument("--memory-bytes", type=int, default=536870912)
     sub.add_parser("recovery-formats", help="Show supported recovery formats and available dependencies")
     external = sub.add_parser("external-analyze", help="Static external identification of verified evidence")
     external.add_argument("case")
@@ -68,9 +75,13 @@ def configure(sub):
             parser.add_argument("--reason",required=True)
             parser.add_argument("--priority",action="store_true")
 
-COMMANDS = ("external-analyze","external-tools","recovery-formats","keys","inventory-disk","inventory-pcap","agent-jobs","recovery-session")
+COMMANDS = ("installer","external-analyze","external-tools","recovery-formats","keys","inventory-disk","inventory-pcap","agent-jobs","recovery-session")
 
 def execute(core,args):
+    if args.command == "installer":
+        from cyber_core.installers import inspect_installer
+        return inspect_installer(core,args.case,args.path,seven_zip=args.seven_zip,extract=args.extract,
+                                 max_extracted_bytes=args.max_extracted_bytes,memory_bytes=args.memory_bytes)
     if args.command == "external-analyze":
         from cyber_core.external_tools import analyze_tool
         return analyze_tool(core,args.case,args.path,tool=args.tool)
