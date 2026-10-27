@@ -3,6 +3,9 @@ import hashlib
 import importlib
 import os
 from pathlib import Path
+import sys
+import time
+from cyber_core.errors import CoreError
 import shutil
 import subprocess
 import tempfile
@@ -20,8 +23,25 @@ class InstallerContracts(unittest.TestCase):
         for value in ('../VisionFT.exe', '/VisionFT.exe', 'C:/VisionFT.exe',
                       'Firmwares/../x', 'Firmwares/a:vftw', 'CON', 'a\\b',
                       'Firmwares/a. ', 'a//b', '-x'):
-            with self.subTest(path=value), self.assertRaises(Exception):
+            with self.subTest(path=value), self.assertRaises(CoreError):
                 api.safe_member(value)
+
+    def test_missing_solid_size_stays_unknown_and_duplicate_fields_fail(self):
+        api = module(self)
+        listing = '7-Zip lab\nType = Nsis\n----------\nPath = Firmwares/a.vftw\nSize = \nOffset = 0\n\n'
+        self.assertIsNone(api.parse_listing(listing, 10, 100)[0]['size'])
+        for bad in (listing.replace('Size = \n', ''),
+                    listing.replace('Offset = 0', 'Size = 3'),
+                    listing.replace('Offset = 0', 'Symbolic Link = outside')):
+            with self.assertRaises(CoreError):
+                api.parse_listing(bad, 10, 100)
+
+    def test_cli_wires_installer_limits(self):
+        from cyber_core.cli import parser
+        args = parser().parse_args(['installer','case','input','--seven-zip','/usr/bin/7z','--extract'])
+        self.assertEqual(args.command, 'installer')
+        self.assertTrue(args.extract)
+        self.assertEqual(args.max_extracted_bytes, 1073741824)
 
     def test_nsis_listing_validates_size_and_collisions(self):
         api = module(self)
@@ -30,8 +50,23 @@ class InstallerContracts(unittest.TestCase):
         for bad in (text.replace('Size = 3', 'Size = -1'),
                     text + 'Path = visionft.EXE\nSize = 3\n\n',
                     text.replace('Type = Nsis', 'Type = zip')):
-            with self.assertRaises(Exception):
+            with self.assertRaises(CoreError):
                 api.parse_listing(bad, 10, 100)
+
+@unittest.skipUnless(sys.platform == 'linux', 'Linux resource-limited backend')
+class InstallerProcessLimits(unittest.TestCase):
+    def test_output_stderr_and_deadline_fail_closed(self):
+        module(self)
+        from cyber_core.installers.child import run
+        for program, maximum, seconds in (
+            ("import sys;sys.stdout.write('x'*10000)", 32, 5),
+            ("import sys;sys.stderr.write('x'*100000)", 32, 5),
+            ("import time;time.sleep(2)", 32, .1),
+        ):
+            with self.subTest(program=program), tempfile.TemporaryDirectory() as folder:
+                with self.assertRaises(CoreError):
+                    run([sys.executable,'-I','-c',program], Path(folder),
+                        time.monotonic()+seconds, maximum, 128*1024*1024)
 
 @unittest.skipUnless(os.environ.get('CYBER_REQUIRE_NSIS') == '1', 'Real NSIS runner')
 class RealInstallerTests(unittest.TestCase):
@@ -89,7 +124,7 @@ class RealInstallerTests(unittest.TestCase):
         api = module(self)
         result = api.inspect_installer(self.core, self.case, self.source, seven_zip=self.exe)
         self.assertEqual(result['installer']['extracted'], [])
-        with self.assertRaises(Exception):
+        with self.assertRaises(CoreError):
             api.inspect_installer(self.core, self.case, self.source, seven_zip=self.exe,
                                   extract=True, max_extracted_bytes=1)
         self.assertFalse(list((self.core.home / 'cases' / self.case).glob('nsis-stage-*')))
