@@ -50,10 +50,13 @@ def parse_listing(text, max_entries, max_bytes):
             raise CoreError('Archive links unsupported')
         folder = fields.get('Folder') == '+' or 'D' in fields.get('Attributes','')
         raw = fields.get('Size', '0' if folder else '')
-        if not raw.isascii() or not raw.isdigit() or len(raw) > 16:
+        if raw == '' and 'Size' in fields and not folder:
+            size = None  # NSIS solid streams may omit the last member size.
+        elif raw.isascii() and raw.isdigit() and len(raw) <= 16:
+            size = int(raw)
+        else:
             raise CoreError('Invalid archive size')
-        size = int(raw)
-        if size > max_bytes or len(result) >= max_entries:
+        if (size is not None and size > max_bytes) or len(result) >= max_entries:
             raise CoreError('Archive listing resource limit')
         result.append({'member': name, 'size': size, 'folder': folder})
     return result

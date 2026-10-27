@@ -94,7 +94,7 @@ def execute(data):
     selected = [item for item in entries if not item['folder'] and selected_member(item['member'])]
     if data['extract'] and not selected:
         raise CoreError('No supported members selected')
-    if data['extract'] and sum(item['size'] for item in selected) > data['max_extracted_bytes']:
+    if data['extract'] and sum(item['size'] for item in selected if item['size'] is not None) > data['max_extracted_bytes']:
         raise CoreError('Selected extraction exceeds budget')
     output, total = [], 0
     if data['extract']:
@@ -106,16 +106,17 @@ def execute(data):
                           root,deadline,data['max_extracted_bytes']-total,
                           data['memory_bytes'],destination)
             total += size
-            if size != item['size']:
+            if item['size'] is not None and size != item['size']:
                 raise CoreError('Extracted size differs from listing')
             output.append({'member':name,'size':size,'sha256':file_hash(destination),
-                           'origin_sha256':data['sha256']})
+                           'origin_sha256':data['sha256'],'declared_size':item['size']})
     if file_hash(source) != data['sha256']:
         raise CoreError('NSIS source changed')
     version = next((line.strip() for line in text.splitlines() if '7-Zip' in line), 'unknown')[:256]
     return {'format':'nsis','source_sha256':data['sha256'],'tool_version':version,
             'tool_sha256':file_hash(executable),'members':entries,'selected':selected,'extracted':output,
-            'status':'extracted' if data['extract'] else 'listed','executed_input':False}
+            'status':'extracted' if data['extract'] else 'listed','executed_input':False,
+            'listing_sizes_partial':any(item['size'] is None for item in entries)}
 
 def main():
     try:
