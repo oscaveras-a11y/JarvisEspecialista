@@ -19,12 +19,6 @@ using it costs time and CPU, not memory.
 import gzip
 import importlib.resources
 
-BUILTIN_WORDLIST_NAME = "rockyou"
-# The file's own line count (its well-known size); used only as an upper
-# bound for max_attempts. iter_builtin_wordlist() yields slightly fewer
-# candidates than this, since it skips the handful of blank lines.
-BUILTIN_WORDLIST_ENTRIES = 14_344_391
-
 
 def iter_builtin_wordlist():
     """Yield each non-blank candidate password from the bundled rockyou list, in order."""

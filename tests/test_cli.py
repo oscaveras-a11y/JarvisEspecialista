@@ -39,6 +39,15 @@ class CLITests(unittest.TestCase):
         self.assertTrue(Path(report['path']).is_file())
         self.assertEqual(self.cli('status', case)['tasks'][0]['status'], 'done')
 
+    def test_materialize_wordlist_writes_a_real_candidate_file_into_scope(self):
+        self.cli('init')
+        case = self.cli('investigate', '--project', 'demo', '--objective', 'synthetic', '--scope', str(self.inputs), '--owner', 'owner', '--authorization', 'Synthetic lab')['id']
+        destination = self.inputs / 'rockyou.txt'
+        result = self.cli('materialize-wordlist', case, str(destination), '--limit', '5')
+        self.assertEqual(result, {'path': str(destination), 'source': 'rockyou', 'lines': 5})
+        self.assertEqual(destination.read_text().splitlines(), ['123456', '12345', '123456789', 'password', 'iloveyou'])
+        self.cli('materialize-wordlist', case, str(destination), '--limit', '5', success=False)
+
     def test_logs_exposes_raw_audit_trail(self):
         self.cli('init')
         case = self.cli('investigate', '--project', 'demo', '--objective', 'synthetic', '--scope', str(self.inputs), '--owner', 'owner', '--authorization', 'Synthetic lab')['id']

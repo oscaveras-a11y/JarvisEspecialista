@@ -494,75 +494,43 @@ class Core:
             audit(self.db, case, 'self_test_recovery', {'recovered': result['recovered'], 'attempts': result['attempts'], 'status': result['status']})
         return result
 
-    # Raising these from the self-test caps (100000 attempts / 1h) lets a
-    # real run cover the full bundled rockyou list (14,344,391 entries) in
-    # one call; still bounded, never unlimited. 24h covers even PDFs with
-    # AES-256/revision 6 encryption, whose deliberately slow KDF runs the
-    # full list at ~200 attempts/s (~20h) rather than ZIP's ~6 minutes.
-    MAX_RECOVERY_ATTEMPTS = 20_000_000
-    MAX_RECOVERY_SECONDS = 86400
+    # recovery-session (cryptanalysis/sessions.py) requires candidate material
+    # to already be a real file inside the case scope, capped at 8 MiB / one
+    # candidate per line. This materializes a prefix of the bundled rockyou
+    # wordlist as such a file, so the operator doesn't have to supply their
+    # own list just to point recovery-session at a well-known one.
+    MAX_WORDLIST_LINES = 100000
 
-    def _authorize_password_recovery(self, case, path, candidates, max_attempts, max_seconds, *, use_builtin_wordlist=False):
-        # Shared gate for every real (non-self-test) password recovery route:
-        # the whole point is to hand back a lost password, so a match is
-        # returned to the caller — never written to the audit trail. Requires
-        # owner_consent, same bar as self_test_recovery/make_lab_envelope,
-        # because trying many candidate passwords is sensitive even bounded.
-        row = self.authorize(case, recovery=True)
+    def materialize_wordlist(self, case, output_path, *, source='rockyou', limit=100000):
+        row = self.authorize(case)
         self._ensure_not_paused(case, row)
-        basis = self.db.execute('SELECT kind FROM authorization_basis WHERE case_id=?', (case,)).fetchone()
-        if basis is None or basis['kind'] != 'owner_consent':
-            raise CoreError('Password recovery requires an owner_consent authorization basis')
-        if use_builtin_wordlist:
-            if candidates is not None:
-                raise CoreError('Do not supply candidates when using the bundled wordlist')
-        elif not isinstance(candidates, (list, tuple)) or not 1 <= len(candidates) <= 100000:
-            raise CoreError('Provide between 1 and 100000 candidate passwords')
-        if not 0 < max_attempts <= self.MAX_RECOVERY_ATTEMPTS or not 0 < max_seconds <= self.MAX_RECOVERY_SECONDS:
-            raise CoreError('Invalid recovery limits')
-        source = self.authorize(case, path, recovery=True)
-        if source.stat().st_size > self.max_bytes:
-            raise CoreError('File exceeds byte limit')
-        return source
-
-    def recover_zip_password(self, case, path, candidates=None, *, max_attempts=10000, max_seconds=30,
-                             use_builtin_wordlist=False):
-        source = self._authorize_password_recovery(case, path, candidates, max_attempts, max_seconds,
-                                                    use_builtin_wordlist=use_builtin_wordlist)
-        from cyber_core.cryptanalysis.zip_cracker import attempt_zip_password
-        attempted = self._recovery_candidates(candidates, use_builtin_wordlist)
-        result = attempt_zip_password(source, attempted, max_attempts=max_attempts, deadline=time.monotonic() + max_seconds)
+        if source != 'rockyou':
+            raise CoreError('Unknown bundled wordlist source')
+        if type(limit) is not int or not 1 <= limit <= self.MAX_WORDLIST_LINES:
+            raise CoreError('Invalid wordlist line limit')
+        target = Path(output_path)
+        parent = local_path(target.parent, directory=True)
+        if not parent.is_relative_to(local_path(row['scope'], directory=True)):
+            raise CoreError('Wordlist must be materialized inside the authorized scope')
+        name = target.name
+        if not name or name in ('.', '..') or '/' in name or '\\' in name:
+            raise CoreError('Invalid wordlist filename')
+        destination = parent / name
+        if destination.exists() or destination.is_symlink():
+            raise CoreError('Wordlist path already exists')
+        from cyber_core.cryptanalysis.wordlists import iter_builtin_wordlist
+        written = 0
+        with destination.open('xb') as handle:
+            for candidate in iter_builtin_wordlist():
+                if written >= limit:
+                    break
+                handle.write(candidate.encode('utf-8', errors='surrogateescape'))
+                handle.write(b'\n')
+                written += 1
         with self.db:
             self.authorize(case)
-            audit(self.db, case, 'zip_password_recovery', {'recovered': result['recovered'], 'attempts': result['attempts'],
-                                                            'status': result['status'], 'source': str(source),
-                                                            'wordlist': 'rockyou' if use_builtin_wordlist else 'custom'})
-        return result
-
-    def recover_password(self, case, path, candidates=None, *, max_attempts=10000, max_seconds=30,
-                         use_builtin_wordlist=False):
-        # Format-agnostic entry point: detects the file type and routes to
-        # whichever recovery implementation exists for it (zip, pdf, ...),
-        # or reports honestly that the format isn't supported yet.
-        source = self._authorize_password_recovery(case, path, candidates, max_attempts, max_seconds,
-                                                    use_builtin_wordlist=use_builtin_wordlist)
-        from cyber_core.cryptanalysis.password_recovery import attempt_password
-        attempted = self._recovery_candidates(candidates, use_builtin_wordlist)
-        result = attempt_password(source, attempted, max_attempts=max_attempts, deadline=time.monotonic() + max_seconds)
-        with self.db:
-            self.authorize(case)
-            audit(self.db, case, 'password_recovery', {'recovered': result['recovered'], 'attempts': result['attempts'],
-                                                        'status': result['status'], 'format_id': result.get('format_id'),
-                                                        'source': str(source),
-                                                        'wordlist': 'rockyou' if use_builtin_wordlist else 'custom'})
-        return result
-
-    @staticmethod
-    def _recovery_candidates(candidates, use_builtin_wordlist):
-        if use_builtin_wordlist:
-            from cyber_core.cryptanalysis.wordlists import iter_builtin_wordlist
-            return iter_builtin_wordlist()
-        return candidates
+            audit(self.db, case, 'wordlist_materialized', {'source': source, 'lines': written, 'destination': str(destination)})
+        return {'path': str(destination), 'source': source, 'lines': written}
 
     def make_lab_envelope(self, case, output_path, *, passphrase, content):
         # Create a CCPW1 lab target on the operator's OWN scope, to exercise the

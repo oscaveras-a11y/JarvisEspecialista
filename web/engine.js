@@ -46,24 +46,12 @@ async function sendEngineFile(id,tool){
  const file=document.getElementById('task-file').files[0];
  if(!file)throw Error('Escolha o arquivo autorizado.');
  if(file.size>liveClient.capabilities.max_file_bytes)throw Error('O limite por arquivo é 4 MiB.');
- const payload={};
- if(tool==='recover-password'){
-  if(document.getElementById('task-wordlist-builtin').checked){
-   payload.wordlist='rockyou';
-  }else{
-   const candidates=document.getElementById('task-candidates').value.split('\n').map(line=>line.replace(/\r$/,'')).filter(Boolean);
-   if(!candidates.length)throw Error('Informe ao menos uma senha candidata (uma por linha) ou marque a lista embutida.');
-   if(candidates.length>5000)throw Error('No máximo 5000 senhas candidatas por envio.');
-   payload.candidates=candidates;
-  }
- }
  const content=await new Promise((resolve,reject)=>{
   const reader=new FileReader();reader.onload=()=>resolve(String(reader.result).split(',')[1]||'');
   reader.onerror=()=>reject(Error('Não foi possível ler o arquivo selecionado.'));reader.readAsDataURL(file);
  });
- await liveClient.request('/cases/'+id+'/files',{name:file.name,tool,content_base64:content,...payload});
- document.getElementById('task-file').value='';document.getElementById('task-candidates').value='';
- document.getElementById('task-wordlist-builtin').checked=false;await refreshEngine();
+ await liveClient.request('/cases/'+id+'/files',{name:file.name,tool,content_base64:content});
+ document.getElementById('task-file').value='';await refreshEngine();
 }
 function renderEngineResults(){
  const c=getCase(state.activeCase),element=document.getElementById('engine-results');
@@ -73,14 +61,6 @@ function renderEngineResults(){
   '</strong><p>SHA-256: <span class="mono">'+escapeHtml(result.sha256)+'</span></p><p>'+escapeHtml(result.size)+' bytes • cópia verificada: '+(result.copy_verified?'sim':'não confirmada')+
   '</p><details><summary>Detalhes técnicos</summary><pre>'+escapeHtml(JSON.stringify(result,null,2))+'</pre></details></article>').join(''):'<p>Nenhuma análise concluída nesta investigação.</p>';
  if(operations.length)element.innerHTML+='<h3>Inventários</h3><pre>'+escapeHtml(JSON.stringify(operations,null,2))+'</pre>';
- if(state.recovery_result){
-  const r=state.recovery_result;
-  element.innerHTML+=r.recovered?
-   '<article class="engine-result recovery-found"><strong>Senha encontrada</strong><p class="mono">'+escapeHtml(r.password)+'</p><p>formato: '+escapeHtml(r.format_id||'?')+' • '+escapeHtml(r.attempts)+' tentativa(s)</p></article>':
-   r.status==='unsupported_format'?
-   '<article class="engine-result"><strong>Formato ainda não suportado</strong><p>'+escapeHtml(r.note||'')+'</p></article>':
-   '<article class="engine-result"><strong>Senha não encontrada na lista enviada</strong><p>'+escapeHtml(r.attempts)+' tentativa(s) • '+escapeHtml(r.status)+'</p></article>';
- }
  if(state.result_errors?.[c.id])element.innerHTML+='<p role="alert">'+escapeHtml(state.result_errors[c.id])+'</p>';
  if(state.last_error)element.innerHTML+='<p role="alert">'+escapeHtml(state.last_error)+'</p>';
  document.getElementById('engine-run-pending').disabled=!canOrganize(c)||!state.tasks.some(t=>t.case_id===c.id&&t.status==='pending');
@@ -108,19 +88,7 @@ function prepareEngineUI(){
  document.getElementById('task-path').hidden=true;document.getElementById('task-path').required=false;
  document.getElementById('task-file').hidden=false;document.getElementById('task-file').required=true;
  document.querySelector('#form-new-task button[type=submit]').textContent='Enviar e analisar';
- for(const option of [...document.getElementById('task-tool').options])if(!['analyze-file','analyze-firmware','assess-recovery','recover-password','inventory-disk','inventory-pcap'].includes(option.value))option.remove();
- document.querySelector('#task-tool option[value="assess-recovery"]').textContent='Avaliar recuperação (sem tentar senha)';
- document.getElementById('task-tool').addEventListener('change',event=>{
-  const recovering=event.target.value==='recover-password';
-  document.getElementById('task-candidates').hidden=!recovering;
-  document.getElementById('task-wordlist-builtin-label').hidden=!recovering;
- });
- const recoveringNow=document.getElementById('task-tool').value==='recover-password';
- document.getElementById('task-candidates').hidden=!recoveringNow;
- document.getElementById('task-wordlist-builtin-label').hidden=!recoveringNow;
- document.getElementById('task-wordlist-builtin').addEventListener('change',event=>{
-  document.getElementById('task-candidates').disabled=event.target.checked;
- });
+ for(const option of [...document.getElementById('task-tool').options])if(!['analyze-file','analyze-firmware','assess-recovery','inventory-disk','inventory-pcap'].includes(option.value))option.remove();
  document.getElementById('engine-results-card').hidden=false;
  document.getElementById('engine-run-pending').hidden=false;
  document.getElementById('engine-refresh').hidden=false;

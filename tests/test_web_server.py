@@ -61,12 +61,8 @@ class WebServerTests(unittest.TestCase):
         self.assertEqual(code, 201, result)
         return result["id"]
 
-    def upload(self, case, raw, tool="analyze-file", name="sample.bin", candidates=None, wordlist=None):
+    def upload(self, case, raw, tool="analyze-file", name="sample.bin"):
         body = {"name": name, "content_base64": base64.b64encode(raw).decode(), "tool": tool}
-        if candidates is not None:
-            body["candidates"] = candidates
-        if wordlist is not None:
-            body["wordlist"] = wordlist
         return self.request("/api/cases/" + case + "/files", body)
 
     def settled(self):
@@ -150,60 +146,6 @@ class WebServerTests(unittest.TestCase):
         self.assertEqual(assessment["format_id"], "ccaes1")
         self.assertFalse(assessment["recovery_demonstrated"])
         self.assertTrue(state["audit_valid"][case])
-
-    def test_recover_password_finds_real_zip_password_without_auditing_it(self):
-        import shutil, subprocess, tempfile
-        if not shutil.which("zip"):
-            self.skipTest("zip CLI not available in this environment")
-        case = self.case()
-        with tempfile.TemporaryDirectory() as tmp:
-            source = Path(tmp) / "doc.txt"
-            source.write_bytes(b"conteudo autorizado de teste http")
-            archive = Path(tmp) / "protected.zip"
-            subprocess.run(["zip", "-q", "-e", "-P", "senha-via-painel", str(archive), "-j", str(source)],
-                           check=True, capture_output=True)
-            raw = archive.read_bytes()
-        status, reply = self.upload(case, raw, tool="recover-password", name="protected.zip",
-                                    candidates=["errada-1", "senha-via-painel", "errada-2"])
-        self.assertEqual(status, 202, reply)
-        state = self.settled()
-        self.assertEqual(state["recovery_result"]["recovered"], True)
-        self.assertEqual(state["recovery_result"]["password"], "senha-via-painel")
-        self.assertEqual(state["recovery_result"]["format_id"], "zip")
-        blob = json.dumps(state["audit"])
-        self.assertNotIn("senha-via-painel", blob)
-        self.assertTrue(state["audit_valid"][case])
-
-    def test_recover_password_uses_builtin_wordlist_when_requested(self):
-        import shutil, subprocess, tempfile
-        from unittest.mock import patch
-        if not shutil.which("zip"):
-            self.skipTest("zip CLI not available in this environment")
-        case = self.case()
-        with tempfile.TemporaryDirectory() as tmp:
-            source = Path(tmp) / "doc.txt"
-            source.write_bytes(b"conteudo autorizado de teste rockyou")
-            archive = Path(tmp) / "protected.zip"
-            subprocess.run(["zip", "-q", "-e", "-P", "senha-da-lista-embutida", str(archive), "-j", str(source)],
-                           check=True, capture_output=True)
-            raw = archive.read_bytes()
-        with patch("cyber_core.cryptanalysis.wordlists.iter_builtin_wordlist",
-                  return_value=iter(["nope", "senha-da-lista-embutida"])):
-            status, reply = self.upload(case, raw, tool="recover-password", name="protected.zip", wordlist="rockyou")
-            self.assertEqual(status, 202, reply)
-            state = self.settled()
-        self.assertEqual(state["recovery_result"]["recovered"], True)
-        self.assertEqual(state["recovery_result"]["password"], "senha-da-lista-embutida")
-        self.assertEqual(self.upload(case, raw, tool="recover-password", candidates=["x"], wordlist="rockyou")[0], 400)
-
-    def test_recover_password_reports_unsupported_format_honestly(self):
-        case = self.case()
-        raw = b"Rar!\x1a\x07\x01\x00" + b"\x00" * 32
-        status, reply = self.upload(case, raw, tool="recover-password", name="archive.rar", candidates=["x"])
-        self.assertEqual(status, 202, reply)
-        state = self.settled()
-        self.assertEqual(state["recovery_result"]["recovered"], False)
-        self.assertEqual(state["recovery_result"]["status"], "unsupported_format")
 
     def test_modified_result_or_evidence_is_not_presented_as_verified(self):
         from cyber_core.service import Core
