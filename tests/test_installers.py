@@ -60,6 +60,14 @@ class RealInstallerTests(unittest.TestCase):
         self.case = self.core.investigate('lab', 'NSIS static extraction', str(self.scope), 'owner', 'Synthetic lab')
         self.exe = str(Path(shutil.which('7z')).resolve())
 
+    def test_real_listing_contract(self):
+        api = module(self)
+        listing = subprocess.check_output([self.exe,'l','-slt','-sccUTF-8','--',str(self.source)], text=True)
+        print('SYNTHETIC_NSIS_LISTING_BEGIN', flush=True)
+        print(listing, flush=True)
+        print('SYNTHETIC_NSIS_LISTING_END', flush=True)
+        api.parse_listing(listing, 1000, 2*1024**3)
+
     def test_selected_extraction_hashes_and_core_report(self):
         api = module(self)
         result = api.inspect_installer(self.core, self.case, self.source, seven_zip=self.exe,
