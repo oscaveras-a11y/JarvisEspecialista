@@ -1,5 +1,11 @@
 """Argument wiring for durable recovery, key metadata, inventories and agent jobs."""
 def configure(sub):
+    web=sub.add_parser('web-probe',help='Observe explicitly authorized HTTPS endpoints without writes')
+    web.add_argument('case')
+    web.add_argument('manifest')
+    web.add_argument('--ca-file',help='Optional scoped public CA certificate; TLS verification remains mandatory')
+    web.add_argument('--body-bytes',type=int,default=65536)
+    web.add_argument('--seconds',type=float,default=30)
     timeline=sub.add_parser('firmware-timeline',help='Correlate offline firmware records without a fraud verdict')
     timeline.add_argument('case')
     timeline.add_argument('path')
@@ -106,9 +112,13 @@ def configure(sub):
             parser.add_argument("--reason",required=True)
             parser.add_argument("--priority",action="store_true")
 
-COMMANDS = ("firmware-timeline","web-lab","symbols","functions","installer","external-analyze","external-tools","recovery-formats","keys","inventory-disk","inventory-pcap","agent-jobs","recovery-session")
+COMMANDS = ("web-probe","firmware-timeline","web-lab","symbols","functions","installer","external-analyze","external-tools","recovery-formats","keys","inventory-disk","inventory-pcap","agent-jobs","recovery-session")
 
 def execute(core,args):
+    if args.command=="web-probe":
+        from cyber_core.web_probe import run_probe
+        return run_probe(core,args.case,args.manifest,ca_file=args.ca_file,
+                         body_bytes=args.body_bytes,seconds=args.seconds)
     if args.command=="firmware-timeline":
         from cyber_core.forensics.firmware_timeline import run_timeline
         return run_timeline(core,args.case,args.path,max_bytes=args.max_input_bytes,max_events=args.max_events,
