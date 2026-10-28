@@ -68,3 +68,26 @@ login da aplicação nem inventário de todos os colaboradores.
 As instruções para os dois agentes estão em [AGENTS.md](../AGENTS.md) e
 [CLAUDE.md](../CLAUDE.md). Esta atualização corrige a política e não remove
 autenticação de código: nenhum login da aplicação havia sido implementado.
+
+## Sequência confirmada pelo proprietário — 2026-10-28
+
+Nesta fase, continuar os avanços do programa e apenas testes leves em
+runners temporários do GitHub, usando amostras sintéticas e limites de
+tempo, memória, disco e requisições. Testes leves devem executar a
+capacidade correspondente; instalação de ferramentas ou consulta de
+versão isolada não comprova funcionamento.
+
+A instalação no computador e os testes avançados ficam para depois da
+conclusão e revisão do programa. Esta intenção futura não autoriza
+instalação, execução local ou testes avançados agora.
+
+As verificações web devem ser implementadas e executadas pelo Jarvis.
+Os agentes não devem repetir inspeções diretas do site Amorella como
+substituto dessa implementação. No CI atual, usar um site de laboratório
+sintético, sem acessar sites reais, enviar formulários operacionais,
+realizar compras ou armazenar dados privados em logs e artefatos.
+
+Preservar os trabalhos VisionFT/FTW2 em andamento e a divisão de seções.
+Registrar capacidades implementadas, testes realmente executados e
+pendências separadamente; não declarar o programa completo apenas por
+possuir ferramentas ou módulos parciais.
