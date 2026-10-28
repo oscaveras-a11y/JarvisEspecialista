@@ -147,3 +147,16 @@ class FirmwareTimelineTests(unittest.TestCase):
         for encoding in ('utf-16','utf-32'):
             with self.subTest(encoding=encoding),self.assertRaises(ValueError):
                 module.analyze(io.BytesIO(json.dumps(event(1)).encode(encoding)))
+
+    def test_direct_core_adapter_applies_core_time_budget(self):
+        from cyber_core.service import Core
+        module=importlib.import_module('cyber_core.forensics.firmware_timeline')
+        with tempfile.TemporaryDirectory() as folder:
+            evidence=Path(folder)/'events.jsonl'
+            evidence.write_bytes(raw([event(1),event(2,B),event(3)]))
+            core=Core(Path(folder)/'store',timeout=1)
+            try:
+                case=core.investigate('lab','Budget',folder,'owner','Synthetic only')
+                result=module.run_timeline(core,case,str(evidence),max_seconds=300)
+                self.assertEqual(result['analysis']['parameters']['max_seconds'],1)
+            finally:core.close()
