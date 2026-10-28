@@ -29,7 +29,7 @@ Registra rotas somente se o caminho coincide com a lista explícita do grant. Qu
 
 Valores de campos, texto HTML, cookies e URLs externas não são persistidos. Os nomes dos campos são substituídos por SHA-256, mantendo tipos e contagens. Hash é identificador pseudônimo, não garantia de anonimização. O sinal csrf_related_name_observed significa apenas que apareceu um nome semelhante a CSRF/XSRF; não comprova proteção ou vulnerabilidade.
 
-O primeiro base href é aplicado também a referências anteriores na página. Formulário sem action aponta para o documento, independentemente de base. Formulários aninhados, atributos duplicados e associações form=id não são tratados como DOM completo e tornam o resultado parcial.
+O primeiro base href é aplicado também a referências anteriores na página. Formulário sem action aponta para o documento, independentemente de base. Formulários aninhados, atributos duplicados, sobrescritas de envio em botões/inputs e associações form=id não são tratados como DOM completo e tornam o resultado parcial.
 
 ## Limites e resultados parciais
 
@@ -46,3 +46,5 @@ O parser cobre markup estático, não DOM renderizado, CSS, rotas criadas em Jav
 Testes unitários usam HTML sintético, UTF-8 dividido byte a byte, queries/valores privados, base, limites e associações não suportadas. Integração Linux usa HTTPS real em servidor sintético do runner, com TLS/DNS/pinning/CORE, valida os formulários recebidos e a execução/retomada da etapa de campanha sem requisições extras.
 
 Regressões Linux/Windows preservam a observação HTTPS e as campanhas anteriores. TLS de ponta a ponta desta fixture é validado no Linux. Nenhum site ou evidência real foi analisado. Desenvolvimento e testes seguem somente no GitHub.
+
+Compatibilidade: conteúdo de textarea/title e elementos de texto bruto é descartado como valor/texto, sem criar campos, rotas ou base fictícios. O fechamento do parser ocorre antes de avaliar resíduos, pois versões recentes do Python podem acumular tags válidas entre feeds pequenos. Base/action inválidos ou omitidos por limite não recebem fallback apresentado como destino verificado. Os testes exercitam esses casos e o tamanho máximo da saída serializada.

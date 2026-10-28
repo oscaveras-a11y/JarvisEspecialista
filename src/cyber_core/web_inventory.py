@@ -11,6 +11,9 @@ INPUT_TYPES = {'text','password','hidden','email','number','checkbox','radio','f
 REFERENCES = {'a':'href','area':'href','link':'href','script':'src','iframe':'src','img':'src'}
 
 class _Tags(HTMLParser):
+    # Treat all raw/RCDATA element contents as text across supported Python patches.
+    # Character references in their values need not be interpreted: values are discarded.
+    CDATA_CONTENT_ELEMENTS=('script','style','xmp','iframe','noembed','noframes','textarea','title')
     def __init__(self,owner):
         super().__init__(convert_charrefs=True)
         self.owner=owner
@@ -44,6 +47,7 @@ class Inventory:
         self.decoder=codecs.getincrementaldecoder('utf-8')('strict')
         self.parser=_Tags(self)
         self.base=None
+        self.base_omitted=False
         self.references=[]
         self.references_seen=0
         self.references_omitted=0
@@ -68,6 +72,7 @@ class Inventory:
                 else:
                     self.flags.add('base_reference_omitted')
                     self.base=''
+                    self.base_omitted=True
             return
         reference=attributes.get(REFERENCES.get(tag))
         if reference is not None:
@@ -90,17 +95,21 @@ class Inventory:
             if method not in ('GET','POST','DIALOG'):
                 self.flags.add('invalid_form_method')
                 method='GET'
-            action=attributes.get('action')
+            action=(attributes.get('action') or '').strip() or None
+            action_omitted=False
             if action is not None and len(action)>2048:
                 action=None
+                action_omitted=True
                 self.flags.add('form_action_omitted')
-            form={'method':method,'_action':action,'fields':[],'fields_seen':0,'fields_omitted':0,
+            form={'method':method,'_action':action,'_action_omitted':action_omitted,'fields':[],'fields_seen':0,'fields_omitted':0,
                   'csrf_related_name_observed':False}
             self.forms.append(form)
             self.current=form
             return
         if tag not in ('input','textarea','select','button'):
             return
+        if any(key in attributes for key in ('formaction','formmethod','formenctype','formtarget','formnovalidate')):
+            self.flags.add('submission_overrides_unsupported')
         if 'form' in attributes:
             self.flags.add('form_attribute_associations_unsupported')
             return
@@ -162,14 +171,18 @@ class Inventory:
         if not self.disabled:
             try:
                 self.parser.feed(self.decoder.decode(b'',final=True))
+                self.parser.close()
                 if self.parser.rawdata.lstrip().startswith('<'):
                     self.flags.add('unfinished_markup')
-                self.parser.close()
             except (UnicodeError,ValueError):
                 self.flags.add('unsupported_or_invalid_utf8')
         if not body_complete:
             self.flags.add('body_incomplete')
-        base=urljoin(self.page,self.base) if self.base is not None else self.page
+        try:
+            base='invalid:' if self.base_omitted else urljoin(self.page,self.base) if self.base is not None else self.page
+        except ValueError:
+            self.flags.add('invalid_base_reference')
+            base='invalid:'
         routes={}
         out_of_scope=0
         for reference in self.references:
@@ -187,7 +200,10 @@ class Inventory:
             form={key:value for key,value in source.items() if not key.startswith('_')}
             # Missing/empty action targets the document, independently of base.
             action=source['_action']
-            resolved=self._resolve(self.page,self.page) if not action else self._resolve(action,base)
+            if source['_action_omitted']:
+                resolved=None
+            else:
+                resolved=self._resolve(self.page,self.page) if not action else self._resolve(action,base)
             form['action_in_scope']=resolved is not None
             form['action_path']=None if resolved is None else resolved['path']
             form['action_query_removed']=False if resolved is None else resolved['query_removed']
