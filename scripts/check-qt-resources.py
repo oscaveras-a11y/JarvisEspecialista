@@ -19,6 +19,7 @@ def main():
         qml=root/'fixture.qml'
         qml.write_text('import QtQml\nQtObject {\n'
                        ' property int value: 37\n'
+                       ' property real ratio: 1.25\n'
                        ' property string mode: "synthetic-mode"\n'
                        ' property string label: qsTr("Laboratory only")\n'
                        ' property bool enabled: true\n}\n')
@@ -46,6 +47,7 @@ def main():
         assert any(t['text']=='Laboratory only' for t in unit['translations']),unit
         bindings=[b for obj in unit['objects'] for b in obj['bindings']]
         assert any(b['property']=='value' and b.get('value')==37 for b in bindings),unit
+        assert any(b['property']=='ratio' and b.get('value')==1.25 for b in bindings),unit
         assert any(b['property']=='enabled' and b.get('value') is True for b in bindings),unit
         resource=api.inspect_rcc(binary.read_bytes())
         selected=[r for r in resource['resources'] if r['path']=='/lab/fixture.qmlc']
@@ -53,11 +55,18 @@ def main():
         assert selected[0]['sha256']==hashlib.sha256(data).hexdigest(),resource
         assert selected[0]['compression']=='zlib',resource
         from cyber_core.reverse_engineering.qt_operation import analyze_qt
-        core=Core(root/'store',timeout=120)
+        core=Core(root/'store',timeout=120,max_bytes=104857600)
         try:
             case=core.investigate('lab','Static Qt resources',str(root),'owner','Synthetic fixtures only')
             operation=analyze_qt(core,case,binary)
             assert operation['analysis']['rcc'][0]['resources'][0]['sha256']==hashlib.sha256(data).hexdigest()
+            large=root/'large-synthetic-qt.bin'
+            with large.open('wb') as stream:
+                stream.seek(80*1024*1024)
+                stream.write(binary.read_bytes())
+            large_result=analyze_qt(core,case,large)['analysis']
+            assert large_result['rcc'][0]['offset']==80*1024*1024,large_result
+            assert large_result['rcc'][0]['resources'][0]['sha256']==hashlib.sha256(data).hexdigest()
             assert core.verify_audit(case)
             assert 'qt_resources' in core.report(case).read_text()
         finally:

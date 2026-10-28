@@ -1,5 +1,16 @@
 """Argument wiring for durable recovery, key metadata, inventories and agent jobs."""
 def configure(sub):
+    qt = sub.add_parser("qt-resources", help="Statically inspect supported Qt resources and compiled QML")
+    qt.add_argument("case")
+    qt.add_argument("path")
+    qt.add_argument("--max-candidates", type=int, default=32)
+    qt.add_argument("--max-entries", type=int, default=4096)
+    qt.add_argument("--max-resource-bytes", type=int, default=8388608)
+    qt.add_argument("--max-decoded-bytes", type=int, default=67108864)
+    qt.add_argument("--max-unit-bytes", type=int, default=33554432)
+    qt.add_argument("--max-ratio", type=int, default=200)
+    qt.add_argument("--output-bytes", type=int, default=1048576)
+    qt.add_argument("--memory-bytes", type=int, default=2147483648)
     symbols = sub.add_parser("symbols", help="Read COFF symbols and optionally demangle C++ without execution")
     symbols.add_argument("case")
     symbols.add_argument("path")
@@ -95,9 +106,15 @@ def configure(sub):
             parser.add_argument("--reason",required=True)
             parser.add_argument("--priority",action="store_true")
 
-COMMANDS = ("symbols","functions","installer","external-analyze","external-tools","recovery-formats","keys","inventory-disk","inventory-pcap","agent-jobs","recovery-session")
+COMMANDS = ("qt-resources","symbols","functions","installer","external-analyze","external-tools","recovery-formats","keys","inventory-disk","inventory-pcap","agent-jobs","recovery-session")
 
 def execute(core,args):
+    if args.command == "qt-resources":
+        from cyber_core.reverse_engineering.qt_operation import analyze_qt
+        return analyze_qt(core,args.case,args.path,max_candidates=args.max_candidates,max_entries=args.max_entries,
+                          max_resource_bytes=args.max_resource_bytes,max_decoded_bytes=args.max_decoded_bytes,
+                          max_unit_bytes=args.max_unit_bytes,max_ratio=args.max_ratio,
+                          output_bytes=args.output_bytes,memory_bytes=args.memory_bytes)
     if args.command == "symbols":
         from cyber_core.reverse_engineering.coff_operation import analyze_symbols
         return analyze_symbols(core,args.case,args.path,llvm_bin=args.llvm_bin,max_symbols=args.max_symbols,

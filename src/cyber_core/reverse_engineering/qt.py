@@ -4,6 +4,7 @@ import struct
 import zlib
 from cyber_core.errors import CoreError
 from cyber_core.reverse_engineering.qt_qml import inspect_qml_unit
+from cyber_core.reverse_engineering.qt_budget import bounded_size, compact_qml
 
 def _fail(message):
     raise CoreError('Qt RCC: '+message)
@@ -15,9 +16,9 @@ def _hash(data,at,length):
     return digest.hexdigest()
 
 def inspect_rcc(data, offset=0, *, max_entries=4096, max_resource_bytes=8388608,
-                max_decoded_bytes=67108864, max_ratio=200):
+                max_decoded_bytes=67108864, max_ratio=200, max_result_bytes=524288):
     for value,minimum,maximum in ((max_entries,1,10000),(max_resource_bytes,1,67108864),
-                                  (max_decoded_bytes,1,268435456),(max_ratio,1,10000)):
+                                  (max_decoded_bytes,1,268435456),(max_ratio,1,10000),(max_result_bytes,4096,1048576)):
         if type(value) is not int or not minimum<=value<=maximum:
             _fail('invalid resource budget')
     if type(offset) is not int or not 0<=offset<=len(data)-8 or data[offset:offset+4]!=b'qres':
@@ -56,8 +57,25 @@ def inspect_rcc(data, offset=0, *, max_entries=4096, max_resource_bytes=8388608,
     seen=set()
     stack=[(0,'',0)]
     decoded=0
+    stored_total=0
+    result_bytes=0
+    omitted=0
     partial=False
     identities=set()
+    def emit(record):
+        nonlocal result_bytes,omitted,partial
+        room=max(0,max_result_bytes-2048-result_bytes)
+        size=bounded_size(record,room)
+        if size is None and 'qml' in record:
+            record={**record,'qml':compact_qml(record['qml'])}
+            partial=True
+            size=bounded_size(record,room)
+        if size is None:
+            omitted+=1
+            partial=True
+        else:
+            result_bytes+=size+1
+            base['resources'].append(record)
     while stack:
         node,parent,depth=stack.pop()
         if node in seen or len(seen)>=max_entries or node>=capacity or depth>128:
@@ -68,6 +86,8 @@ def inspect_rcc(data, offset=0, *, max_entries=4096, max_resource_bytes=8388608,
         name_at,flags=struct.unpack_from('>IH',data,offset+at)
         if flags&~7 or (flags&2 and flags&5) or flags&5==5:
             _fail('unsupported node flags')
+        if flags&5&~features:
+            _fail('compressed node does not match header features')
         path=parent if node==0 else parent+'/'+name(name_at)
         if len(path)>8192:
             _fail('resource path exceeds budget')
@@ -75,6 +95,8 @@ def inspect_rcc(data, offset=0, *, max_entries=4096, max_resource_bytes=8388608,
             count,first=struct.unpack_from('>II',data,offset+at+6)
             if count>max_entries or first>capacity or count>capacity-first:
                 _fail('child range exceeds tree bounds or budget')
+            if count+len(stack)+len(seen)>max_entries:
+                _fail('pending tree nodes exceed budget')
             if node==0 and parent:
                 _fail('invalid root')
             for child in range(first+count-1,first-1,-1):
@@ -93,12 +115,15 @@ def inspect_rcc(data, offset=0, *, max_entries=4096, max_resource_bytes=8388608,
         need(blob+4,size,payload,payload_end)
         if size>max_resource_bytes+4:
             _fail('stored resource exceeds budget')
+        stored_total+=size
+        if stored_total>max_decoded_bytes:
+            _fail('aggregate stored bytes exceed budget')
         record={'path':path,'territory_declared':territory,'language_declared':language,
                 'source_file_offset':offset+blob+4,'stored_size_bytes':size,
                 'stored_sha256':_hash(data,offset+blob+4,size)}
         if flags&4:
             record.update(status='unsupported_compression',compression='zstd',sha256=None)
-            base['resources'].append(record)
+            emit(record)
             partial=True
             continue
         if flags&1:
@@ -127,6 +152,7 @@ def inspect_rcc(data, offset=0, *, max_entries=4096, max_resource_bytes=8388608,
                           sha256=hashlib.sha256(output).hexdigest())
             if output[:8]==b'qv4cdata':
                 record['qml']=inspect_qml_unit(output,max_entries=max_entries)
+                record['qml_origin']={'kind':'decoded_resource','unit_offset':0,'resource_sha256':record['sha256']}
                 partial|=record['qml']['status']!='completed'
         else:
             if size>max_resource_bytes or decoded+size>max_decoded_bytes:
@@ -136,7 +162,9 @@ def inspect_rcc(data, offset=0, *, max_entries=4096, max_resource_bytes=8388608,
                           sha256=record['stored_sha256'])
             if data[offset+blob+4:offset+blob+12]==b'qv4cdata':
                 record['qml']=inspect_qml_unit(data,offset+blob+4,available=size,max_entries=max_entries)
+                record['qml_origin']={'kind':'file_span','unit_file_offset':offset+blob+4}
                 partial|=record['qml']['status']!='completed'
-        base['resources'].append(record)
+        emit(record)
     return {**base,'status':'partial' if partial else 'completed','entry_count':len(seen),
-            'resource_count':len(base['resources']),'decoded_bytes':decoded}
+            'resource_count':len(identities),'decoded_bytes':decoded,'stored_bytes':stored_total,
+            'resources_truncated':bool(omitted),'resources_omitted':omitted,'result_bytes_limit':max_result_bytes}
