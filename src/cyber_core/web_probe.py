@@ -236,11 +236,15 @@ def probe(grant, *, body_bytes=65536, seconds=30, ca_pem=None):
                            'Absent findings do not establish site security; no firmware or electoral evidence is collected']}
 
 
-def run_probe(core,case,manifest,*,ca_file=None,body_bytes=65536,seconds=30):
+def run_probe(core,case,manifest,*,ca_file=None,body_bytes=65536,seconds=30,receipt=None,control_check=None):
     from cyber_core.agents.runner import run_bounded
     from cyber_core.errors import CoreError
     from cyber_core.memory import audit
     from cyber_core.operations import _acquire, save_operation
+    if receipt is not None and (not isinstance(receipt,str) or not re.fullmatch(r'[0-9a-f]{32}',receipt)):
+        raise CoreError('Invalid campaign receipt')
+    if control_check is not None and not callable(control_check):
+        raise CoreError('Invalid campaign control callback')
     try:
         options = validate_options(body_bytes=body_bytes,seconds=seconds)
     except ValueError:
@@ -265,6 +269,8 @@ def run_probe(core,case,manifest,*,ca_file=None,body_bytes=65536,seconds=30):
             raise CoreError('Invalid public CA certificate') from None
         inputs.append((ca_file,ca_evidence['sha256'],4096))
     def stopped():
+        if control_check is not None:
+            control_check()
         row = core.authorize(case)
         if row['paused']:
             raise CoreError('Investigation is paused')
@@ -294,7 +300,8 @@ def run_probe(core,case,manifest,*,ca_file=None,body_bytes=65536,seconds=30):
             raise CoreError('Invalid HTTPS worker result')
         stopped()
         return save_operation(core,case,'web_probe',{'evidence':evidence,'ca_evidence':ca_evidence,
-                              'parameters':options,'analysis':result})
+                              'parameters':options,'analysis':result,
+                              **({'campaign_receipt':receipt} if receipt is not None else {})})
     except BaseException:
         with core.db:
             audit(core.db,case,'web_probe_interrupted',{'manifest_sha256':evidence['sha256'],

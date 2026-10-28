@@ -1,5 +1,14 @@
 """Argument wiring for durable recovery, key metadata, inventories and agent jobs."""
 def configure(sub):
+    campaign=sub.add_parser('pentest',help='Create and run durable automatic assessment campaigns')
+    actions=campaign.add_subparsers(dest='pentest_action',required=True)
+    for action in ('create','run','show'):
+        command=actions.add_parser(action)
+        command.add_argument('case')
+        command.add_argument('manifest' if action=='create' else 'campaign')
+        if action=='run':
+            command.add_argument('--max-stages',type=int,default=16)
+            command.add_argument('--max-seconds',type=float,default=300)
     web=sub.add_parser('web-probe',help='Observe explicitly authorized HTTPS endpoints without writes')
     web.add_argument('case')
     web.add_argument('manifest')
@@ -112,9 +121,16 @@ def configure(sub):
             parser.add_argument("--reason",required=True)
             parser.add_argument("--priority",action="store_true")
 
-COMMANDS = ("web-probe","firmware-timeline","web-lab","symbols","functions","installer","external-analyze","external-tools","recovery-formats","keys","inventory-disk","inventory-pcap","agent-jobs","recovery-session")
+COMMANDS = ("pentest","web-probe","firmware-timeline","web-lab","symbols","functions","installer","external-analyze","external-tools","recovery-formats","keys","inventory-disk","inventory-pcap","agent-jobs","recovery-session")
 
 def execute(core,args):
+    if args.command=="pentest":
+        from cyber_core.pentest import campaigns
+        if args.pentest_action=='create':
+            return campaigns.create(core,args.case,args.manifest)
+        if args.pentest_action=='show':
+            return campaigns.show(core,args.case,args.campaign)
+        return campaigns.work(core,args.case,args.campaign,max_stages=args.max_stages,max_seconds=args.max_seconds)
     if args.command=="web-probe":
         from cyber_core.web_probe import run_probe
         return run_probe(core,args.case,args.manifest,ca_file=args.ca_file,
