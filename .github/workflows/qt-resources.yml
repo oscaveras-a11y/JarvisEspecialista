@@ -1,0 +1,38 @@
+name: Qt static resources
+on:
+  push:
+    branches: [codex/visionft-qt-stage]
+  pull_request:
+    branches: [main]
+    paths:
+      - 'src/cyber_core/reverse_engineering/qt*'
+      - 'tests/test_qt_resources.py'
+      - 'scripts/check-qt-resources.py'
+      - '.github/workflows/qt-resources.yml'
+permissions:
+  contents: read
+concurrency:
+  group: qt-resources-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  contracts:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - run: python -m pip install . aqtinstall==3.3.0
+      - name: Prepare Qt 6.8.3 fixture tools only on disposable runner
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y libegl1 libopengl0 libxkbcommon-x11-0 libxcb-cursor0
+          python -m aqt install-qt linux desktop 6.8.3 linux_gcc_64 --archives qtbase qtdeclarative icu --outputdir "$RUNNER_TEMP/qt"
+          echo "QT_FIXTURE_ROOT=$RUNNER_TEMP/qt" >> "$GITHUB_ENV"
+      - name: Real Qt compilation resource packaging and static inspection
+        run: python scripts/check-qt-resources.py
+      - run: python -m compileall -q src scripts tests
+      - run: python scripts/run-tests.py
