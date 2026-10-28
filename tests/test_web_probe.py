@@ -89,7 +89,7 @@ class WebProbeTests(unittest.TestCase):
                     payload=(b'x'*8192 if self.path=='/large' else b'abc' if self.path=='/truncated'
                              else b'x'*1024 if self.path=='/exact-truncated' else b'synthetic-public-page')
                     try:self.wfile.write(payload)
-                    except (BrokenPipeError,ConnectionResetError):pass
+                    except OSError:pass
             server=ThreadingHTTPServer((ADDRESS,0),Handler)
             context=ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER);context.load_cert_chain(cert,key)
             server.socket=context.wrap_socket(server.socket,server_side=True)
@@ -120,7 +120,7 @@ class WebProbeTests(unittest.TestCase):
                     self.assertFalse(cut['body_complete'])
                     self.assertEqual(cut['incomplete_reason'],'premature_eof')
                     self.assertEqual(cut['hash_scope'],'response_body_prefix')
-                self.assertEqual(Handler.paths,['/','/redirect','/large'])
+                self.assertEqual(Handler.paths,['/','/redirect','/large','/truncated','/exact-truncated'])
                 self.assertNotIn('do-not-persist',json.dumps(operation))
                 self.assertNotIn('synthetic-public-page',json.dumps(operation))
                 core=Core(home,timeout=15)
@@ -132,7 +132,7 @@ class WebProbeTests(unittest.TestCase):
                     from cyber_core.web_probe import run_probe
                     untrusted=run_probe(core,case,str(manifest),seconds=10,body_bytes=1024)
                     self.assertEqual(untrusted['analysis']['responses'][0]['error'],'tls_validation_failed')
-                    self.assertEqual(Handler.paths,['/','/redirect','/large'])
+                    self.assertEqual(Handler.paths,['/','/redirect','/large','/truncated','/exact-truncated'])
                     # A trusted CA must not bypass hostname validation.
                     manifest.write_text(json.dumps(grant(f'https://{ADDRESS}:{server.server_port}')))
                     mismatch=run_probe(core,case,str(manifest),ca_file=str(cert),seconds=10)
@@ -149,6 +149,7 @@ class WebProbeTests(unittest.TestCase):
                     finally:
                         Handler.slow_release.set();mutator.join(timeout=6)
                     self.assertFalse(mutator.is_alive())
+                    self.assertEqual(manifest.read_text(),'{}')
                     manifest.write_text(slow_grant)
                     core.pause(case)
                     with self.assertRaises(CoreError):run_probe(core,case,str(manifest),ca_file=str(cert))
