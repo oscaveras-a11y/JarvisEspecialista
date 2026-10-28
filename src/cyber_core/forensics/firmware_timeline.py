@@ -73,15 +73,20 @@ def _event(raw, line):
         raise ValueError('Invalid event encoding or fields') from exc
 
 
-def analyze(stream, *, max_bytes=16777216, max_line_bytes=16384,
-            max_events=10000, max_findings=128, max_seconds=30, check=None):
-    """Read binary JSONL. Hashes/times/source identities remain unverified declarations."""
+def _limits(max_bytes=16777216, max_line_bytes=16384, max_events=10000,
+            max_findings=128, max_seconds=30):
     _integer(max_bytes, 1, 16777216)
     _integer(max_line_bytes, 1, 65536)
     _integer(max_events, 1, 10000)
     _integer(max_findings, 1, 128)
     if type(max_seconds) not in (int, float) or not math.isfinite(max_seconds) or not 0 < max_seconds <= 300:
         raise ValueError('Invalid time budget')
+
+
+def analyze(stream, *, max_bytes=16777216, max_line_bytes=16384,
+            max_events=10000, max_findings=128, max_seconds=30, check=None):
+    """Read binary JSONL. Hashes/times/source identities remain unverified declarations."""
+    _limits(max_bytes, max_line_bytes, max_events, max_findings, max_seconds)
     deadline = time.monotonic() + max_seconds
     def gate():
         if check is not None:
@@ -194,11 +199,10 @@ def run_timeline(core, case, path, **budgets):
     """Use existing verified acquisition and audited operation persistence."""
     from cyber_core.errors import CoreError
     from cyber_core.operations import _acquire, save_operation
-    # Validate all options before acquiring or running another CORE operation.
+    # Reject invalid configuration before evidence acquisition.
     import io
-    probe = b'{"id":"p","device":"p","component":"p","source":"p","time":"2000-01-01T00:00:00Z","kind":"boot"}\n'
     try:
-        analyze(io.BytesIO(probe), **budgets)
+        _limits(**budgets)
     except (ValueError, TypeError):
         raise CoreError('Invalid firmware timeline parameters') from None
     maximum = budgets.get('max_bytes', 16777216)
