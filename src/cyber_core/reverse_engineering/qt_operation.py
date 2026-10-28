@@ -51,7 +51,7 @@ def _scan(data, options, deadline):
                 parsed=inspect_rcc(data,at,max_entries=options['max_entries'],
                                    max_resource_bytes=options['max_resource_bytes'],
                                    max_decoded_bytes=remaining,max_ratio=options['max_ratio'],
-                                   max_result_bytes=min(524288,options['output_bytes']))
+                                   max_result_bytes=min(524288,options['output_bytes']),max_unit_bytes=options['max_unit_bytes'])
                 work+=max(parsed.get('decoded_bytes',0),parsed.get('stored_bytes',0))
                 target='rcc'
             else:

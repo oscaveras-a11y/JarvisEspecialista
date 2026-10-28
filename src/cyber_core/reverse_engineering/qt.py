@@ -16,9 +16,9 @@ def _hash(data,at,length):
     return digest.hexdigest()
 
 def inspect_rcc(data, offset=0, *, max_entries=4096, max_resource_bytes=8388608,
-                max_decoded_bytes=67108864, max_ratio=200, max_result_bytes=524288):
+                max_decoded_bytes=67108864, max_ratio=200, max_result_bytes=524288, max_unit_bytes=33554432):
     for value,minimum,maximum in ((max_entries,1,10000),(max_resource_bytes,1,67108864),
-                                  (max_decoded_bytes,1,268435456),(max_ratio,1,10000),(max_result_bytes,4096,1048576)):
+                                  (max_decoded_bytes,1,268435456),(max_ratio,1,10000),(max_result_bytes,4096,1048576),(max_unit_bytes,248,67108864)):
         if type(value) is not int or not minimum<=value<=maximum:
             _fail('invalid resource budget')
     if type(offset) is not int or not 0<=offset<=len(data)-8 or data[offset:offset+4]!=b'qres':
@@ -62,6 +62,14 @@ def inspect_rcc(data, offset=0, *, max_entries=4096, max_resource_bytes=8388608,
     omitted=0
     partial=False
     identities=set()
+    def decode_unit(source,at,available):
+        if available>=28:
+            declared=struct.unpack_from('<I',source,at+24)[0]
+            if declared>max_unit_bytes:
+                return {'status':'resource_limited','declared_size_bytes':declared,
+                        'limit_bytes':max_unit_bytes,'objects':[]}
+        return inspect_qml_unit(source,at,available=available,max_entries=max_entries,
+                                max_unit_bytes=max_unit_bytes)
     def emit(record):
         nonlocal result_bytes,omitted,partial
         room=max(0,max_result_bytes-2048-result_bytes)
@@ -151,7 +159,7 @@ def inspect_rcc(data, offset=0, *, max_entries=4096, max_resource_bytes=8388608,
             record.update(status='decoded',compression='zlib',size_bytes=expected,
                           sha256=hashlib.sha256(output).hexdigest())
             if output[:8]==b'qv4cdata':
-                record['qml']=inspect_qml_unit(output,max_entries=max_entries)
+                record['qml']=decode_unit(output,0,len(output))
                 record['qml_origin']={'kind':'decoded_resource','unit_offset':0,'resource_sha256':record['sha256']}
                 partial|=record['qml']['status']!='completed'
         else:
@@ -161,7 +169,7 @@ def inspect_rcc(data, offset=0, *, max_entries=4096, max_resource_bytes=8388608,
             record.update(status='decoded',compression='none',size_bytes=size,
                           sha256=record['stored_sha256'])
             if data[offset+blob+4:offset+blob+12]==b'qv4cdata':
-                record['qml']=inspect_qml_unit(data,offset+blob+4,available=size,max_entries=max_entries)
+                record['qml']=decode_unit(data,offset+blob+4,size)
                 record['qml_origin']={'kind':'file_span','unit_file_offset':offset+blob+4}
                 partial|=record['qml']['status']!='completed'
         emit(record)

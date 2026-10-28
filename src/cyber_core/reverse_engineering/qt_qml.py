@@ -64,6 +64,9 @@ def inspect_qml_unit(data, offset=0, *, available=None, max_unit_bytes=33554432,
             if at<minimum:
                 _fail('table overlaps fixed header')
             need(at,count*width)
+    flags=u32(108)
+    base['flags_declared']=flags
+    base['unit_kind']='javascript_module' if flags&0x10 else 'javascript' if flags&1 else 'qml'
     checksum=hashlib.md5(usedforsecurity=False)
     for at in range(92,size,1048576):
         checksum.update(data[offset+at:offset+min(size,at+1048576)])
@@ -120,7 +123,7 @@ def inspect_qml_unit(data, offset=0, *, available=None, max_unit_bytes=33554432,
             unparsed.append({'table':name,'count':count,'offset':at,'validation':'minimum table span only'})
     qml=u32(244)
     bindings_total=0
-    if qml:
+    if qml and base['unit_kind']=='qml':
         if qml<248:
             _fail('QML header overlaps unit header')
         need(qml,16)
