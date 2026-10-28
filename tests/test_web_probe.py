@@ -134,6 +134,36 @@ class WebProbeTests(unittest.TestCase):
                     untrusted=run_probe(core,case,str(manifest),seconds=10,body_bytes=1024)
                     self.assertEqual(untrusted['analysis']['responses'][0]['error'],'tls_validation_failed')
                     self.assertEqual(Handler.paths,['/','/redirect','/large','/truncated','/exact-truncated'])
+                    # Campaign execution uses the actual HTTPS adapter and survives
+                    # a storage failure after the adapter committed its result.
+                    import importlib
+                    try:campaigns=importlib.import_module('cyber_core.pentest.campaigns')
+                    except ImportError:self.fail('Automatic pentest campaign service missing')
+                    campaign_file=root/'campaign.json'
+                    campaign_file.write_text(json.dumps({'version':1,'stages':['https_probe','sast'],
+                                                          'web_grant':'grant.json','ca_file':'fixture.pem',
+                                                          'seconds':10,'body_bytes':1024}))
+                    campaign=campaigns.create(core,case,str(campaign_file))
+                    core.db.execute("""CREATE TRIGGER synthetic_campaign_failure
+                        BEFORE INSERT ON operation_results
+                        WHEN NEW.kind='pentest_campaign'
+                        AND json_extract(NEW.data,'$.event')='stage_completed'
+                        BEGIN SELECT RAISE(FAIL,'synthetic storage failure'); END""")
+                    core.db.commit()
+                    with self.assertRaises(CoreError):
+                        campaigns.work(core,case,campaign['campaign_id'])
+                    received=len(Handler.paths)
+                    self.assertGreater(received,5)
+                    core.db.execute('DROP TRIGGER synthetic_campaign_failure');core.db.commit()
+                    home_again=core.home;core.close();core=Core(home_again,timeout=15)
+                    resumed=campaigns.work(core,case,campaign['campaign_id'])
+                    self.assertEqual(len(Handler.paths),received,'completed HTTPS step must not repeat')
+                    self.assertEqual(resumed['stages'][0]['state'],'completed')
+                    self.assertEqual(resumed['stages'][0]['coverage'],'exercised')
+                    self.assertEqual(resumed['stages'][1]['coverage'],'unsupported_automation')
+                    self.assertEqual(resumed['state'],'partial')
+                    self.assertTrue(core.verify_audit(case))
+                    self.assertIn('pentest_campaign',core.report(case).read_text())
                     # A trusted CA must not bypass hostname validation.
                     manifest.write_text(json.dumps(grant(f'https://{ADDRESS}:{server.server_port}')))
                     mismatch=run_probe(core,case,str(manifest),ca_file=str(cert),seconds=10)
