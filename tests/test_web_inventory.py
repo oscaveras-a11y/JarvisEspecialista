@@ -16,7 +16,7 @@ class InventoryTests(unittest.TestCase):
 
     def test_routes_forms_and_secret_values_are_redacted(self):
         r=self.parse('<a href="/save?token=private-query">Save</a><form action="/save?key=private-action" method="POST"><input name="password" type="password" value="private-value"><input name="csrf_token" value="private-csrf"></form>')
-        self.assertEqual(r['status'],'completed')
+        self.assertEqual(r['status'],'completed',r['quality_flags'])
         self.assertEqual(r['routes'][0],{'path':'/save','query_removed':True})
         form=r['forms'][0]
         self.assertEqual(form['method'],'POST')
@@ -93,3 +93,34 @@ class InventoryTests(unittest.TestCase):
         r=self.parse('<a href="/save?a=secret-one">a</a><a href="/save?b=secret-two#fragment">b</a>')
         self.assertEqual(r['routes'],[{'path':'/save','query_removed':True}])
         self.assertNotIn('secret',json.dumps(r))
+
+    def test_textarea_and_title_contents_are_not_inventory_markup(self):
+        r=self.parse('<form action="/save"><textarea name="comment"><input name="csrf_token"><a href="/save">private text</textarea></form>')
+        self.assertEqual(r['routes'],[])
+        self.assertEqual([f['kind'] for f in r['forms'][0]['fields']],['textarea'])
+        self.assertFalse(r['forms'][0]['csrf_related_name_observed'])
+        r=self.parse('<title><base href="https://outside.invalid/"><a href="/save">private</title><a href="/save">real</a>')
+        self.assertEqual(r['routes'],[{'path':'/save','query_removed':False}])
+
+    def test_submission_overrides_are_explicitly_partial(self):
+        r=self.parse('<form action="/save"><button formaction="https://outside.invalid/" formmethod="post">Send</button></form>')
+        self.assertEqual(r['status'],'partial')
+        self.assertIn('submission_overrides_unsupported',r['quality_flags'])
+
+    def test_invalid_or_omitted_base_and_form_actions_do_not_fallback_as_verified(self):
+        r=self.parse('<base href="https://["><a href="save">x</a>')
+        self.assertEqual(r['status'],'partial')
+        self.assertEqual(r['routes'],[])
+        r=self.parse('<base href="'+('x'*2049)+'"><a href="save">x</a>')
+        self.assertEqual(r['status'],'partial')
+        self.assertEqual(r['routes'],[])
+        r=self.parse('<form action="'+('x'*2049)+'"><input name="x"></form>')
+        self.assertFalse(r['forms'][0]['action_in_scope'])
+        self.assertIsNone(r['forms'][0]['action_path'])
+
+    def test_maximum_inventory_records_fit_supervised_output_budget(self):
+        paths=['/'+str(i)+'x'*250 for i in range(8)]
+        html=''.join('<a href="'+p+'">x</a>' for p in paths)
+        html+=('<form action="'+paths[0]+'">'+''.join('<input type="password" name="field'+str(i)+'">' for i in range(8))+'</form>')*2
+        r=self.parse(html,page=paths[0],allowed=paths)
+        self.assertLess(len(json.dumps({'responses':[{'inventory':r}]*8}).encode()),55000)
