@@ -13,7 +13,7 @@ def configure(sub):
     api.add_argument('case')
     api.add_argument('path')
     api.add_argument('--grant',required=True)
-    api.add_argument('--max-bytes',type=int,default=1048576)
+    api.add_argument('--max-bytes',dest='api_max_bytes',type=int,default=1048576)
     api.add_argument('--max-operations',type=int,default=64)
     api.add_argument('--output-bytes',type=int,default=131072)
     api.add_argument('--seconds',type=float,default=30)
@@ -135,7 +135,7 @@ COMMANDS = ("api-inventory","pentest","web-probe","firmware-timeline","web-lab",
 def execute(core,args):
     if args.command=="api-inventory":
         from cyber_core.pentest.openapi import run_inventory
-        return run_inventory(core,args.case,args.path,args.grant,max_bytes=args.max_bytes,
+        return run_inventory(core,args.case,args.path,args.grant,max_bytes=args.api_max_bytes,
                              max_operations=args.max_operations,output_bytes=args.output_bytes,seconds=args.seconds)
     if args.command=="pentest":
         from cyber_core.pentest import campaigns
