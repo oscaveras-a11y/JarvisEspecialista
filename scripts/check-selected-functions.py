@@ -15,7 +15,7 @@ def main():
                           '__attribute__((noinline)) int fixture_helper(int x){return x+5;}\n'
                           '__attribute__((noinline)) int fixture_target(void){return fixture_helper(fixture_value);}\n'
                           '__attribute__((noinline)) int fixture_other(void){\n' +
-                          ''.join('fixture_value += %d;\n' % i for i in range(1,41)) +
+                          ''.join('fixture_value = fixture_helper(fixture_value + %d);\n' % i for i in range(1,41)) +
                           'return fixture_value;}\n')
         binary = root / 'fixture.elf'
         subprocess.run(['gcc','-g','-O0','-fno-pie','-no-pie','-nostdlib',
@@ -41,7 +41,7 @@ def main():
             assert second['analysis']['functions'][0]['name'] == 'fixture_target'
             third = analyze_functions(core,case,binary,
                                       names=['fixture_helper','fixture_other','absent_function'],
-                                      pseudocode_chars=256,**options)['analysis']
+                                      pseudocode_chars=256,max_functions=2,max_references=256,**options)['analysis']
             assert third['status'] == 'partial', third
             assert third['name_matches']['absent_function'] == 0, third
             by_name = {f['name']:f for f in third['functions']}
