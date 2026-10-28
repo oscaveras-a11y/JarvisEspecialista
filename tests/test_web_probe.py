@@ -40,7 +40,7 @@ class WebProbeTests(unittest.TestCase):
         m=self.module()
         for origin in ('http://example.com','https://user:pass@example.com','https://example.com/extra',
                        'https://example.com?q=secret','https://example.com#x','https://example.com\n',
-                       'https://127.0.0.1','https://example.com:80','https://example.com.'):
+                       'https://127.0.0.1','https://example.com:80','https://example.com:0','https://example.com.'):
             with self.subTest(origin=origin),self.assertRaises(ValueError):
                 m.validate_grant(grant(origin))
         for paths in (['//other.test'],['/../private'],['/%2e%2e'],['/?token=x'],['/a']*9):
@@ -70,15 +70,25 @@ class WebProbeTests(unittest.TestCase):
                            check=True,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
             class Handler(BaseHTTPRequestHandler):
                 paths=[]
+                slow_started=threading.Event()
+                slow_release=threading.Event()
                 def log_message(self,*args):pass
                 def do_GET(self):
                     type(self).paths.append(self.path)
                     self.send_response(302 if self.path=='/redirect' else 200)
                     if self.path=='/redirect':self.send_header('Location','https://outside.invalid/private')
+                    if self.path in ('/truncated','/exact-truncated'):
+                        self.send_header('Content-Length','2048')
+                    if self.path=='/slow':
+                        type(self).slow_started.set()
                     self.send_header('Content-Security-Policy',"default-src 'self'")
                     self.send_header('Set-Cookie','private-token=do-not-persist; Secure; HttpOnly; SameSite=Lax')
                     self.end_headers()
-                    try:self.wfile.write(b'x'*8192 if self.path=='/large' else b'synthetic-public-page')
+                    if self.path=='/slow':
+                        type(self).slow_release.wait(5)
+                    payload=(b'x'*8192 if self.path=='/large' else b'abc' if self.path=='/truncated'
+                             else b'x'*1024 if self.path=='/exact-truncated' else b'synthetic-public-page')
+                    try:self.wfile.write(payload)
                     except (BrokenPipeError,ConnectionResetError):pass
             server=ThreadingHTTPServer((ADDRESS,0),Handler)
             context=ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER);context.load_cert_chain(cert,key)
@@ -86,7 +96,7 @@ class WebProbeTests(unittest.TestCase):
             thread=threading.Thread(target=server.serve_forever,daemon=True);thread.start()
             try:
                 manifest=root/'grant.json'
-                manifest.write_text(json.dumps(grant(f'https://{HOST}:{server.server_port}',['/','/redirect','/large'])))
+                manifest.write_text(json.dumps(grant(f'https://{HOST}:{server.server_port}',['/','/redirect','/large','/truncated','/exact-truncated'])))
                 home=root/'store';core=Core(home,timeout=15)
                 case=core.investigate('https-lab','Protocol verification',folder,'owner','Synthetic only')
                 core.close()
@@ -96,8 +106,8 @@ class WebProbeTests(unittest.TestCase):
                 operation=json.loads(output.getvalue())
                 result=operation['analysis']
                 self.assertEqual(result['status'],'partial')
-                self.assertEqual(len(result['responses']),3)
-                first,redirect,large=result['responses']
+                self.assertEqual(len(result['responses']),5)
+                first,redirect,large,truncated,exact=result['responses']
                 self.assertEqual(first['status'],200)
                 self.assertEqual(first['body_sha256'],hashlib.sha256(b'synthetic-public-page').hexdigest())
                 self.assertTrue(first['body_complete'])
@@ -106,6 +116,10 @@ class WebProbeTests(unittest.TestCase):
                 self.assertFalse(redirect['redirect_followed'])
                 self.assertFalse(large['body_complete'])
                 self.assertEqual(large['body_bytes_hashed'],1024)
+                for cut in (truncated,exact):
+                    self.assertFalse(cut['body_complete'])
+                    self.assertEqual(cut['incomplete_reason'],'premature_eof')
+                    self.assertEqual(cut['hash_scope'],'response_body_prefix')
                 self.assertEqual(Handler.paths,['/','/redirect','/large'])
                 self.assertNotIn('do-not-persist',json.dumps(operation))
                 self.assertNotIn('synthetic-public-page',json.dumps(operation))
@@ -119,8 +133,55 @@ class WebProbeTests(unittest.TestCase):
                     untrusted=run_probe(core,case,str(manifest),seconds=10,body_bytes=1024)
                     self.assertEqual(untrusted['analysis']['responses'][0]['error'],'tls_validation_failed')
                     self.assertEqual(Handler.paths,['/','/redirect','/large'])
+                    # A trusted CA must not bypass hostname validation.
+                    manifest.write_text(json.dumps(grant(f'https://{ADDRESS}:{server.server_port}')))
+                    mismatch=run_probe(core,case,str(manifest),ca_file=str(cert),seconds=10)
+                    self.assertEqual(mismatch['analysis']['responses'][0]['error'],'tls_validation_failed')
+                    slow_grant=json.dumps(grant(f'https://{HOST}:{server.server_port}',['/slow']))
+                    manifest.write_text(slow_grant)
+                    def change_manifest():
+                        if Handler.slow_started.wait(5):
+                            manifest.write_text('{}')
+                    mutator=threading.Thread(target=change_manifest);mutator.start()
+                    try:
+                        with self.assertRaises(CoreError):
+                            run_probe(core,case,str(manifest),ca_file=str(cert),seconds=10)
+                    finally:
+                        Handler.slow_release.set();mutator.join(timeout=6)
+                    self.assertFalse(mutator.is_alive())
+                    manifest.write_text(slow_grant)
                     core.pause(case)
                     with self.assertRaises(CoreError):run_probe(core,case,str(manifest),ca_file=str(cert))
+                    core.resume(case)
+                    Handler.slow_started.clear();Handler.slow_release.clear()
+                    errors=[]
+                    def revoke_during_read():
+                        if not Handler.slow_started.wait(5):
+                            errors.append('fixture did not receive request')
+                            return
+                        other=Core(home)
+                        try:other.revoke(case)
+                        except Exception:errors.append('revocation failed')
+                        finally:other.close()
+                    revoker=threading.Thread(target=revoke_during_read);revoker.start()
+                    try:
+                        with self.assertRaises(CoreError):
+                            run_probe(core,case,str(manifest),ca_file=str(cert),seconds=10)
+                    finally:
+                        Handler.slow_release.set();revoker.join(timeout=6)
+                    self.assertEqual(errors,[])
+                    self.assertFalse(revoker.is_alive())
+                    events=[r['event'] for r in core.db.execute('SELECT event FROM audit WHERE case_id=?',(case,))]
+                    self.assertIn('web_probe_interrupted',events)
                 finally:core.close()
             finally:
                 server.shutdown();server.server_close();thread.join(timeout=2)
+
+    def test_mixed_dns_answer_is_rejected_before_connect(self):
+        from unittest.mock import patch
+        import socket
+        m=self.module()
+        answers=[(socket.AF_INET,socket.SOCK_STREAM,6,'',(ip,443))
+                 for ip in ('93.184.216.34','127.0.0.1')]
+        with patch('socket.getaddrinfo',return_value=answers):
+            with self.assertRaises(ValueError):m.resolve_public('example.com',443)
