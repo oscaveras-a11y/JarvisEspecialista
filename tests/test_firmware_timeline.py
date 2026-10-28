@@ -141,3 +141,9 @@ class FirmwareTimelineTests(unittest.TestCase):
                 from cyber_core.errors import CoreError
                 with self.assertRaises(CoreError):run_timeline(core,case,str(evidence))
             finally:core.close()
+
+    def test_non_utf8_input_is_rejected(self):
+        module=importlib.import_module('cyber_core.forensics.firmware_timeline')
+        for encoding in ('utf-16','utf-32'):
+            with self.subTest(encoding=encoding),self.assertRaises(ValueError):
+                module.analyze(io.BytesIO(json.dumps(event(1)).encode(encoding)))
