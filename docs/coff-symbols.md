@@ -8,7 +8,7 @@ cyber --home DIRETORIO_OPERACIONAL --max-bytes 1073741824 --timeout 300 symbols 
 
 O leitor usa mmap somente leitura e SHA-256 por partes. Valida tabela de seções, limites das tabelas de símbolos/strings, índices, contagens auxiliares e registros não apresentados após o limite. Entradas auxiliares são puladas, não interpretadas como símbolos. Nomes originais e seus bytes hexadecimais permanecem junto do nome apresentado; nomes extensos são marcados name_truncated e não são enviados ao demangler.
 
-section_offset, rva, virtual_address e file_offset são campos separados. Objetos relocáveis não recebem VA/RVA inventados; endereços PE derivam do cabeçalho e da seção. Nem todo símbolo possui bytes locais. Símbolos não provam limites de função, resolução de relocations, origem do código ou comportamento em execução.
+section_offset, rva, virtual_address e file_offset são campos separados. Seções COFF de dados não inicializados (.bss) mantêm tamanho declarado sem bytes locais; seus símbolos não recebem file_offset. Objetos relocáveis não recebem VA/RVA inventados; endereços PE derivam do cabeçalho e da seção. Nem todo símbolo possui bytes locais. Símbolos não provam limites de função, resolução de relocations, origem do código ou comportamento em execução.
 
 LLVM llvm-undname trata ABI Microsoft; llvm-cxxfilt trata nomes Itanium reconhecidos. Sem --llvm-bin, o leitor preserva nomes e informa not_requested nos símbolos decorados, com resultado parcial. A ferramenta recebe somente nomes limitados como argumentos, sem shell. Plataforma de demangling inicial: Linux. Versão, caminho e SHA-256 da ferramenta usada são persistidos. Versões diferentes das exercitadas no CI não estão comprovadas por esta entrega.
 
@@ -18,7 +18,7 @@ A operação coff_symbols persiste evidência/hash, parâmetros, resultados e fe
 
 ## Validação
 
-tests/test_coff_symbols.py usa tabelas sintéticas com nomes curtos/longos, auxiliares, PE e COFF, offsets inválidos, truncamento, contagens excessivas e orçamento. scripts/check-coff-symbols.py compila C++ Microsoft COFF com clang++-18 e exige que LLVM desambigue Lab::selected(int), além de verificar CORE, hash, auditoria e relatório. O objeto nunca é executado. CI: .github/workflows/coff-symbols.yml.
+tests/test_coff_symbols.py usa tabelas sintéticas com nomes curtos/longos, auxiliares, PE e COFF, offsets inválidos, truncamento, contagens excessivas, .bss, tipos derivados, tabela além de 64 MiB e orçamento de saída com Unicode. scripts/check-coff-symbols.py compila C++ Microsoft COFF com clang++-18 nas ABIs Microsoft e Itanium, incluindo um global .bss, e exige que LLVM desambigue Lab::selected(int), além de verificar CORE, hash, auditoria e relatório. Também verifica nome decorado inválido sem perder o nome original. Os objetos nunca são executados. CI: .github/workflows/coff-symbols.yml.
 
 Referência de layout: https://learn.microsoft.com/en-us/windows/win32/debug/pe-format#coff-symbol-table.
 Referência da ferramenta exercitada: https://github.com/llvm/llvm-project/blob/llvmorg-18.1.8/llvm/tools/llvm-undname/llvm-undname.cpp.

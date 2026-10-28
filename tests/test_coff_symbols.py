@@ -114,6 +114,24 @@ class CoffSymbolsTests(unittest.TestCase):
         self.assertLess(len(bounded['symbols']),8)
         self.assertEqual(len(result['symbols']),8)
 
+    def test_symbol_table_beyond_old_64_mib_limit_is_mapped(self):
+        import tempfile
+        from pathlib import Path
+        from cyber_core.firmware import _mapped
+        data,ptr=fixture()
+        position=80*1024*1024
+        struct.pack_into('<I',data,8,position)
+        with tempfile.TemporaryDirectory() as folder:
+            path=Path(folder)/'large-offset.obj'
+            with path.open('wb') as stream:
+                stream.write(data[:ptr])
+                stream.seek(position)
+                stream.write(data[ptr:])
+            with _mapped(path,100*1024*1024) as mapped:
+                result=self.api().read_symbols(mapped)
+            self.assertEqual(result['symbol_count'],2)
+            self.assertEqual(result['symbols'][1]['name'],'?selected@Lab@@YAHH@Z')
+
     def test_bigobj_is_explicitly_unsupported_and_budgets_are_validated(self):
         self.assertEqual(self.api().read_symbols(b'\0\0\xff\xff'+bytes(52))['status'],'unsupported_variant')
         data,_=fixture()

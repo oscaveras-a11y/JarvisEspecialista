@@ -42,10 +42,15 @@ def read_symbols(data, *, max_symbols=128, max_records=100000, max_name_bytes=51
         for i in range(count):
             at=table+i*40
             size,offset=struct.unpack_from('<II',data,at+16)
-            memory_size=struct.unpack_from('<I',data,at+8)[0]
-            if size and (offset<end or offset+size>len(data)):
+            section_flags=struct.unpack_from('<I',data,at+36)[0]
+            uninitialized=bool(section_flags&0x80) and not bool(section_flags&0x60)
+            if uninitialized and offset:
+                _fail('unsupported file payload for uninitialized section')
+            file_size=0 if uninitialized else size
+            if file_size and (offset<end or offset+file_size>len(data)):
                 _fail('section payload outside input')
-            sections.append({'file_size':size,'file_offset':offset,'memory_size':memory_size})
+            sections.append({'file_size':file_size,'file_offset':offset,'memory_size':size,
+                             'declared_size':size,'uninitialized':uninitialized})
     base.update(container='pe' if pe else 'coff_object',machine=machine,
                 record_count=records,symbol_count=0,string_table_bytes=0)
     if not pointer and not records:
@@ -104,7 +109,7 @@ def read_symbols(data, *, max_symbols=128, max_records=100000, max_name_bytes=51
                                     'section_number':number,'section_offset':section_offset,
                                     'value':value,'rva':rva,'virtual_address':virtual,'file_offset':file_offset,
                                     'type':kind,'storage_class':storage,'auxiliary_count':aux,
-                                    'function_type_declared':bool(kind&0x20)})
+                                    'function_type_declared':(kind&0x30)==0x20})
         index+=1+aux
     base['symbols_truncated']=base['symbol_count']>len(base['symbols'])
     base['names_partial']=name_partial
