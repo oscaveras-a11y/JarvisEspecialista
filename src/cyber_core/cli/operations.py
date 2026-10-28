@@ -1,5 +1,13 @@
 """Argument wiring for durable recovery, key metadata, inventories and agent jobs."""
 def configure(sub):
+    symbols = sub.add_parser("symbols", help="Read COFF symbols and optionally demangle C++ without execution")
+    symbols.add_argument("case")
+    symbols.add_argument("path")
+    symbols.add_argument("--llvm-bin")
+    symbols.add_argument("--max-symbols", type=int, default=128)
+    symbols.add_argument("--max-records", type=int, default=100000)
+    symbols.add_argument("--max-name-bytes", type=int, default=512)
+    symbols.add_argument("--output-bytes", type=int, default=1048576)
     functions = sub.add_parser("functions", help="Select static Ghidra functions and inspect references")
     functions.add_argument("case")
     functions.add_argument("path")
@@ -87,9 +95,14 @@ def configure(sub):
             parser.add_argument("--reason",required=True)
             parser.add_argument("--priority",action="store_true")
 
-COMMANDS = ("functions","installer","external-analyze","external-tools","recovery-formats","keys","inventory-disk","inventory-pcap","agent-jobs","recovery-session")
+COMMANDS = ("symbols","functions","installer","external-analyze","external-tools","recovery-formats","keys","inventory-disk","inventory-pcap","agent-jobs","recovery-session")
 
 def execute(core,args):
+    if args.command == "symbols":
+        from cyber_core.reverse_engineering.coff_operation import analyze_symbols
+        return analyze_symbols(core,args.case,args.path,llvm_bin=args.llvm_bin,max_symbols=args.max_symbols,
+                               max_records=args.max_records,max_name_bytes=args.max_name_bytes,
+                               output_bytes=args.output_bytes)
     if args.command == "functions":
         from cyber_core.reverse_engineering.selected import analyze_functions
         return analyze_functions(core,args.case,args.path,ghidra_home=args.ghidra_home,java_home=args.java_home,
