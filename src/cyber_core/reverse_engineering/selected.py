@@ -7,7 +7,7 @@ import tempfile
 from cyber_core.errors import CoreError
 
 def selection(*, names=None, addresses=None, ranges=None, max_functions=8, max_references=64,
-              decompile_seconds=5, analysis_seconds=30, pseudocode_chars=4096, max_scan_instructions=10000):
+              decompile_seconds=5, analysis_seconds=30, pseudocode_chars=4096, max_scan_instructions=10000, output_bytes=1048576):
     names, addresses, ranges = names or [], addresses or [], ranges or []
     if any(not isinstance(v, (list, tuple)) or len(v) > 32 for v in (names, addresses, ranges)):
         raise CoreError('Invalid function selectors')
@@ -21,7 +21,7 @@ def selection(*, names=None, addresses=None, ranges=None, max_functions=8, max_r
         not isinstance(v,(list,tuple)) or len(v)!=2 or not all(address(a) for a in v) or v[0]>=v[1] for v in ranges):
         raise CoreError('Invalid function address or half-open entry range')
     for value, maximum, minimum in ((max_functions,128,1),(max_references,512,1),(decompile_seconds,60,1),
-                                    (analysis_seconds,600,1),(pseudocode_chars,8192,256),(max_scan_instructions,100000,1)):
+                                    (analysis_seconds,600,1),(pseudocode_chars,8192,256),(max_scan_instructions,100000,1),(output_bytes,1048576,4096)):
         if type(value) is not int or not minimum <= value <= maximum:
             raise CoreError('Invalid selected-analysis budget')
     if max_functions*(pseudocode_chars + max_references*640 + 1024) > 850000:
@@ -29,7 +29,7 @@ def selection(*, names=None, addresses=None, ranges=None, max_functions=8, max_r
     result = dict(names=list(dict.fromkeys(names)), addresses=list(dict.fromkeys(addresses)),
                   ranges=[list(v) for v in ranges], max_functions=max_functions, max_references=max_references,
                   decompile_seconds=decompile_seconds, analysis_seconds=analysis_seconds,
-                  pseudocode_chars=pseudocode_chars, max_scan_instructions=max_scan_instructions)
+                  pseudocode_chars=pseudocode_chars, max_scan_instructions=max_scan_instructions, output_bytes=output_bytes)
     if len(json.dumps(result,ensure_ascii=True).encode()) > 8192:
         raise CoreError('Selected-analysis request too large')
     return result
@@ -71,6 +71,32 @@ def normalize(raw, options):
             'visited_functions':raw['visited_functions'],'matched_functions':raw['matched_functions'],
             'name_matches':matches,'interpretation':'Ghidra-generated pseudocode and static reference model; not recovered original source or proof of runtime behavior.'}
 
+def encode_result(result, *, output_bytes=1048576):
+    """Limit serialized bytes, including JSON escaping and the trailing newline.
+
+    Complete function records are omitted from the tail when needed. The caller
+    retains match counts and explicit partial/truncation metadata for persistence.
+    """
+    if type(output_bytes) is not int or not 4096 <= output_bytes <= 1048576:
+        raise CoreError('Invalid selected-analysis output byte budget')
+    if not isinstance(result,dict):
+        raise CoreError('Invalid selected-analysis output')
+    bounded = {**result,'output_bytes_limit':output_bytes,'output_truncated':False,
+               'output_functions_omitted':0}
+    if 'functions' in result:
+        if not isinstance(result['functions'],list):
+            raise CoreError('Invalid selected-analysis function output')
+        bounded['functions'] = list(result['functions'])
+    while True:
+        encoded = json.dumps(bounded,ensure_ascii=True)
+        if len(encoded.encode('utf-8')) + 1 <= output_bytes:
+            return encoded
+        if not bounded.get('functions'):
+            raise CoreError('Selected-analysis metadata exceeds output byte budget')
+        bounded['functions'].pop()
+        bounded['output_functions_omitted'] += 1
+        bounded.update(output_truncated=True,functions_truncated=True,status='partial')
+
 def analyze_functions(core, case, path, *, ghidra_home, java_home, **selectors):
     from cyber_core.agents.runner import run_bounded
     from cyber_core.operations import save_operation
@@ -92,7 +118,7 @@ def analyze_functions(core, case, path, *, ghidra_home, java_home, **selectors):
                    'timeout':core.timeout,'selection':options,
                    'config':{key:{k:str(v) for k,v in fields.items()} for key,fields in config.items()}}
         response = run_bounded([sys.executable,'-I',str(Path(__file__).with_name('selected_child.py'))],
-                               json.dumps(request),cwd=scratch,timeout=core.timeout,max_output=1048576,
+                               json.dumps(request),cwd=scratch,timeout=core.timeout,max_output=options['output_bytes'],
                                should_stop=stopped,env={})
         result = json.loads(response['stdout'])
         if not isinstance(result,dict) or result.get('input_sha256')!=evidence['sha256']:

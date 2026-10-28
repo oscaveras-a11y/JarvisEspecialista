@@ -301,7 +301,7 @@ def analyze_external(verified_path, metadata, config, timeout, *, function_selec
                     result["status"] = ("partial" if raw["analysis_timed_out"] or
                                         any(f["status"] == "failed" for f in raw["functions"])
                                         else "completed" if raw["functions"] else "no_functions")
-                    if function_selection is not None and (raw["functions_truncated"] or raw["selection_scan_truncated"] or any(f["references_truncated"] for f in raw["functions"])):
+                    if function_selection is not None and (raw["functions_truncated"] or raw["selection_scan_truncated"] or any(f["references_truncated"] or f["pseudocode_truncated"] for f in raw["functions"])):
                         result["status"] = "partial"
         except (CoreError, OSError) as exc:
             result["status"] = "failed"

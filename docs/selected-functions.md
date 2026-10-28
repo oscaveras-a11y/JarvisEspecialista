@@ -23,18 +23,18 @@ Cada função contém pseudocódigo identificado como interpretação do decompi
 
 Orçamento por operação:
 - até 32 nomes, 32 endereços e 32 intervalos; requisição normalizada <=8192 bytes;
-- até 128 funções, 512 referências por função, respeitando também um orçamento combinado conservador de saída;
+- até 128 funções, 512 referências por função, respeitando também uma estimativa combinada de admissão em caracteres;
 - pseudocódigo entre 256 e 8192 caracteres por função (padrão 4096);
 - até 60 segundos de decompilação por função (padrão 5);
 - até 600 segundos de autoanálise (padrão 30), sempre dentro do prazo restante do CORE;
 - até 100 mil funções percorridas para seleção e 10 mil instruções por função por padrão;
-- limites existentes de JSON, stdio e scratch da integração Ghidra continuam aplicáveis. A operação retorna parcial quando seleção ou referências são truncadas. Pseudocode_truncated marca o texto limitado, sem afirmar sua integralidade.
+- limites existentes de JSON, stdio e scratch da integração Ghidra continuam aplicáveis. A operação retorna parcial quando seleção, referências ou pseudocódigo são truncados. Pseudocode_truncated marca o texto limitado, sem afirmar sua integralidade.
 
 Exemplos de configuração: --max-functions 4 --max-references 32 --decompile-seconds 10 --analysis-seconds 60 --pseudocode-chars 8192.
-A combinação funções/referências/texto pode ser rejeitada antes da aquisição para manter a resposta abaixo do limite IPC. Valores máximos individuais não são promessa de que todos os máximos simultâneos caibam.
+A combinação funções/referências/texto pode ser rejeitada antes da aquisição por uma estimativa de caracteres. O limite efetivo de bytes é aplicado após serialização JSON (incluindo escaping Unicode): --output-bytes, entre 4096 e 1048576, padrão 1048576. Se necessário, registros completos de funções são omitidos do final; output_truncated=true, output_functions_omitted e functions_truncated=true identificam a perda, mantendo matched_functions e status partial. Até todas as funções podem ser omitidas em orçamento pequeno; isso não significa ausência de correspondências. O original retornado pelo exportador não é alterado. Metadados que sozinhos excedam o limite causam falha explícita. Valores máximos individuais não são promessa de que todos os máximos simultâneos caibam.
 
 ## Validação e pendências
 
-scripts/check-selected-functions.py compila um ELF sintético com função alvo, auxiliar e variável global, sem executá-lo. A integração real deve comprovar seleção por nome, endereço/intervalo, chamada, referência a dados, preservação do original, persistência e relatório. Testes apenas no GitHub; nenhum VisionFT privado é enviado ao CI.
+scripts/check-selected-functions.py compila um ELF sintético com função alvo, auxiliar e variável global, sem executá-lo. A integração real comprova seleção por nome, endereço/intervalo, chamadas de entrada/saída, referência a dados, nome inexistente, limite de funções, pseudocódigo truncado, preservação do original, persistência e relatório. Testes apenas no GitHub; nenhum VisionFT privado é enviado ao CI.
 
 A prévia ExportPreview.java e o contrato Capstone atual permanecem preservados. Esta etapa não implementa seleção profunda no Capstone, COFF/demangling, QML, comparação semântica, FTW2 ou retomada por função. A aquisição é persistente, mas a análise direcionada é uma operação síncrona: interrupção exige nova execução. O orçamento de scratch existente ainda limita executáveis grandes; não há validação de Ghidra profundo em VisionFT ou em executável de 250 MiB nesta entrega.

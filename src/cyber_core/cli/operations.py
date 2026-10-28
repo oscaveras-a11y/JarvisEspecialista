@@ -11,6 +11,7 @@ def configure(sub):
     functions.add_argument("--decompile-seconds", type=int, default=5)
     functions.add_argument("--analysis-seconds", type=int, default=30)
     functions.add_argument("--pseudocode-chars", type=int, default=4096)
+    functions.add_argument("--output-bytes", type=int, default=1048576)
     installer = sub.add_parser("installer", help="List or extract selected NSIS files without running the installer")
     installer.add_argument("case")
     installer.add_argument("path")
@@ -95,7 +96,7 @@ def execute(core,args):
                                  names=args.name,addresses=args.address,ranges=args.entry_ranges,
                                  max_functions=args.max_functions,max_references=args.max_references,
                                  decompile_seconds=args.decompile_seconds,analysis_seconds=args.analysis_seconds,
-                                 pseudocode_chars=args.pseudocode_chars)
+                                 pseudocode_chars=args.pseudocode_chars,output_bytes=args.output_bytes)
     if args.command == "installer":
         from cyber_core.installers import inspect_installer
         return inspect_installer(core,args.case,args.path,seven_zip=args.seven_zip,extract=args.extract,

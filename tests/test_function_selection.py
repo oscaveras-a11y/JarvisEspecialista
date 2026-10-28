@@ -58,6 +58,11 @@ class SelectedOutputBudgetTests(unittest.TestCase):
         self.assertLess(len(bounded['functions']),8)
         self.assertEqual(bounded['matched_functions'],8)
         self.assertEqual(len(result['functions']),8)
+        for value in (True,0,4095,1048577,1.5):
+            with self.subTest(output_bytes=value), self.assertRaises(CoreError):
+                selected.selection(names=['target'],output_bytes=value)
+            with self.subTest(encoder_bytes=value), self.assertRaises(CoreError):
+                selected.encode_result(result,output_bytes=value)
         small = json.loads(selected.encode_result(result,output_bytes=4096))
         self.assertEqual(small['functions'],[])
         self.assertEqual(small['status'],'partial')
