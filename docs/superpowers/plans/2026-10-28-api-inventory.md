@@ -12,10 +12,13 @@ No template expansion, method execution or authentication verdict. GET eligibili
 
 Review focus: reference cycles/external fetch, server overrides/variables, security inheritance/anonymous alternatives, JSON depth and output growth, lifecycle/receipt integrity.
 
-- [ ] Write parser, CLI and campaign tests; observe RED on GitHub.
-- [ ] Implement analyze(raw,grant,**limits), run_inventory(core,case,path,grant_path,...), CLI and campaign receipt.
+- [x] Write parser, CLI and campaign tests; observe RED on GitHub.
+- [x] Implement analyze(raw,grant,**limits), run_inventory(core,case,path,grant_path,...), CLI and campaign receipt.
 - [ ] Run focused and whole regression suite on Linux and Windows, including existing real synthetic HTTPS integration.
 - [ ] Fresh read-only review, fix important findings with RED/GREEN, publish draft PR with evidence.
 
 Ruling: use an isolated remote branch rather than local worktree because AGENTS.md mandates GitHub-only development/testing.
 Ruling: api_inventory is separate from api; documenting routes cannot claim runtime API testing.
+
+RED: workflow 40777653975, eight expected missing-adapter failures. First implementation CI40777823043 exposed missing CLI dispatch; corrected in205ce61.
+Review: fresh read-only reviewer found no Important/Critical bugs. Minor deferred: control-character URL normalization, documented in docs/api-inventory.md. No requests or grant expansion.
