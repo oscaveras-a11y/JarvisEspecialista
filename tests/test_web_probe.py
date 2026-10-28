@@ -1,5 +1,6 @@
 """HTTPS protocol tests use only disposable CI fixtures, never external websites."""
 import hashlib
+import gzip
 import importlib
 import io
 import json
@@ -82,8 +83,12 @@ class WebProbeTests(unittest.TestCase):
                         self.send_header('Content-Length','2048')
                     if self.path=='/slow':
                         type(self).slow_started.set()
-                    if self.path=='/inventory':
+                    if self.path in ('/inventory','/inventory-gzip'):
                         self.send_header('Content-Type','text/html; charset=utf-8')
+                    if self.path=='/inventory-latin1':
+                        self.send_header('Content-Type','text/html; charset=iso-8859-1')
+                    if self.path=='/inventory-gzip':
+                        self.send_header('Content-Encoding','gzip')
                     self.send_header('Content-Security-Policy',"default-src 'self'")
                     self.send_header('Set-Cookie','private-token=do-not-persist; Secure; HttpOnly; SameSite=Lax')
                     self.end_headers()
@@ -93,6 +98,10 @@ class WebProbeTests(unittest.TestCase):
                              else b'x'*1024 if self.path=='/exact-truncated' else b'synthetic-public-page')
                     if self.path=='/inventory':
                         payload=b'<a href="/save?token=private-query">Save</a><form action="/save" method="POST"><input name="password" type="password" value="private-value"></form>'
+                    if self.path=='/inventory-latin1':
+                        payload=b'<form><input name="caf\\xe9"></form>'
+                    if self.path=='/inventory-gzip':
+                        payload=gzip.compress(b'<form><input name="private-compressed" value="private-value"></form>')
                     try:self.wfile.write(payload)
                     except OSError:pass
             server=ThreadingHTTPServer((ADDRESS,0),Handler)
@@ -139,7 +148,7 @@ class WebProbeTests(unittest.TestCase):
                     self.assertEqual(untrusted['analysis']['responses'][0]['error'],'tls_validation_failed')
                     self.assertEqual(Handler.paths,['/','/redirect','/large','/truncated','/exact-truncated'])
                     original_manifest=manifest.read_bytes()
-                    manifest.write_text(json.dumps(grant(f'https://{HOST}:{server.server_port}',['/inventory','/save'])))
+                    manifest.write_text(json.dumps(grant(f'https://{HOST}:{server.server_port}',['/inventory','/save','/inventory-latin1','/inventory-gzip'])))
                     before_inventory=len(Handler.paths)
                     discovered=run_probe(core,case,str(manifest),ca_file=str(cert),inventory=True,seconds=10)
                     self.assertEqual(discovered['kind'],'web_inventory')
@@ -147,7 +156,11 @@ class WebProbeTests(unittest.TestCase):
                     self.assertEqual(inv['forms'][0]['method'],'POST')
                     self.assertEqual(inv['forms'][0]['action_path'],'/save')
                     self.assertEqual(inv['routes'][0]['path'],'/save')
-                    self.assertEqual(Handler.paths[before_inventory:],['/inventory','/save'])
+                    self.assertEqual(discovered['analysis']['status'],'partial')
+                    unsupported=discovered['analysis']['responses'][2:]
+                    self.assertEqual(unsupported[0]['inventory']['reason'],'unsupported_charset')
+                    self.assertEqual(unsupported[1]['inventory']['reason'],'encoded_body')
+                    self.assertEqual(Handler.paths[before_inventory:],['/inventory','/save','/inventory-latin1','/inventory-gzip'])
                     self.assertNotIn('private-value',json.dumps(discovered))
                     self.assertNotIn('private-query',json.dumps(discovered))
                     from cyber_core.pentest import campaigns as inventory_campaigns
@@ -159,6 +172,7 @@ class WebProbeTests(unittest.TestCase):
                     finished=inventory_campaigns.work(core,case,inv_campaign['campaign_id'])
                     self.assertEqual(finished['stages'][0]['state'],'completed')
                     self.assertEqual(finished['stages'][0]['coverage'],'exercised')
+                    self.assertEqual(finished['state'],'partial')
                     count_after_inventory=len(Handler.paths)
                     repeated=inventory_campaigns.work(core,case,inv_campaign['campaign_id'])
                     self.assertEqual(len(Handler.paths),count_after_inventory)
