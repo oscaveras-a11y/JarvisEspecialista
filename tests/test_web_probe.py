@@ -82,6 +82,8 @@ class WebProbeTests(unittest.TestCase):
                         self.send_header('Content-Length','2048')
                     if self.path=='/slow':
                         type(self).slow_started.set()
+                    if self.path=='/inventory':
+                        self.send_header('Content-Type','text/html; charset=utf-8')
                     self.send_header('Content-Security-Policy',"default-src 'self'")
                     self.send_header('Set-Cookie','private-token=do-not-persist; Secure; HttpOnly; SameSite=Lax')
                     self.end_headers()
@@ -89,6 +91,8 @@ class WebProbeTests(unittest.TestCase):
                         type(self).slow_release.wait(5)
                     payload=(b'x'*8192 if self.path=='/large' else b'abc' if self.path=='/truncated'
                              else b'x'*1024 if self.path=='/exact-truncated' else b'synthetic-public-page')
+                    if self.path=='/inventory':
+                        payload=b'<a href="/save?token=private-query">Save</a><form action="/save" method="POST"><input name="password" type="password" value="private-value"></form>'
                     try:self.wfile.write(payload)
                     except OSError:pass
             server=ThreadingHTTPServer((ADDRESS,0),Handler)
@@ -134,6 +138,33 @@ class WebProbeTests(unittest.TestCase):
                     untrusted=run_probe(core,case,str(manifest),seconds=10,body_bytes=1024)
                     self.assertEqual(untrusted['analysis']['responses'][0]['error'],'tls_validation_failed')
                     self.assertEqual(Handler.paths,['/','/redirect','/large','/truncated','/exact-truncated'])
+                    original_manifest=manifest.read_bytes()
+                    manifest.write_text(json.dumps(grant(f'https://{HOST}:{server.server_port}',['/inventory','/save'])))
+                    before_inventory=len(Handler.paths)
+                    discovered=run_probe(core,case,str(manifest),ca_file=str(cert),inventory=True,seconds=10)
+                    self.assertEqual(discovered['kind'],'web_inventory')
+                    inv=discovered['analysis']['responses'][0]['inventory']
+                    self.assertEqual(inv['forms'][0]['method'],'POST')
+                    self.assertEqual(inv['forms'][0]['action_path'],'/save')
+                    self.assertEqual(inv['routes'][0]['path'],'/save')
+                    self.assertEqual(Handler.paths[before_inventory:],['/inventory','/save'])
+                    self.assertNotIn('private-value',json.dumps(discovered))
+                    self.assertNotIn('private-query',json.dumps(discovered))
+                    from cyber_core.pentest import campaigns as inventory_campaigns
+                    inventory_plan=root/'inventory-campaign.json'
+                    inventory_plan.write_text(json.dumps({'version':1,'stages':['web_inventory'],
+                                                          'web_grant':'grant.json','ca_file':'fixture.pem',
+                                                          'seconds':10}))
+                    inv_campaign=inventory_campaigns.create(core,case,str(inventory_plan))
+                    finished=inventory_campaigns.work(core,case,inv_campaign['campaign_id'])
+                    self.assertEqual(finished['stages'][0]['state'],'completed')
+                    self.assertEqual(finished['stages'][0]['coverage'],'exercised')
+                    count_after_inventory=len(Handler.paths)
+                    repeated=inventory_campaigns.work(core,case,inv_campaign['campaign_id'])
+                    self.assertEqual(len(Handler.paths),count_after_inventory)
+                    self.assertEqual(repeated['id'],finished['id'])
+                    self.assertIn('web_inventory',core.report(case).read_text())
+                    manifest.write_bytes(original_manifest)
                     # Campaign execution uses the actual HTTPS adapter and survives
                     # a storage failure after the adapter committed its result.
                     import importlib
