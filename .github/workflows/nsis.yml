@@ -1,0 +1,31 @@
+name: Real NSIS static extraction
+on:
+  push:
+    branches: [codex/visionft-static-analysis]
+    paths: ['src/cyber_core/installers/**', 'tests/test_installers.py', '.github/workflows/nsis.yml']
+  pull_request:
+    branches: [main]
+    paths: ['src/cyber_core/installers/**', 'tests/test_installers.py', '.github/workflows/nsis.yml', 'src/cyber_core/cli/**']
+permissions:
+  contents: read
+concurrency:
+  group: nsis-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  nsis:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      CYBER_REQUIRE_NSIS: '1'
+      PYTHONUTF8: '1'
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - run: sudo apt-get update -qq && sudo apt-get install -y nsis p7zip-full
+      - run: python -m pip install ".[reverse]"
+      - run: python scripts/run-tests.py test_installers.py
+      - run: python scripts/run-tests.py

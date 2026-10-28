@@ -16,7 +16,9 @@ import time
 
 from cyber_core.errors import CoreError
 
-MAX_INPUT = 64 * 1024 * 1024
+from cyber_core.analysis_process.limits import MAX_INPUT_BYTES
+
+MAX_INPUT = MAX_INPUT_BYTES
 MAX_JSON = 2 * 1024 * 1024
 MAX_SCRATCH = 64 * 1024 * 1024
 MAX_STDIO = 256 * 1024
@@ -189,7 +191,7 @@ def _ghidra_result(raw):
     return normalized
 
 
-def analyze_external(verified_path, metadata, config, timeout):
+def analyze_external(verified_path, metadata, config, timeout, *, function_selection=None):
     """Analyze a verified copy; config is trusted host configuration, never evidence.
 
     No tools run without explicit config. Does not acquire evidence, authorize a
@@ -197,6 +199,9 @@ def analyze_external(verified_path, metadata, config, timeout):
     """
     if type(timeout) not in (int, float) or not math.isfinite(timeout) or not 0 < timeout <= 3600:
         raise CoreError("Invalid external analysis timeout")
+    if function_selection is not None:
+        from cyber_core.reverse_engineering.selected import selection
+        function_selection = selection(**function_selection)
     deadline = time.monotonic() + timeout
     configuration = _config(config)
     path = _path(verified_path)
@@ -265,7 +270,7 @@ def analyze_external(verified_path, metadata, config, timeout):
                                GHIDRA_HEADLESS_MAXMEM="1G")
                     scripts = Path(__file__).with_name("ghidra_scripts")
                     loader = "ElfLoader" if metadata["format"] == "elf" else "PeLoader"
-                    analysis_seconds = max(1, min(30, int(deadline - time.monotonic()) - 3))
+                    analysis_seconds = max(1, min(function_selection["analysis_seconds"] if function_selection else 30, int(deadline - time.monotonic()) - 3))
                     loader_options = ["-loader-loadLibraries", "false"]
                     if metadata["format"] == "elf":
                         loader_options += ["-loader-applyRelocations", "false"]
@@ -274,15 +279,30 @@ def analyze_external(verified_path, metadata, config, timeout):
                                "-scriptPath", scripts, "-postScript", "ExportPreview.java", output,
                                "-analysisTimeoutPerFile", str(analysis_seconds), "-max-cpu", "1",
                                "-log", scratch / "application.log", "-scriptlog", scratch / "script.log"]
+                    if function_selection is not None:
+                        selection_file = scratch / "selection.json"
+                        selection_file.write_text(json.dumps(function_selection), encoding="utf-8")
+                        position = command.index("ExportPreview.java")
+                        command[position] = "ExportSelected.java"
+                        command.insert(position + 2, selection_file)
                     diagnostic = _run(command, scratch, env, deadline)
                     if not output.is_file():
                         errors = [line for line in diagnostic.splitlines() if "error" in line.lower() or "exception" in line.lower()]
                         raise CoreError("Ghidra exporter did not produce JSON: " + " ".join(errors)[-400:])
-                    raw = _ghidra_result(_read_json(output))
+                    if function_selection is not None:
+                        from cyber_core.reverse_engineering.selected import normalize
+                        raw = normalize(_read_json(output), function_selection)
+                    else:
+                        raw = _ghidra_result(_read_json(output))
                     result.update(raw)
+                    if function_selection is not None:
+                        result["selection"] = function_selection
+                        result["limits"]["functions"] = function_selection["max_functions"]
                     result["status"] = ("partial" if raw["analysis_timed_out"] or
                                         any(f["status"] == "failed" for f in raw["functions"])
                                         else "completed" if raw["functions"] else "no_functions")
+                    if function_selection is not None and (raw["functions_truncated"] or raw["selection_scan_truncated"] or any(f["references_truncated"] or f["pseudocode_truncated"] for f in raw["functions"])):
+                        result["status"] = "partial"
         except (CoreError, OSError) as exc:
             result["status"] = "failed"
             result["error"] = str(exc)[:512] if isinstance(exc, CoreError) else "External backend could not run"

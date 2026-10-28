@@ -1,0 +1,31 @@
+name: Large synthetic inputs
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [codex/visionft-static-analysis]
+permissions:
+  contents: read
+concurrency:
+  group: large-inputs-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  large:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-2022]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    env:
+      PYTHONUTF8: "1"
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - run: python -m pip install ".[reverse]"
+      - run: python scripts/run-tests.py test_large_inputs.py
+      - run: python scripts/run-tests.py

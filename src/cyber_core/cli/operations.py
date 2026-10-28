@@ -1,5 +1,32 @@
 """Argument wiring for durable recovery, key metadata, inventories and agent jobs."""
 def configure(sub):
+    symbols = sub.add_parser("symbols", help="Read COFF symbols and optionally demangle C++ without execution")
+    symbols.add_argument("case")
+    symbols.add_argument("path")
+    symbols.add_argument("--llvm-bin")
+    symbols.add_argument("--max-symbols", type=int, default=128)
+    symbols.add_argument("--max-records", type=int, default=100000)
+    symbols.add_argument("--max-name-bytes", type=int, default=512)
+    symbols.add_argument("--output-bytes", type=int, default=1048576)
+    functions = sub.add_parser("functions", help="Select static Ghidra functions and inspect references")
+    functions.add_argument("case")
+    functions.add_argument("path")
+    functions.add_argument("--name", action="append", default=[])
+    functions.add_argument("--address", action="append", type=lambda v:int(v,0), default=[])
+    functions.add_argument("--range", dest="entry_ranges", action="append", nargs=2, type=lambda v:int(v,0), default=[])
+    functions.add_argument("--max-functions", type=int, default=8)
+    functions.add_argument("--max-references", type=int, default=64)
+    functions.add_argument("--decompile-seconds", type=int, default=5)
+    functions.add_argument("--analysis-seconds", type=int, default=30)
+    functions.add_argument("--pseudocode-chars", type=int, default=4096)
+    functions.add_argument("--output-bytes", type=int, default=1048576)
+    installer = sub.add_parser("installer", help="List or extract selected NSIS files without running the installer")
+    installer.add_argument("case")
+    installer.add_argument("path")
+    installer.add_argument("--seven-zip", required=True)
+    installer.add_argument("--extract", action="store_true")
+    installer.add_argument("--max-extracted-bytes", type=int, default=1073741824)
+    installer.add_argument("--memory-bytes", type=int, default=536870912)
     sub.add_parser("recovery-formats", help="Show supported recovery formats and available dependencies")
     external = sub.add_parser("external-analyze", help="Static external identification of verified evidence")
     external.add_argument("case")
@@ -68,9 +95,25 @@ def configure(sub):
             parser.add_argument("--reason",required=True)
             parser.add_argument("--priority",action="store_true")
 
-COMMANDS = ("external-analyze","external-tools","recovery-formats","keys","inventory-disk","inventory-pcap","agent-jobs","recovery-session")
+COMMANDS = ("symbols","functions","installer","external-analyze","external-tools","recovery-formats","keys","inventory-disk","inventory-pcap","agent-jobs","recovery-session")
 
 def execute(core,args):
+    if args.command == "symbols":
+        from cyber_core.reverse_engineering.coff_operation import analyze_symbols
+        return analyze_symbols(core,args.case,args.path,llvm_bin=args.llvm_bin,max_symbols=args.max_symbols,
+                               max_records=args.max_records,max_name_bytes=args.max_name_bytes,
+                               output_bytes=args.output_bytes)
+    if args.command == "functions":
+        from cyber_core.reverse_engineering.selected import analyze_functions
+        return analyze_functions(core,args.case,args.path,ghidra_home=args.ghidra_home,java_home=args.java_home,
+                                 names=args.name,addresses=args.address,ranges=args.entry_ranges,
+                                 max_functions=args.max_functions,max_references=args.max_references,
+                                 decompile_seconds=args.decompile_seconds,analysis_seconds=args.analysis_seconds,
+                                 pseudocode_chars=args.pseudocode_chars,output_bytes=args.output_bytes)
+    if args.command == "installer":
+        from cyber_core.installers import inspect_installer
+        return inspect_installer(core,args.case,args.path,seven_zip=args.seven_zip,extract=args.extract,
+                                 max_extracted_bytes=args.max_extracted_bytes,memory_bytes=args.memory_bytes)
     if args.command == "external-analyze":
         from cyber_core.external_tools import analyze_tool
         return analyze_tool(core,args.case,args.path,tool=args.tool)
