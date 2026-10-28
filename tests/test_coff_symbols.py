@@ -81,6 +81,39 @@ class CoffSymbolsTests(unittest.TestCase):
         with self.assertRaises(CoreError):
             self.api().read_symbols(data,max_symbols=1)
 
+    def test_uninitialized_data_has_size_without_file_backed_bytes(self):
+        data,ptr=fixture()
+        struct.pack_into('<I',data,20+20,0)
+        struct.pack_into('<I',data,20+36,0xc0000080)
+        result=self.api().read_symbols(data)
+        self.assertEqual(result['status'],'completed')
+        self.assertEqual(result['symbols'][0]['section_offset'],4)
+        self.assertIsNone(result['symbols'][0]['file_offset'])
+        self.assertIsNone(result['symbols'][1]['file_offset'])
+
+    def test_array_derived_type_is_not_reported_as_a_function(self):
+        data,ptr=fixture()
+        struct.pack_into('<H',data,ptr+14,0x30)
+        result=self.api().read_symbols(data)
+        self.assertFalse(result['symbols'][0]['function_type_declared'])
+        self.assertTrue(result['symbols'][1]['function_type_declared'])
+
+    def test_output_limit_counts_escaped_unicode_bytes(self):
+        import json
+        from cyber_core.reverse_engineering.coff_operation import _encode
+        result={'status':'completed','symbol_count':8,'symbols_truncated':False,
+                'symbols':[{'name':'?x','display_name':'界'*2048} for _ in range(8)]}
+        encoded=_encode(result,16384)
+        self.assertLessEqual(len(encoded.encode('utf-8'))+1,16384)
+        bounded=json.loads(encoded)
+        self.assertEqual(bounded['status'],'partial')
+        self.assertTrue(bounded['symbols_truncated'])
+        self.assertTrue(bounded['output_truncated'])
+        self.assertEqual(bounded['symbol_count'],8)
+        self.assertGreater(len(bounded['symbols']),0)
+        self.assertLess(len(bounded['symbols']),8)
+        self.assertEqual(len(result['symbols']),8)
+
     def test_bigobj_is_explicitly_unsupported_and_budgets_are_validated(self):
         self.assertEqual(self.api().read_symbols(b'\0\0\xff\xff'+bytes(52))['status'],'unsupported_variant')
         data,_=fixture()
