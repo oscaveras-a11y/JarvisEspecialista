@@ -121,6 +121,27 @@ class QtResourceTests(unittest.TestCase):
         with self.assertRaises(CoreError):
             self.api().inspect_rcc(data)
 
+    def test_nested_unit_budget_applies_to_both_resource_encodings(self):
+        import time
+        from cyber_core.reverse_engineering.qt_operation import _scan
+        options=dict(max_candidates=32,max_entries=4096,max_resource_bytes=8388608,
+                     max_decoded_bytes=67108864,max_unit_bytes=248,max_ratio=200,
+                     output_bytes=1048576,memory_bytes=2147483648)
+        for compressed in (False,True):
+            with self.subTest(compressed=compressed):
+                result=_scan(rcc_fixture(qml_fixture(),compressed),options,time.monotonic()+30)
+                unit=result['rcc'][0]['resources'][0]['qml']
+                self.assertEqual(unit['status'],'resource_limited')
+                self.assertEqual(unit.get('objects',[]),[])
+
+    def test_javascript_unit_is_distinguished_from_qml(self):
+        data=qml_fixture()
+        struct.pack_into('<I',data,108,1)
+        struct.pack_into('<I',data,244,0)
+        result=self.api().inspect_qml_unit(data)
+        self.assertEqual(result.get('unit_kind'),'javascript')
+        self.assertEqual(result['objects'],[])
+
     def test_rcc_truncation_cycles_invalid_offsets_and_expansion_limit(self):
         valid=rcc_fixture()
         cases=[valid[:-1]]
