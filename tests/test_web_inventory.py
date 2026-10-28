@@ -65,7 +65,7 @@ class InventoryTests(unittest.TestCase):
         for byte in '<form action="/save"><input name="ação" value="敏感"></form>'.encode():
             scanner.feed(bytes([byte]))
         r=scanner.finish()
-        self.assertEqual(r['status'],'completed')
+        self.assertEqual(r['status'],'completed',r['quality_flags'])
         self.assertEqual(r['forms'][0]['fields'][0]['name_sha256'],hashlib.sha256('ação'.encode()).hexdigest())
         self.assertNotIn('敏感',json.dumps(r))
 
@@ -108,15 +108,18 @@ class InventoryTests(unittest.TestCase):
         self.assertIn('submission_overrides_unsupported',r['quality_flags'])
 
     def test_invalid_or_omitted_base_and_form_actions_do_not_fallback_as_verified(self):
-        r=self.parse('<base href="https://["><a href="save">x</a>')
-        self.assertEqual(r['status'],'partial')
-        self.assertEqual(r['routes'],[])
-        r=self.parse('<base href="'+('x'*2049)+'"><a href="save">x</a>')
-        self.assertEqual(r['status'],'partial')
-        self.assertEqual(r['routes'],[])
-        r=self.parse('<form action="'+('x'*2049)+'"><input name="x"></form>')
-        self.assertFalse(r['forms'][0]['action_in_scope'])
-        self.assertIsNone(r['forms'][0]['action_path'])
+        with self.subTest('invalid base'):
+            r=self.parse('<base href="https://["><a href="save">x</a>')
+            self.assertEqual(r['status'],'partial')
+            self.assertEqual(r['routes'],[])
+        with self.subTest('omitted base'):
+            r=self.parse('<base href="'+('x'*2049)+'"><a href="save">x</a>')
+            self.assertEqual(r['status'],'partial')
+            self.assertEqual(r['routes'],[])
+        with self.subTest('omitted form action'):
+            r=self.parse('<form action="'+('x'*2049)+'"><input name="x"></form>')
+            self.assertFalse(r['forms'][0]['action_in_scope'])
+            self.assertIsNone(r['forms'][0]['action_path'])
 
     def test_maximum_inventory_records_fit_supervised_output_budget(self):
         paths=['/'+str(i)+'x'*250 for i in range(8)]
