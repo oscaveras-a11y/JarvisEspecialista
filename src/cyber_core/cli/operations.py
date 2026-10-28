@@ -9,6 +9,14 @@ def configure(sub):
         if action=='run':
             command.add_argument('--max-stages',type=int,default=16)
             command.add_argument('--max-seconds',type=float,default=300)
+    api=sub.add_parser('api-inventory',help='Inventory supplied OpenAPI JSON without network requests')
+    api.add_argument('case')
+    api.add_argument('path')
+    api.add_argument('--grant',required=True)
+    api.add_argument('--max-bytes',dest='api_max_bytes',type=int,default=1048576)
+    api.add_argument('--max-operations',type=int,default=64)
+    api.add_argument('--output-bytes',type=int,default=131072)
+    api.add_argument('--seconds',type=float,default=30)
     web=sub.add_parser('web-probe',help='Observe explicitly authorized HTTPS endpoints without writes')
     web.add_argument('case')
     web.add_argument('manifest')
@@ -122,9 +130,13 @@ def configure(sub):
             parser.add_argument("--reason",required=True)
             parser.add_argument("--priority",action="store_true")
 
-COMMANDS = ("pentest","web-probe","firmware-timeline","web-lab","symbols","functions","installer","external-analyze","external-tools","recovery-formats","keys","inventory-disk","inventory-pcap","agent-jobs","recovery-session")
+COMMANDS = ("api-inventory","pentest","web-probe","firmware-timeline","web-lab","symbols","functions","installer","external-analyze","external-tools","recovery-formats","keys","inventory-disk","inventory-pcap","agent-jobs","recovery-session")
 
 def execute(core,args):
+    if args.command=="api-inventory":
+        from cyber_core.pentest.openapi import run_inventory
+        return run_inventory(core,args.case,args.path,args.grant,max_bytes=args.api_max_bytes,
+                             max_operations=args.max_operations,output_bytes=args.output_bytes,seconds=args.seconds)
     if args.command=="pentest":
         from cyber_core.pentest import campaigns
         if args.pentest_action=='create':
