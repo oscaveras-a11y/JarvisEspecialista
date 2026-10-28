@@ -99,7 +99,7 @@ class WebProbeTests(unittest.TestCase):
                     if self.path=='/inventory':
                         payload=b'<a href="/save?token=private-query">Save</a><form action="/save" method="POST"><input name="password" type="password" value="private-value"></form>'
                     if self.path=='/inventory-latin1':
-                        payload=b'<form><input name="caf\\xe9"></form>'
+                        payload=b'<form><input name="caf'+bytes([233])+b'"></form>'
                     if self.path=='/inventory-gzip':
                         payload=gzip.compress(b'<form><input name="private-compressed" value="private-value"></form>')
                     try:self.wfile.write(payload)
