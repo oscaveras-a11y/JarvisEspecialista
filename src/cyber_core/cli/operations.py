@@ -1,5 +1,8 @@
 """Argument wiring for durable recovery, key metadata, inventories and agent jobs."""
 def configure(sub):
+    lab=sub.add_parser('web-lab',help='Run scoped synthetic HTTP laboratory')
+    lab.add_argument('case')
+    lab.add_argument('manifest')
     symbols = sub.add_parser("symbols", help="Read COFF symbols and optionally demangle C++ without execution")
     symbols.add_argument("case")
     symbols.add_argument("path")
@@ -95,9 +98,12 @@ def configure(sub):
             parser.add_argument("--reason",required=True)
             parser.add_argument("--priority",action="store_true")
 
-COMMANDS = ("symbols","functions","installer","external-analyze","external-tools","recovery-formats","keys","inventory-disk","inventory-pcap","agent-jobs","recovery-session")
+COMMANDS = ("web-lab","symbols","functions","installer","external-analyze","external-tools","recovery-formats","keys","inventory-disk","inventory-pcap","agent-jobs","recovery-session")
 
 def execute(core,args):
+    if args.command=='web-lab':
+        from cyber_core.web_lab import run_lab
+        return run_lab(core,args.case,args.manifest)
     if args.command == "symbols":
         from cyber_core.reverse_engineering.coff_operation import analyze_symbols
         return analyze_symbols(core,args.case,args.path,llvm_bin=args.llvm_bin,max_symbols=args.max_symbols,

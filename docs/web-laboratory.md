@@ -1,19 +1,19 @@
-# Laboratório web sintético
+# Laboratório HTTP no CORE
+Comando: cyber --home DIRETORIO web-lab CASO manifesto.json.
+Manifesto dentro do escopo do caso:
+{"origin":"http://127.0.0.1:PORTA","allow_write":true}
 
-Primeiro incremento de transporte HTTP e testes (seções Codex10/18).
-Não substitui o motor de vulnerabilidades da seção9, atribuído ao Claude.
+Somente servidor sintético descartável com GET/POST /lab/content e JSON title.
+Autorização, pausa e hash do manifesto são conferidos antes de cada requisição.
+Resultado, origem e hash são persistidos na operação auditada e relatório.
+Revogação, expiração ou cancelamento impedem a próxima requisição.
+Uma requisição em andamento pode esperar até10s; não há cancelamento
+instantâneo do socket nem garantia transacional de restauração.
+Após revogação/pausa, nenhuma restauração adicional é enviada; o evento
+web_lab_interrupted informa possível limpeza pendente. Descartar a fixture
+antes de retomar. Encerramento abrupto também pode deixar alteração pendente.
 
-Executar no runner GitHub: python -m cyber_core.web_lab http://127.0.0.1:PORTA.
-O servidor sintético deve oferecer GET/POST /lab/content com JSON title.
-O runner tenta uma alteração sem credenciais, confirma por leitura e tenta
-restaurar o título original em finally, confirmando novamente por leitura.
-Falhas durante restauração são erros; não há garantia de restauração após
-encerramento abrupto. Usar somente dados descartáveis no laboratório.
-
-Somente IPv4 loopback literal e porta >=1024; sem DNS, proxy, redirecionamento
-ou alvos públicos. Até cinco requisições, resposta64KiB e prazo10s.
-JSON com observação, restauração e limitações. Não opera Amorella.
-Ainda pendentes: autorização persistente CORE, auditoria, cancelamento,
-interface principal, laboratório protegido de contraste e motor completo.
-Este incremento não declara o Jarvis completo nem uma ferramenta geral
-capaz de invadir ou modificar sites reais.
+Limites: cinco requisições, resposta64KiB, manifesto4KiB, loopback literal,
+porta alta, sem redirecionamento/proxy/DNS. A API audit permanece harness
+de baixo nível; a CLI principal usa CORE. Não opera sites reais e não é
+motor geral de exploração. Desenvolvimento/testes somente no GitHub.

@@ -5,7 +5,7 @@ import json
 import time
 from urllib.parse import urlsplit
 
-def audit(url):
+def audit(url, *, check=None):
     target=urlsplit(url)
     if (target.scheme!='http' or target.hostname!='127.0.0.1' or target.username
         or target.password or target.path not in ('','/') or target.query or target.fragment
@@ -15,6 +15,8 @@ def audit(url):
     requests=0
     def request(method,payload=None):
         nonlocal requests
+        if check is not None:
+            check()
         requests+=1
         if requests>5 or time.monotonic()>=deadline:
             raise RuntimeError('Laboratory request/time budget exhausted')
@@ -60,3 +62,40 @@ def main():
 
 if __name__=='__main__':
     main()
+
+def run_lab(core,case,manifest):
+    import hashlib
+    from cyber_core.errors import CoreError
+    from cyber_core.memory import audit as record
+    from cyber_core.operations import save_operation
+    def authorized():
+        row=core.authorize(case)
+        if row['paused']:
+            raise CoreError('Investigation is paused')
+        return core.authorize(case,manifest)
+    source=authorized()
+    def read():
+        with source.open('rb') as stream:
+            data=stream.read(4097)
+        if len(data)>4096:
+            raise CoreError('Manifest limit exceeded')
+        return data
+    raw=read()
+    grant=json.loads(raw)
+    if not isinstance(grant,dict) or set(grant)!={'origin','allow_write'} or grant['allow_write'] is not True or not isinstance(grant['origin'],str):
+        raise CoreError('Explicit synthetic laboratory write grant required')
+    digest=hashlib.sha256(raw).hexdigest()
+    def check():
+        authorized()
+        if hashlib.sha256(read()).hexdigest()!=digest:
+            raise CoreError('Laboratory grant changed')
+    with core.db:
+        record(core.db,case,'web_lab_started',{'manifest_sha256':digest,'origin':grant['origin']})
+    try:
+        result=audit(grant['origin'],check=check)
+        check()
+        return save_operation(core,case,'web_lab',{'manifest_sha256':digest,'origin':grant['origin'],'analysis':result})
+    except Exception:
+        with core.db:
+            record(core.db,case,'web_lab_interrupted',{'manifest_sha256':digest,'cleanup_required':'possible; verify disposable fixture state'})
+        raise
