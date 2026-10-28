@@ -22,7 +22,27 @@ class WebLabTests(unittest.TestCase):
         server=ThreadingHTTPServer(('127.0.0.1',0),Handler)
         thread=threading.Thread(target=server.serve_forever,daemon=True);thread.start()
         try:
-            result=audit('http://127.0.0.1:%d'%server.server_port)
+            import tempfile
+            from pathlib import Path
+            from cyber_core.service import Core
+            module=importlib.import_module('cyber_core.web_lab')
+            self.assertTrue(callable(getattr(module,'run_lab',None)),'CORE laboratory operation missing')
+            with tempfile.TemporaryDirectory() as folder:
+                manifest=Path(folder)/'lab.json'
+                manifest.write_text(json.dumps({'origin':'http://127.0.0.1:%d'%server.server_port,'allow_write':True}))
+                core=Core(Path(folder)/'store')
+                try:
+                    case=core.investigate('lab','Synthetic web',folder,'owner','Synthetic laboratory')
+                    operation=module.run_lab(core,case,manifest)
+                    result=operation['analysis']
+                    self.assertTrue(core.verify_audit(case))
+                    self.assertIn('web_lab',core.report(case).read_text())
+                    core.pause(case)
+                    from cyber_core.errors import CoreError
+                    with self.assertRaises(CoreError):
+                        module.run_lab(core,case,manifest)
+                finally:
+                    core.close()
             self.assertTrue(result['unauthenticated_write_observed'])
             self.assertTrue(result['restored'])
             self.assertEqual(Handler.title,'original')
