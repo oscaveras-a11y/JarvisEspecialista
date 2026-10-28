@@ -105,6 +105,20 @@ class QtResourceTests(unittest.TestCase):
             self.assertEqual(record['size_bytes'],240)
             self.assertEqual(record['compression'],'zlib' if compressed else 'none')
 
+    def test_unsupported_compression_still_obeys_stored_byte_budget(self):
+        data=rcc_fixture(b'opaque-stored-payload')
+        struct.pack_into('>I',data,20,4)
+        tree=struct.unpack_from('>I',data,8)[0]
+        struct.pack_into('>H',data,tree+2*22+4,4)
+        with self.assertRaises(CoreError):
+            self.api().inspect_rcc(data,max_decoded_bytes=1)
+
+    def test_compressed_node_must_match_declared_header_features(self):
+        data=rcc_fixture(b'lab-resource',True)
+        struct.pack_into('>I',data,20,0)
+        with self.assertRaises(CoreError):
+            self.api().inspect_rcc(data)
+
     def test_rcc_truncation_cycles_invalid_offsets_and_expansion_limit(self):
         valid=rcc_fixture()
         cases=[valid[:-1]]
