@@ -1,5 +1,13 @@
 """Argument wiring for durable recovery, key metadata, inventories and agent jobs."""
 def configure(sub):
+    timeline=sub.add_parser('firmware-timeline',help='Correlate offline firmware records without a fraud verdict')
+    timeline.add_argument('case')
+    timeline.add_argument('path')
+    timeline.add_argument('--max-input-bytes',type=int,default=16777216)
+    timeline.add_argument('--max-events',type=int,default=10000)
+    timeline.add_argument('--max-findings',type=int,default=128)
+    timeline.add_argument('--max-line-bytes',type=int,default=16384)
+    timeline.add_argument('--max-seconds',type=float,default=30)
     lab=sub.add_parser('web-lab',help='Run scoped synthetic HTTP laboratory')
     lab.add_argument('case')
     lab.add_argument('manifest')
@@ -98,9 +106,14 @@ def configure(sub):
             parser.add_argument("--reason",required=True)
             parser.add_argument("--priority",action="store_true")
 
-COMMANDS = ("web-lab","symbols","functions","installer","external-analyze","external-tools","recovery-formats","keys","inventory-disk","inventory-pcap","agent-jobs","recovery-session")
+COMMANDS = ("firmware-timeline","web-lab","symbols","functions","installer","external-analyze","external-tools","recovery-formats","keys","inventory-disk","inventory-pcap","agent-jobs","recovery-session")
 
 def execute(core,args):
+    if args.command=="firmware-timeline":
+        from cyber_core.forensics.firmware_timeline import run_timeline
+        return run_timeline(core,args.case,args.path,max_bytes=args.max_input_bytes,max_events=args.max_events,
+                            max_findings=args.max_findings,max_line_bytes=args.max_line_bytes,
+                            max_seconds=min(args.max_seconds,core.timeout))
     if args.command=='web-lab':
         from cyber_core.web_lab import run_lab
         return run_lab(core,args.case,args.manifest)
