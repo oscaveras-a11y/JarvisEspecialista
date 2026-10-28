@@ -36,7 +36,7 @@ def _constant(value):
 
 def _event(raw, line):
     try:
-        e = json.loads(raw, object_pairs_hook=_pairs, parse_constant=_constant)
+        e = json.loads(raw.decode('utf-8'), object_pairs_hook=_pairs, parse_constant=_constant)
         if not isinstance(e, dict) or not REQUIRED <= e.keys() or e.keys() - REQUIRED - OPTIONAL:
             raise ValueError('Invalid event schema')
         for key in REQUIRED | ({'actor'} if 'actor' in e else set()):
@@ -205,6 +205,7 @@ def run_timeline(core, case, path, **budgets):
         _limits(**budgets)
     except (ValueError, TypeError):
         raise CoreError('Invalid firmware timeline parameters') from None
+    budgets = {**budgets, 'max_seconds': min(budgets.get('max_seconds', 30), core.timeout)}
     maximum = budgets.get('max_bytes', 16777216)
     raw, evidence = _acquire(core, case, path, maximum)
     def check():
