@@ -9,6 +9,7 @@ import ssl
 import subprocess
 import tempfile
 import threading
+import time
 import unittest
 from contextlib import redirect_stdout
 from datetime import datetime, timedelta, timezone
@@ -139,6 +140,15 @@ class WebProbeTests(unittest.TestCase):
                     self.assertEqual(mismatch['analysis']['responses'][0]['error'],'tls_validation_failed')
                     slow_grant=json.dumps(grant(f'https://{HOST}:{server.server_port}',['/slow']))
                     manifest.write_text(slow_grant)
+                    Handler.slow_started.clear();Handler.slow_release.clear()
+                    began=time.monotonic()
+                    try:
+                        with self.assertRaises(CoreError):
+                            run_probe(core,case,str(manifest),ca_file=str(cert),seconds=1.5)
+                        self.assertTrue(Handler.slow_started.is_set())
+                        self.assertLess(time.monotonic()-began,4)
+                    finally:Handler.slow_release.set()
+                    Handler.slow_started.clear();Handler.slow_release.clear()
                     def change_manifest():
                         if Handler.slow_started.wait(5):
                             manifest.write_text('{}')

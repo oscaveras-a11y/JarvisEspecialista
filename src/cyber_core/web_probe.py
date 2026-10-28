@@ -50,7 +50,7 @@ def _origin(value):
             raise ValueError('Invalid ASCII hostname')
     else:
         public_address(host)
-    port = target.port or 443
+    port = 443 if target.port is None else target.port
     if port != 443 and not 1024 <= port <= 65535:
         raise ValueError('Invalid HTTPS port')
     authority = ('['+host+']') if ':' in host else host
@@ -183,24 +183,34 @@ def probe(grant, *, body_bytes=65536, seconds=30, ca_pem=None):
             digest = hashlib.sha256()
             read = 0
             complete = False
+            incomplete_reason = None
             while read < body_bytes:
                 if time.monotonic() >= deadline:
                     raise TimeoutError()
                 chunk = response.read1(min(8192,body_bytes-read))
                 if not chunk:
-                    complete = True
+                    if response.length not in (None,0):
+                        incomplete_reason = 'premature_eof'
+                    else:
+                        complete = True
                     break
                 digest.update(chunk)
                 read += len(chunk)
-            if not complete:
+            if not complete and incomplete_reason is None:
                 if time.monotonic() >= deadline:
                     raise TimeoutError()
-                complete = not response.read1(1)  # At most one extra byte, never hashed.
+                extra = response.read1(1)  # At most one extra byte, never hashed.
+                if extra:
+                    incomplete_reason = 'body_byte_limit'
+                elif response.length not in (None,0):
+                    incomplete_reason = 'premature_eof'
+                else:
+                    complete = True
             responses.append({'path':path,'status':response.status,'peer_ip':address,
                               'resolved_public_addresses':addresses,'tls':tls,
                               'security_headers':{name:name in names for name in SECURITY_HEADERS},
                               'body_sha256':digest.hexdigest(),'body_bytes_hashed':read,
-                              'body_complete':complete,
+                              'body_complete':complete,'incomplete_reason':incomplete_reason,
                               'hash_scope':'complete_response_body' if complete else 'response_body_prefix',
                               'redirect_followed':False})
         except ssl.SSLCertVerificationError:
