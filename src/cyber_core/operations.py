@@ -16,13 +16,17 @@ def ensure(core):
     core.db.execute(SCHEMA)
     core.db.commit()
 
-def save_operation(core,case,kind,data,*,recovery=False):
+def save_operation(core,case,kind,data,*,recovery=False,commit_guard=None):
+    if commit_guard is not None and not callable(commit_guard):
+        raise CoreError('Invalid operation commit guard')
     ensure(core)
     with core.db:
         core.db.execute("BEGIN IMMEDIATE")
         row = core.authorize(case,recovery=recovery)
         if row["paused"]:
             raise CoreError("Investigation is paused")
+        if commit_guard is not None:
+            commit_guard()
         identifier = uuid4().hex
         core.db.execute("INSERT INTO operation_results VALUES(?,?,?,?,?)",
                         (identifier,case,kind,encoded(data),utc()))

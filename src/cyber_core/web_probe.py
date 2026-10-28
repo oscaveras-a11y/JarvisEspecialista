@@ -301,7 +301,8 @@ def run_probe(core,case,manifest,*,ca_file=None,body_bytes=65536,seconds=30,rece
         stopped()
         return save_operation(core,case,'web_probe',{'evidence':evidence,'ca_evidence':ca_evidence,
                               'parameters':options,'analysis':result,
-                              **({'campaign_receipt':receipt} if receipt is not None else {})})
+                              **({'campaign_receipt':receipt} if receipt is not None else {})},
+                              commit_guard=control_check)
     except BaseException:
         with core.db:
             audit(core.db,case,'web_probe_interrupted',{'manifest_sha256':evidence['sha256'],
