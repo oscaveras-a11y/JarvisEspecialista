@@ -150,7 +150,10 @@ class WebProbeTests(unittest.TestCase):
                     original_manifest=manifest.read_bytes()
                     manifest.write_text(json.dumps(grant(f'https://{HOST}:{server.server_port}',['/inventory','/save','/inventory-latin1','/inventory-gzip'])))
                     before_inventory=len(Handler.paths)
-                    discovered=run_probe(core,case,str(manifest),ca_file=str(cert),inventory=True,seconds=10)
+                    with redirect_stdout(io.StringIO()) as inventory_output:
+                        self.assertEqual(main(['--home',str(home),'web-probe',case,str(manifest),
+                                               '--ca-file',str(cert),'--inventory','--seconds','10']),0)
+                    discovered=json.loads(inventory_output.getvalue())
                     self.assertEqual(discovered['kind'],'web_inventory')
                     inv=discovered['analysis']['responses'][0]['inventory']
                     self.assertEqual(inv['forms'][0]['method'],'POST')
