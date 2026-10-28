@@ -15,7 +15,7 @@ import tempfile
 import time
 from urllib.parse import urlsplit
 
-VERSION = 'https-probe-1'
+VERSION = 'https-probe-2'
 SECURITY_HEADERS = ('strict-transport-security', 'content-security-policy',
                     'x-content-type-options', 'x-frame-options', 'referrer-policy',
                     'permissions-policy')
@@ -144,8 +144,12 @@ class _PinnedHTTPS(http.client.HTTPSConnection):
             raise
 
 
-def probe(grant, *, body_bytes=65536, seconds=30, ca_pem=None):
+def probe(grant, *, body_bytes=65536, seconds=30, ca_pem=None, inventory=False):
     options = validate_options(body_bytes=body_bytes,seconds=seconds)
+    if type(inventory) is not bool:
+        raise ValueError('Invalid inventory mode')
+    if inventory:
+        options['inventory']=True
     grant = validate_grant(grant)
     origin,host,port = _origin(grant['origin'])
     context = ssl.create_default_context()
@@ -180,6 +184,21 @@ def probe(grant, *, body_bytes=65536, seconds=30, ca_pem=None):
             if sum(len(k)+len(v)+4 for k,v in headers) > 65536:
                 raise ValueError('Header byte budget exceeded')
             names = {key.lower() for key,_ in headers}
+            collector=None
+            inventory_result=None
+            if inventory:
+                content_type=response.headers.get_content_type()
+                charset=response.headers.get_content_charset()
+                encoding=response.headers.get('Content-Encoding','identity').strip().lower()
+                if content_type!='text/html':
+                    inventory_result={'status':'not_html'}
+                elif encoding not in ('','identity'):
+                    inventory_result={'status':'unsupported','reason':'encoded_body'}
+                elif charset not in (None,'utf-8','us-ascii'):
+                    inventory_result={'status':'unsupported','reason':'unsupported_charset'}
+                else:
+                    from cyber_core.web_inventory import Inventory
+                    collector=Inventory(origin,path,grant['paths'],max_bytes=body_bytes)
             digest = hashlib.sha256()
             read = 0
             complete = False
@@ -195,6 +214,8 @@ def probe(grant, *, body_bytes=65536, seconds=30, ca_pem=None):
                         complete = True
                     break
                 digest.update(chunk)
+                if collector is not None:
+                    collector.feed(chunk)
                 read += len(chunk)
             if not complete and incomplete_reason is None:
                 if time.monotonic() >= deadline:
@@ -206,13 +227,16 @@ def probe(grant, *, body_bytes=65536, seconds=30, ca_pem=None):
                     incomplete_reason = 'premature_eof'
                 else:
                     complete = True
+            if collector is not None:
+                inventory_result=collector.finish(body_complete=complete)
             responses.append({'path':path,'status':response.status,'peer_ip':address,
                               'resolved_public_addresses':addresses,'tls':tls,
                               'security_headers':{name:name in names for name in SECURITY_HEADERS},
                               'body_sha256':digest.hexdigest(),'body_bytes_hashed':read,
                               'body_complete':complete,'incomplete_reason':incomplete_reason,
                               'hash_scope':'complete_response_body' if complete else 'response_body_prefix',
-                              'redirect_followed':False})
+                              'redirect_followed':False,
+                              **({'inventory':inventory_result} if inventory else {})})
         except ssl.SSLCertVerificationError:
             responses.append({'path':path,'error':'tls_validation_failed'})
         except (socket.timeout,TimeoutError):
@@ -226,6 +250,7 @@ def probe(grant, *, body_bytes=65536, seconds=30, ca_pem=None):
                 connection.close()
     partial = (len(responses) != len(grant['paths'])
                or any('error' in r or not r.get('body_complete',False) or 300 <= r.get('status',0) < 400
+                      or r.get('inventory',{}).get('status') in ('partial','unsupported')
                       for r in responses))
     return {'version':VERSION,'origin':origin,'parameters':options,'status':'partial' if partial else 'completed',
             'responses':responses,'paths_not_attempted':len(grant['paths'])-len(responses),
@@ -236,7 +261,7 @@ def probe(grant, *, body_bytes=65536, seconds=30, ca_pem=None):
                            'Absent findings do not establish site security; no firmware or electoral evidence is collected']}
 
 
-def run_probe(core,case,manifest,*,ca_file=None,body_bytes=65536,seconds=30,receipt=None,control_check=None):
+def run_probe(core,case,manifest,*,ca_file=None,body_bytes=65536,seconds=30,receipt=None,control_check=None,inventory=False):
     from cyber_core.agents.runner import run_bounded
     from cyber_core.errors import CoreError
     from cyber_core.memory import audit
@@ -249,6 +274,10 @@ def run_probe(core,case,manifest,*,ca_file=None,body_bytes=65536,seconds=30,rece
         options = validate_options(body_bytes=body_bytes,seconds=seconds)
     except ValueError:
         raise CoreError('Invalid HTTPS probe budgets') from None
+    if type(inventory) is not bool:
+        raise CoreError('Invalid inventory mode')
+    if inventory:
+        options['inventory']=True
     options['seconds'] = min(options['seconds'],core.timeout)
     raw,evidence = _acquire(core,case,manifest,8192)
     try:
@@ -299,7 +328,7 @@ def run_probe(core,case,manifest,*,ca_file=None,body_bytes=65536,seconds=30,rece
                 or not isinstance(result.get('responses'),list) or len(result['responses']) > len(grant['paths'])):
             raise CoreError('Invalid HTTPS worker result')
         stopped()
-        return save_operation(core,case,'web_probe',{'evidence':evidence,'ca_evidence':ca_evidence,
+        return save_operation(core,case,'web_inventory' if inventory else 'web_probe',{'evidence':evidence,'ca_evidence':ca_evidence,
                               'parameters':options,'analysis':result,
                               **({'campaign_receipt':receipt} if receipt is not None else {})},
                               commit_guard=control_check)

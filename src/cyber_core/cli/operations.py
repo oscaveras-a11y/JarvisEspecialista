@@ -15,6 +15,7 @@ def configure(sub):
     web.add_argument('--ca-file',help='Optional scoped public CA certificate; TLS verification remains mandatory')
     web.add_argument('--body-bytes',type=int,default=65536)
     web.add_argument('--seconds',type=float,default=30)
+    web.add_argument('--inventory',action='store_true',help='Inventory bounded static HTML without submitting forms')
     timeline=sub.add_parser('firmware-timeline',help='Correlate offline firmware records without a fraud verdict')
     timeline.add_argument('case')
     timeline.add_argument('path')
@@ -134,7 +135,7 @@ def execute(core,args):
     if args.command=="web-probe":
         from cyber_core.web_probe import run_probe
         return run_probe(core,args.case,args.manifest,ca_file=args.ca_file,
-                         body_bytes=args.body_bytes,seconds=args.seconds)
+                         body_bytes=args.body_bytes,seconds=args.seconds,inventory=args.inventory)
     if args.command=="firmware-timeline":
         from cyber_core.forensics.firmware_timeline import run_timeline
         return run_timeline(core,args.case,args.path,max_bytes=args.max_input_bytes,max_events=args.max_events,
