@@ -160,7 +160,8 @@ class WebProbeTests(unittest.TestCase):
                     self.assertEqual(len(Handler.paths),received,'completed HTTPS step must not repeat')
                     self.assertEqual(resumed['stages'][0]['state'],'completed')
                     self.assertEqual(resumed['stages'][0]['coverage'],'exercised')
-                    self.assertIsNone(resumed['stages'][0].get('reason'))
+                    with self.subTest('recovered stage clears stale interruption reason'):
+                        self.assertIsNone(resumed['stages'][0].get('reason'))
                     self.assertEqual(resumed['stages'][1]['coverage'],'unsupported_automation')
                     self.assertEqual(resumed['state'],'partial')
                     self.assertTrue(core.verify_audit(case))
@@ -186,14 +187,16 @@ class WebProbeTests(unittest.TestCase):
                         with self.assertRaises(CoreError):
                             campaigns.work(core,case,raced['campaign_id'])
                     self.assertEqual(len(replaced),1)
-                    self.assertFalse(any(r.get('campaign_receipt')==replaced[0]
-                                         for r in saved_operations(core,case)))
+                    with self.subTest('replaced worker cannot publish late result'):
+                        self.assertFalse(any(r.get('campaign_receipt')==replaced[0]
+                                             for r in saved_operations(core,case)))
                     # Deletion of an audited receipt must block inspection/execution.
                     receipt_id=resumed['stages'][0]['operation_id']
                     receipt_row=core.db.execute('SELECT * FROM operation_results WHERE id=?',(receipt_id,)).fetchone()
                     core.db.execute('DELETE FROM operation_results WHERE id=?',(receipt_id,));core.db.commit()
                     try:
-                        with self.assertRaises(CoreError):campaigns.show(core,case,campaign['campaign_id'])
+                        with self.subTest('missing audited receipt is rejected'):
+                            with self.assertRaises(CoreError):campaigns.show(core,case,campaign['campaign_id'])
                     finally:
                         core.db.execute('INSERT INTO operation_results VALUES(?,?,?,?,?)',tuple(receipt_row))
                         core.db.commit()
