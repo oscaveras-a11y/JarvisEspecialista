@@ -3,6 +3,8 @@ import hashlib
 import importlib
 import struct
 import unittest
+import sys
+import subprocess
 import zlib
 from cyber_core.errors import CoreError
 
@@ -132,6 +134,27 @@ class QtResourceTests(unittest.TestCase):
             self.api().inspect_rcc(rcc_fixture(b'x'*4096,True),max_resource_bytes=1024)
         bad=rcc_fixture();struct.pack_into('>I',bad,4,99)
         self.assertEqual(self.api().inspect_rcc(bad)['status'],'unsupported_version')
+
+
+class QtOutputBudgetTests(unittest.TestCase):
+    @unittest.skipUnless(sys.platform=='linux','Linux address-space containment fixture')
+    def test_repeated_unicode_bindings_fit_a_limited_encoder_process(self):
+        source = """import json, resource
+resource.setrlimit(resource.RLIMIT_AS,(268435456,268435456))
+from cyber_core.reverse_engineering.qt_operation import _encode
+large='界'*4096
+unit={'objects':[{'bindings':[{'property':'x','value':large} for _ in range(10000)]}]}
+result={'status':'partial','rcc':[],'qml_units':[unit],'candidates':[]}
+encoded=_encode(result,output_bytes=16384)
+bounded=json.loads(encoded)
+assert len(encoded.encode('utf-8'))+1<=16384
+assert bounded['output_truncated'] and bounded['output_qml_units_omitted']==1
+assert bounded['qml_units']==[] and bounded['status']=='partial'
+print('Streaming byte budget verified under 256 MiB address space')
+"""
+        completed=subprocess.run([sys.executable,'-c',source],capture_output=True,text=True,timeout=20)
+        self.assertEqual(completed.returncode,0,completed.stderr[-1000:])
+        self.assertIn('byte budget verified',completed.stdout)
 
 if __name__=='__main__':
     unittest.main()
