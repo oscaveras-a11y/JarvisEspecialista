@@ -14,7 +14,9 @@ def main():
         source.write_text('volatile int fixture_value = 37;\n'
                           '__attribute__((noinline)) int fixture_helper(int x){return x+5;}\n'
                           '__attribute__((noinline)) int fixture_target(void){return fixture_helper(fixture_value);}\n'
-                          '__attribute__((noinline)) int fixture_other(void){return 99;}\n')
+                          '__attribute__((noinline)) int fixture_other(void){\n' +
+                          ''.join('fixture_value += %d;\n' % i for i in range(1,41)) +
+                          'return fixture_value;}\n')
         binary = root / 'fixture.elf'
         subprocess.run(['gcc','-g','-O0','-fno-pie','-no-pie','-nostdlib',
                         '-Wl,-e,fixture_target','-o',str(binary),str(source)],check=True,timeout=30)
@@ -37,6 +39,20 @@ def main():
             second = analyze_functions(core,case,binary,addresses=[address],ranges=[[address,address+1]],**options)
             assert len(second['analysis']['functions']) == 1
             assert second['analysis']['functions'][0]['name'] == 'fixture_target'
+            third = analyze_functions(core,case,binary,
+                                      names=['fixture_helper','fixture_other','absent_function'],
+                                      pseudocode_chars=256,**options)['analysis']
+            assert third['status'] == 'partial', third
+            assert third['name_matches']['absent_function'] == 0, third
+            by_name = {f['name']:f for f in third['functions']}
+            assert any(r['call'] and r['direction']=='incoming'
+                       for r in by_name['fixture_helper']['references']), third
+            assert by_name['fixture_other']['pseudocode_truncated'], third
+            assert len(by_name['fixture_other']['pseudocode']) == 256, third
+            capped = analyze_functions(core,case,binary,ranges=[[0,2**64-1]],
+                                       max_functions=1,**options)['analysis']
+            assert capped['status'] == 'partial' and capped['functions_truncated'], capped
+            assert len(capped['functions']) == 1 and capped['matched_functions'] > 1, capped
             assert core.verify_audit(case)
             assert 'selected_functions' in core.report(case).read_text()
             assert hashlib.sha256(binary.read_bytes()).hexdigest() == before
