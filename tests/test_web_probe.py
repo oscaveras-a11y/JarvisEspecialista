@@ -160,10 +160,43 @@ class WebProbeTests(unittest.TestCase):
                     self.assertEqual(len(Handler.paths),received,'completed HTTPS step must not repeat')
                     self.assertEqual(resumed['stages'][0]['state'],'completed')
                     self.assertEqual(resumed['stages'][0]['coverage'],'exercised')
+                    self.assertIsNone(resumed['stages'][0].get('reason'))
                     self.assertEqual(resumed['stages'][1]['coverage'],'unsupported_automation')
                     self.assertEqual(resumed['state'],'partial')
                     self.assertTrue(core.verify_audit(case))
                     self.assertIn('pentest_campaign',core.report(case).read_text())
+                    # Deterministic interleaving: a second writer replaces ownership
+                    # after the adapter's preflight but before its result transaction.
+                    from unittest.mock import patch
+                    from cyber_core import operations as operation_store
+                    raced=campaigns.create(core,case,str(campaign_file))
+                    original_save=operation_store.save_operation
+                    replaced=[]
+                    def replace_before_commit(target,case_id,kind,data,**kwargs):
+                        if kind=='web_probe' and data.get('campaign_receipt'):
+                            other=Core(target.home)
+                            try:
+                                owner=campaigns.show(other,case_id,raced['campaign_id'])
+                                campaigns._update(other,case_id,owner,0,
+                                    {'token':'b'*32,'receipt':'c'*32},'stage_started')
+                                replaced.append(data['campaign_receipt'])
+                            finally:other.close()
+                        return original_save(target,case_id,kind,data,**kwargs)
+                    with patch.object(operation_store,'save_operation',side_effect=replace_before_commit):
+                        with self.assertRaises(CoreError):
+                            campaigns.work(core,case,raced['campaign_id'])
+                    self.assertEqual(len(replaced),1)
+                    self.assertFalse(any(r.get('campaign_receipt')==replaced[0]
+                                         for r in saved_operations(core,case)))
+                    # Deletion of an audited receipt must block inspection/execution.
+                    receipt_id=resumed['stages'][0]['operation_id']
+                    receipt_row=core.db.execute('SELECT * FROM operation_results WHERE id=?',(receipt_id,)).fetchone()
+                    core.db.execute('DELETE FROM operation_results WHERE id=?',(receipt_id,));core.db.commit()
+                    try:
+                        with self.assertRaises(CoreError):campaigns.show(core,case,campaign['campaign_id'])
+                    finally:
+                        core.db.execute('INSERT INTO operation_results VALUES(?,?,?,?,?)',tuple(receipt_row))
+                        core.db.commit()
                     # A trusted CA must not bypass hostname validation.
                     manifest.write_text(json.dumps(grant(f'https://{ADDRESS}:{server.server_port}')))
                     mismatch=run_probe(core,case,str(manifest),ca_file=str(cert),seconds=10)
