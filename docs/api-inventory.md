@@ -72,10 +72,10 @@ Não há geração de payload, execução de POST/PUT/DELETE, teste de login,
 autorização entre contas, descoberta de BOLA/IDOR, ZAP/Semgrep ou análise SCA.
 GET elegível não significa ausência de efeitos colaterais.
 
-Revisão registrou uma limitação menor: urlsplit normaliza TAB/CR/LF em uma URL de
-servidor antes do filtro; um servidor malformado pode receber mapeamento válido.
-Não provoca requests nem amplia os caminhos da autorização. Endurecimento adicional
-dessa validação ficou pendente para revisão explícita.
+URLs de servidor com controles ASCII C0, espaço ou DEL são rejeitadas no texto
+original, antes de urlsplit. Não são corrigidas silenciosamente: a operação fica
+sem mapeamento e sem elegibilidade GET, com flag unsupported_server_url e resultado
+partial. A validação respeita a precedência operação > path item > documento.
 
 ## Verificação
 
