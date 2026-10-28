@@ -101,7 +101,7 @@ def _main(argv=None):
             if cmd in ('hypothesis', 'experiment', 'research', 'verify', 'history'):
                 from cyber_core.cli.science import execute
                 result = execute(core, args)
-            elif cmd in ('web-probe', 'firmware-timeline', 'web-lab', 'symbols', 'functions', 'installer', 'keys', 'inventory-disk', 'inventory-pcap', 'agent-jobs', 'recovery-session', 'recovery-formats', 'external-analyze', 'external-tools'):
+            elif cmd in ('pentest', 'web-probe', 'firmware-timeline', 'web-lab', 'symbols', 'functions', 'installer', 'keys', 'inventory-disk', 'inventory-pcap', 'agent-jobs', 'recovery-session', 'recovery-formats', 'external-analyze', 'external-tools'):
                 from cyber_core.cli.operations import execute
                 result = execute(core, args)
             elif cmd == 'init':
