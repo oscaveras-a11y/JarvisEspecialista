@@ -23,10 +23,18 @@ def _executable(value):
     if not isinstance(value, (str, os.PathLike)) or not value:
         raise AgentResourceError('unavailable')
     candidate = Path(value)
-    if (not candidate.is_absolute() or not candidate.is_file()
-            or candidate.suffix.lower() in ('.cmd', '.bat', '.ps1', '.sh')):
+    if not candidate.is_absolute():
         raise AgentResourceError('unavailable')
-    return str(candidate.resolve())
+    # Resolve only the parent directory, not the final component: candidate
+    # may itself be a symlink (classically sys.executable in a venv, whose
+    # bin/python3 points at a base interpreter with different, or missing,
+    # site-packages). Fully resolving it can silently swap in a different
+    # interpreter/installation that cannot import this very package. Same
+    # reasoning already applied to external_tool_runtime.executable().
+    resolved = candidate.parent.resolve() / candidate.name
+    if not resolved.is_file() or resolved.suffix.lower() in ('.cmd', '.bat', '.ps1', '.sh'):
+        raise AgentResourceError('unavailable')
+    return str(resolved)
 
 def _environment(agent=None):
     runtime = {'SYSTEMROOT', 'WINDIR', 'TEMP', 'TMP', 'TMPDIR', 'LANG', 'LC_ALL',

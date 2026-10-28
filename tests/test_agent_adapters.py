@@ -74,6 +74,19 @@ class AdapterContracts(unittest.TestCase):
     def test_nonfinite_timeout_is_rejected(self):
         with self.assertRaises(CoreError):
             runner.run_bounded([sys.executable], '', cwd=self.root, timeout=float('nan'))
+    @unittest.skipUnless(sys.platform != 'win32', 'Symlinks require elevated rights on Windows')
+    def test_executable_preserves_a_symlinked_interpreter_instead_of_resolving_it(self):
+        # A venv's bin/python3 is commonly a symlink to a base interpreter
+        # with different (or no) site-packages. Resolving it away from the
+        # symlink would silently run the wrong interpreter identity, as a
+        # real regression here once made every run_bounded() call whose
+        # command[0] was sys.executable inside a venv fail to import this
+        # very package (ModuleNotFoundError) the moment that package was
+        # only installed in the venv, not in the base interpreter.
+        link = self.root / 'python-link'
+        link.symlink_to(sys.executable)
+        self.assertEqual(runner._executable(str(link)), str(link))
+        self.assertNotEqual(runner._executable(str(link)), str(link.resolve()))
 
 if __name__ == '__main__':
     unittest.main()
