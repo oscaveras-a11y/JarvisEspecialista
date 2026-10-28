@@ -122,3 +122,35 @@ class ApiInventoryTests(unittest.TestCase):
                 core.pause(case)
                 with self.assertRaises(CoreError):m.run_inventory(core,case,str(description),str(permission))
             finally:core.close()
+
+    def test_server_controls_are_rejected_before_url_normalization(self):
+        # urlsplit otherwise strips leading C0/space and embedded TAB/CR/LF.
+        invalid=[]
+        for c in [chr(n) for n in range(33)]+[chr(127)]:
+            invalid.extend([c+'https://example.com/',
+                            'https://exa'+c+'mple.com/',
+                            'https://example.com/'+c,
+                            '/'+c])
+        for url in invalid:
+            with self.subTest(url=repr(url)):
+                d=spec();d['servers']=[{'url':url}]
+                r=self.analyze(d)
+                self.assertEqual(r['status'],'partial')
+                self.assertIn('unsupported_server_url',r['quality_flags'])
+                self.assertTrue(all(v['scope']=='server_not_mapped' for v in r['operations']))
+                self.assertTrue(all(v['mapped_path'] is None for v in r['operations']))
+                self.assertTrue(all(not v['read_probe_eligible'] for v in r['operations']))
+
+    def test_valid_server_mapping_preserves_precedence(self):
+        for url in ('/','https://example.com/','https://example.com:443/'):
+            with self.subTest(url=url):
+                d=spec();d['servers']=[{'url':url}]
+                r=self.analyze(d)
+                self.assertEqual(r['status'],'completed')
+                self.assertTrue(r['operations'][0]['read_probe_eligible'])
+        d=spec();d['servers']=[{'url':'https://example.com/\n'}]
+        d['paths']['/items']['servers']=[{'url':'/'}]
+        d['paths']['/items']['get']['servers']=[{'url':'/\t'}]
+        rows={(v['path'],v['method']):v for v in self.analyze(d)['operations']}
+        self.assertFalse(rows['/items','GET']['read_probe_eligible'])
+        self.assertTrue(rows['/items','POST']['scope']=='exact_granted_path')
