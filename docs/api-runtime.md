@@ -47,10 +47,13 @@ compressão, UTF-8, com schema explícito. Campos de schema suportados:
 - objetos: properties, required, additionalProperties booleano;
 - arrays: items, minItems, maxItems;
 - strings: minLength, maxLength;
-- números: minimum, maximum;
+- números: minimum, maximum com limites inteiros;
 - title/description como anotações ignoradas.
 
 Inteiros aceitam número JSON integral como 1.0; booleano não é número.
+Números decimais de resposta são comparados de forma exata após preflight limitado;
+limites minimum/maximum não inteiros são explicitamente não suportados.
+Expoentes/inteiros além da representação suportada pelo preflight geram alerta.
 Sem schema de corpo, registra apenas que o status está declarado.
 Palavras-chave desconhecidas, refs de resposta/schema, composição, enum,
 format, pattern, nullable, tipos em lista, headers de contrato, outros tipos
@@ -116,4 +119,6 @@ Windows; testes puros e regressão completa executam nas duas plataformas.
 A regressão HTTPS sintética anterior executa no Linux.
 
 RED: [40903266960](https://github.com/oscaveras-a11y/JarvisEspecialista/actions/runs/40903266960),
-seis falhas Linux por adapter ainda ausente. Evidência GREEN final no PR #34.
+seis falhas Linux por adapter ainda ausente. Regressões adicionais RED: [40904238501](https://github.com/oscaveras-a11y/JarvisEspecialista/actions/runs/40904238501)
+e [40904774100](https://github.com/oscaveras-a11y/JarvisEspecialista/actions/runs/40904774100).
+Evidência GREEN final, contagens, skips e revisão no [PR #34](https://github.com/oscaveras-a11y/JarvisEspecialista/pull/34).
