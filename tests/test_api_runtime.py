@@ -89,6 +89,21 @@ class ApiRuntimeTests(unittest.TestCase):
         self.assertEqual(r['level'],'confirmed_failure')
         self.assertIn('invalid_json',r['codes'])
 
+    def test_numeric_comparison_avoids_rounding_false_verdicts(self):
+        m=self.module();d=specification()
+        media=d['paths']['/items']['get']['responses']['200']['content']['application/json']
+        media['schema']={'type':'number','minimum':9007199254740993}
+        r=m.compare_response(d,'/items',200,{'content-type':'application/json'},b'9007199254740993.0',True)
+        self.assertEqual(r['level'],'observation')
+        media['schema']={'type':'integer'}
+        r=m.compare_response(d,'/items',200,{'content-type':'application/json'},b'1e-400',True)
+        self.assertEqual(r['level'],'confirmed_failure')
+        self.assertIn('schema_type',r['codes'])
+        media['schema']={'type':'number','minimum':0.1}
+        r=m.compare_response(d,'/items',200,{'content-type':'application/json'},b'0.1',True)
+        self.assertEqual(r['level'],'alert')
+        self.assertIn('unsupported_schema',r['codes'])
+
     def test_matrix_requires_explicit_synthetic_profiles_and_granted_paths(self):
         m=self.module()
         self.assertEqual(len(m.validate_matrix(json.dumps(matrix()).encode(),grant())['cases']),1)
