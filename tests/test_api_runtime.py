@@ -69,6 +69,18 @@ class ApiRuntimeTests(unittest.TestCase):
         self.assertIn('invalid_json',self.compare(b'{"count":NaN}')['codes'])
         self.assertIn('invalid_json',self.compare(b'{"count":1,"count":2}')['codes'])
 
+    def test_valid_json_beyond_analysis_limits_is_alert_not_contract_failure(self):
+        m=self.module();d=specification()
+        schema=d['paths']['/items']['get']['responses']['200']['content']['application/json']
+        schema['schema']={'type':'object'}
+        bodies=[b'{"x":'+b'['*32+b'0'+b']'*32+b'}',
+                b'{"x":['+b'0,'*50000+b'0]}',b'{"x":1e1000}']
+        for body in bodies:
+            with self.subTest(size=len(body)):
+                r=m.compare_response(d,'/items',200,{'content-type':'application/json'},body,True)
+                self.assertEqual(r['level'],'alert')
+                self.assertIn('body_analysis_limit',r['codes'])
+
     def test_matrix_requires_explicit_synthetic_profiles_and_granted_paths(self):
         m=self.module()
         self.assertEqual(len(m.validate_matrix(json.dumps(matrix()).encode(),grant())['cases']),1)
