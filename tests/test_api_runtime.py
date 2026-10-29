@@ -7,6 +7,7 @@ import ssl
 import subprocess
 import tempfile
 import threading
+import time
 import unittest
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -134,6 +135,9 @@ class ApiRuntimeTests(unittest.TestCase):
             class Handler(BaseHTTPRequestHandler):
                 seen=[]
                 broken=False
+                slow=False
+                slow_started=threading.Event()
+                release=threading.Event()
                 def log_message(self,*args):pass
                 def do_GET(self):
                     token=self.headers.get('Authorization','')
@@ -144,7 +148,11 @@ class ApiRuntimeTests(unittest.TestCase):
                     self.send_response(status);self.send_header('Content-Type','application/json')
                     self.send_header('Content-Length',str(len(payload)))
                     self.send_header('Set-Cookie','PRIVATE_SENTINEL')
-                    self.end_headers();self.wfile.write(payload)
+                    self.end_headers()
+                    if type(self).slow:
+                        type(self).slow_started.set();type(self).release.wait(4)
+                    try:self.wfile.write(payload)
+                    except OSError:pass
             server=ThreadingHTTPServer(('127.0.0.1',0),Handler)
             context=ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER);context.load_cert_chain(cert,key)
             server.socket=context.wrap_socket(server.socket,server_side=True)
@@ -196,6 +204,19 @@ class ApiRuntimeTests(unittest.TestCase):
                     resumed=campaigns.work(core,case,c2['campaign_id'])
                     self.assertEqual(resumed['stages'][0]['state'],'completed')
                     self.assertEqual(len(Handler.seen),n)
+                    # Supervisor interrupts a real blocking response; no late operation published.
+                    Handler.slow=True;Handler.slow_started.clear();Handler.release.clear()
+                    count_before=len(saved_operations(core,case));began=time.monotonic()
+                    def cancelled():
+                        if Handler.slow_started.is_set():raise CoreError('Synthetic cancellation')
+                    try:
+                        with self.assertRaises(CoreError):
+                            m.run_api(*args,ca_file=str(cert),seconds=15,control_check=cancelled)
+                        self.assertTrue(Handler.slow_started.is_set())
+                        self.assertLess(time.monotonic()-began,5)
+                        self.assertEqual(len(saved_operations(core,case)),count_before)
+                    finally:
+                        Handler.slow=False;Handler.release.set()
                     # Lifecycle guard executes inside save transaction, not only before it.
                     from cyber_core import operations
                     original=operations.save_operation

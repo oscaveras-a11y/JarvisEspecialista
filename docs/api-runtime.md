@@ -62,7 +62,7 @@ A evidência distingue:
 - `declaration`: segurança declarada pelo OpenAPI; nunca prova enforcement.
 - `observation`: comparação suportada satisfeita ou negação 401/403 observada.
 - `alert`: contrato não suportado, corpo incompleto, conexão/TLS falhou,
-  controle positivo falhou ou acesso ficou inconclusivo.
+  controle positivo falhou, limite de análise JSON foi excedido ou acesso ficou inconclusivo.
 - `confirmed_failure`: divergência concreta do contrato suportado, ou exposição
   do recurso sintético identificado a um perfil que a matriz explicitamente nega,
   com controle positivo funcionando no mesmo conjunto de respostas.
@@ -111,7 +111,7 @@ entrega. `full_pentest_completed` permanece falso, inclusive quando a matriz pas
 Workflow `Synthetic API runtime`: testes focados e suíte completa Linux/Windows.
 Integração TLS real no Linux, incluindo Core/SQLite/auditoria, matriz segura e
 vulnerável, redaction, CA não confiável, falha de checkpoint, reabertura/adoção,
-mutação e pausa no instante da publicação. A integração TLS nova é ignorada no
+mutação, cancelamento durante resposta TLS bloqueada e pausa no instante da publicação. A integração TLS nova é ignorada no
 Windows; testes puros e regressão completa executam nas duas plataformas.
 A regressão HTTPS sintética anterior executa no Linux.
 
