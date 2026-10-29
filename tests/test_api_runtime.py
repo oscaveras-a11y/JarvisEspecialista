@@ -74,12 +74,19 @@ class ApiRuntimeTests(unittest.TestCase):
         schema=d['paths']['/items']['get']['responses']['200']['content']['application/json']
         schema['schema']={'type':'object'}
         bodies=[b'{"x":'+b'['*32+b'0'+b']'*32+b'}',
-                b'{"x":['+b'0,'*50000+b'0]}',b'{"x":1e1000}']
+                b'{"x":['+b'0,'*50000+b'0]}',b'{"x":1e1000}',b'{"x":'+b'9'*5000+b'}']
         for body in bodies:
             with self.subTest(size=len(body)):
                 r=m.compare_response(d,'/items',200,{'content-type':'application/json'},body,True)
                 self.assertEqual(r['level'],'alert')
                 self.assertIn('body_analysis_limit',r['codes'])
+
+    def test_response_parser_rejects_trailing_member_injection(self):
+        m=self.module();d=specification()
+        d['paths']['/items']['get']['responses']['200']['content']['application/json']['schema']={'type':'integer'}
+        r=m.compare_response(d,'/items',200,{'content-type':'application/json'},b'1,"ignored":2',True)
+        self.assertEqual(r['level'],'confirmed_failure')
+        self.assertIn('invalid_json',r['codes'])
 
     def test_matrix_requires_explicit_synthetic_profiles_and_granted_paths(self):
         m=self.module()
