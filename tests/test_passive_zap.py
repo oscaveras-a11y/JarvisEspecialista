@@ -1,5 +1,6 @@
 """Passive ZAP tests: synthetic messages only; execution exclusively in GitHub."""
 import importlib
+import gzip
 import json
 import os
 from pathlib import Path
@@ -51,8 +52,8 @@ class PassiveTests(unittest.TestCase):
 
     def test_offline_container_command_has_hard_containment(self):
         m=self.module()
-        cmd=m.container_command('/usr/bin/docker','jarvis-zap-'+'a'*32,Path('/tmp/input'),
-                                Path('/tmp/driver.py'),120)
+        cmd=m.container_command('/usr/bin/docker','jarvis-zap-'+'a'*32,Path(tempfile.gettempdir())/'input',
+                                Path(tempfile.gettempdir())/'driver.py',120)
         for flag in ('--network=none','--read-only','--cap-drop=ALL',
                      '--security-opt=no-new-privileges','--pull=never','--pids-limit=128',
                      '--memory=1g','--cpus=1'):
@@ -60,7 +61,7 @@ class PassiveTests(unittest.TestCase):
         self.assertTrue(any('@sha256:' in s for s in cmd))
         self.assertFalse(any('docker.sock' in s for s in cmd if s.startswith('type=bind,')))
         with self.assertRaises(ValueError):
-            m.container_command('/usr/bin/docker','bad name',Path('/tmp/input'),Path('/tmp/driver.py'),120)
+            m.container_command('/usr/bin/docker','bad name',Path(tempfile.gettempdir())/'input',Path(tempfile.gettempdir())/'driver.py',120)
 
     def test_dast_stage_requires_grant_and_retains_unavailable_state(self):
         self.module()
@@ -144,7 +145,11 @@ class PassiveTests(unittest.TestCase):
                     else:self.send_header('Set-Cookie','PRIVATE_NAME=PRIVATE_VALUE')
                     if self.path=='/redirect':self.send_header('Location','https://outside.invalid/private')
                     body=b'<!doctype html><html><title>Synthetic</title><body>PRIVATE_BODY</body></html>'
-                    self.send_header('Content-Length',str(len(body)));self.end_headers()
+                    if self.path.startswith('/transfer'):
+                        body=gzip.compress(body)
+                        self.send_header('Transfer-Encoding','gzip, chunked' if self.path.endswith('list') else 'gzip')
+                    else:self.send_header('Content-Length',str(len(body)))
+                    self.end_headers()
                     try:self.wfile.write(body)
                     except OSError:pass
             server=ThreadingHTTPServer(('93.184.216.34',0),Handler)
@@ -159,6 +164,17 @@ class PassiveTests(unittest.TestCase):
             core=Core(root/'store',timeout=200)
             try:
                 case=core.investigate('passive','Synthetic HTTPS and offline ZAP',root,'owner','CI only')
+                # Real transfer-coded TLS responses must never claim complete body inspection.
+                from cyber_core.agents.runner import run_bounded
+                import sys
+                for transfer_path in ('/transfer','/transfer-list'):
+                    request={'grant':{**g,'paths':[transfer_path]},'ca_pem':cert.read_text(),
+                             'body_bytes':65536,'seconds':10}
+                    with tempfile.TemporaryDirectory(dir=root) as scratch:
+                        observed=run_bounded([sys.executable,'-I',str(Path(m.__file__).with_name('passive_child.py'))],
+                            json.dumps(request),cwd=scratch,timeout=12,max_output=65536)
+                    self.assertEqual(json.loads(observed['stdout'])['status'],'partial')
+                Handler.seen.clear()
                 c=campaigns.create(core,case,root/'campaign.json')
                 with patch.object(campaigns,'_complete',side_effect=CoreError('synthetic checkpoint failure')):
                     with self.assertRaises(CoreError):campaigns.work(core,case,c['campaign_id'],max_seconds=200)
