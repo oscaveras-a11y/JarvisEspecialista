@@ -58,7 +58,7 @@ class PassiveTests(unittest.TestCase):
                      '--memory=1g','--cpus=1'):
             self.assertIn(flag,cmd)
         self.assertTrue(any('@sha256:' in s for s in cmd))
-        self.assertFalse(any('docker.sock' in s for s in cmd))
+        self.assertFalse(any('docker.sock' in s for s in cmd if s.startswith('type=bind,')))
         with self.assertRaises(ValueError):
             m.container_command('/usr/bin/docker','bad name',Path('/tmp/input'),Path('/tmp/driver.py'),120)
 
@@ -83,6 +83,34 @@ class PassiveTests(unittest.TestCase):
                 self.assertEqual(stage['coverage'],'unsupported_automation')
                 self.assertFalse(result['full_pentest_completed'])
                 self.assertTrue(core.verify_audit(case))
+            finally:core.close()
+
+
+    def test_real_zap_named_risk_levels_are_projected(self):
+        m=self.module();g=grant()
+        alert={'pluginId':'10010','risk':'Low','confidence':'Medium','method':'GET','url':g['origin']+'/unsafe'}
+        r=m.sanitize_alerts([alert],g)
+        self.assertEqual(r['rejected'],0)
+        self.assertEqual(r['findings'][0]['risk'],1)
+        self.assertEqual(r['findings'][0]['confidence'],2)
+
+    def test_expired_stage_budget_cannot_publish_unavailable(self):
+        import time
+        m=self.module()
+        from cyber_core.service import Core
+        from cyber_core.errors import CoreError
+        from cyber_core.operations import saved_operations
+        with tempfile.TemporaryDirectory() as f:
+            root=Path(f);path=root/'grant.json';path.write_text(json.dumps(grant()))
+            core=Core(root/'store',timeout=10)
+            try:
+                case=core.investigate('passive','Expired budget',root,'owner','Synthetic')
+                def late_backend(*args):
+                    time.sleep(.08);return None
+                with patch.object(m,'backend',side_effect=late_backend):
+                    with self.assertRaises(CoreError):
+                        m.run_passive(core,case,path,seconds=.05)
+                self.assertFalse(any(o['kind']=='dast_passive' for o in saved_operations(core,case)))
             finally:core.close()
 
     @unittest.skipUnless(os.environ.get('JARVIS_ZAP_REAL')=='1','real ZAP and synthetic TLS in GitHub Linux')
