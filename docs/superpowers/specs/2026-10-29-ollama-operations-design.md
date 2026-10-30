@@ -45,3 +45,14 @@ Regressões completas e fluxos existentes. Documentar skips, links e SHA exato. 
 ## Decisões delegadas ao implementador e pendência
 Delegados: nomes de APIs/comandos/tabelas, esquema JSON mínimo, implementação do transporte isolado, sanitização e fixtures de teste, respeitando estes contratos. Questões de API descobertas no plano devem preservar os dois lados.
 Pendente: aprovação deste desenho pelo proprietário antes de código de produto. O proprietário já autorizou execução automática de operações autorizadas; essa escolha não será perguntada novamente.
+
+## Direção ampliada confirmada pelo proprietário
+Após a proposta inicial, o proprietário esclareceu que quer um agente trabalhando dentro do Jarvis como um agente de programação: receber objetivos, usar ferramentas, escrever código, executar testes, interpretar erros e continuar a tarefa. Confirmou que memória e treinamento serão melhorados depois. A primeira entrega operacional acima é um incremento dessa direção, não a totalidade do agente pretendido.
+
+Sequência registrada:
+1. Integração operacional Ollama/CORE com execução automática autorizada e evidências reais de funcionamento.
+2. Ferramentas de programação em ambiente de desenvolvimento isolado: alterações revisáveis, execução de testes e iteração com resultados. Requer desenho específico de workspace, ferramentas e publicação antes de implementar; não está entregue pelo dispatcher do primeiro incremento.
+3. Memória persistente consumindo os contratos existentes da seção 5, preservando proveniência e separando objetivo, hipótese e fato validado. A recuperação de contexto não altera os pesos do modelo.
+4. Avaliação de treinamento/adaptação com exemplos selecionados, direitos de uso e conjunto de testes separado. Não treinar automaticamente com conversas, senhas, evidências privadas ou erros promovidos a exemplos corretos. Dados operacionais permanecem fora do Git/CI.
+
+Modelo com menos recusas indevidas é uma preferência do proprietário; não há garantia de ausência universal de recusas ou equivalência de capacidade com Codex. Não foi realizado treinamento, mudança de pesos ou memória nova nesta atualização. O pequeno hardware local não comprova capacidade de treinamento; escolher ambiente e técnica apenas na etapa correspondente. Os detalhes de memória e treinamento ficam para desenhos posteriores, respeitando a divisão Codex/Claude.
