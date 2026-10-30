@@ -145,10 +145,19 @@ def _seven(raw, candidate):
 
 def _pdf(raw, candidate):
     from pypdf import PdfReader
-    reader = PdfReader(io.BytesIO(raw), strict=True)
-    if not reader.is_encrypted:
+    from pypdf.errors import FileNotDecryptedError, ParseError, PdfReadError
+    try:
+        reader = PdfReader(io.BytesIO(raw), strict=True)
+        if not reader.is_encrypted:
+            return False
+        return bool(reader.decrypt(candidate.decode("utf-8")))
+    except FileNotDecryptedError:
+        # A required decryption step failed, rather than a malformed document.
+        raise
+    except (PdfReadError, ParseError):
+        # Invalid PDF syntax is an unmatched trial. Dependency, unsupported
+        # encryption and library resource-limit errors must remain failures.
         return False
-    return bool(reader.decrypt(candidate.decode("utf-8")))
 
 def _office(raw, candidate):
     import msoffcrypto
