@@ -144,7 +144,9 @@ class _PinnedHTTPS(http.client.HTTPSConnection):
             raise
 
 
-def probe(grant, *, body_bytes=65536, seconds=30, ca_pem=None, inventory=False):
+def probe(grant, *, body_bytes=65536, seconds=30, ca_pem=None, inventory=False, _capture=None):
+    if _capture is not None and not callable(_capture):
+        raise ValueError('Invalid internal response consumer')
     options = validate_options(body_bytes=body_bytes,seconds=seconds)
     if type(inventory) is not bool:
         raise ValueError('Invalid inventory mode')
@@ -199,6 +201,7 @@ def probe(grant, *, body_bytes=65536, seconds=30, ca_pem=None, inventory=False):
                 else:
                     from cyber_core.web_inventory import Inventory
                     collector=Inventory(origin,path,grant['paths'],max_bytes=body_bytes)
+            transient = bytearray() if _capture is not None else None
             digest = hashlib.sha256()
             read = 0
             complete = False
@@ -214,6 +217,8 @@ def probe(grant, *, body_bytes=65536, seconds=30, ca_pem=None, inventory=False):
                         complete = True
                     break
                 digest.update(chunk)
+                if transient is not None:
+                    transient.extend(chunk)
                 if collector is not None:
                     collector.feed(chunk)
                 read += len(chunk)
@@ -229,6 +234,8 @@ def probe(grant, *, body_bytes=65536, seconds=30, ca_pem=None, inventory=False):
                     complete = True
             if collector is not None:
                 inventory_result=collector.finish(body_complete=complete)
+            if _capture is not None:
+                _capture(path,response.status,headers,bytes(transient),complete)
             responses.append({'path':path,'status':response.status,'peer_ip':address,
                               'resolved_public_addresses':addresses,'tls':tls,
                               'security_headers':{name:name in names for name in SECURITY_HEADERS},
