@@ -138,3 +138,28 @@ firmware/forensics/pcap/automotive, YARA. Testados com atenção
 específica aos riscos mais prováveis de cada área (adulteração de
 evidência, path traversal, corrida de thread, vazamento de segredo) —
 nada confirmado além do listado acima.
+
+## Correções aplicadas (2026-10-30, após decisão do proprietário)
+
+- **#1 (vazamento de 2 caracteres)**: corrigido em `vulnerability/__init__.py::_mask` — nunca mais revela nenhum caractere real do segredo.
+- **#2 (tentativa consumida antes de validar)**: corrigido em `cryptanalysis/__init__.py::recover` — a validação do envelope (magic/tamanho) agora acontece antes de entrar na transação que incrementa `recovery_attempts`.
+- **#3 (strings UTF-16LE em offset ímpar)**: corrigido em `reverse_engineering/strings.py::_utf16le_runs` — agora varre as duas paridades de offset.
+- **#4 (process.wait sem proteção)**: corrigido em `agents/runner.py` — mesmo padrão já usado em `supervisor.py` (`except (ChildProcessError, OSError, subprocess.TimeoutExpired): pass`). Confirmado: não impõe nenhum limite de tempo no trabalho em si, só evita que a limpeza pós-kill mascare o erro real.
+- **#5 (lease expirado trava job em "running")**: **investigado e descartado como bug.** Existe um teste existente (`test_stale_claim_cannot_publish_over_new_claim`) confirmando que lançar erro quando a posse do job foi perdida/roubada por outro worker é o comportamento intencional (falhar alto por segurança, para um worker "zumbi" nunca publicar por cima de outro). O job ficar em `running` até o próximo `claim()` reciclar é o mecanismo de autocura já projetado (`broker_store.recover()`), não um defeito.
+- **#7 (RLIMIT_CPU por thread)**: corrigido em `reverse_engineering/_limit_exec.py` — o orçamento de CPU agora escala pelo valor de `OMP_NUM_THREADS` já presente no ambiente do processo (lido automaticamente, sem precisar que nenhum chamador mude). Esse arquivo é idêntico nos dois branches, então a correção já vale também para quando o `main` do Codex for reconciliado.
+- **#6 (validador de PDF sem try/except, em `cryptanalysis/formats.py` do Codex)**: **não aplicado ainda** — esse arquivo só existe em `origin/main`, dentro da mesma divergência registrada no achado #0 (`sessions.py`/`recovery_trial.py`/`formats.py` evoluíram em paralelo nos dois branches a partir da mesma base). Aplicar agora criaria um arquivo novo e conflitante nesta branch em vez de corrigir o arquivo real. Patch pronto para aplicar no `main` quando a reconciliação acontecer:
+
+```python
+def _pdf(raw, candidate):
+    from pypdf import PdfReader
+    from pypdf.errors import PyPdfError
+    try:
+        reader = PdfReader(io.BytesIO(raw), strict=True)
+        if not reader.is_encrypted:
+            return False
+        return bool(reader.decrypt(candidate.decode("utf-8")))
+    except PyPdfError:
+        return False
+```
+
+Mesmo raciocínio já aplicado a `_zip`/`_seven`/`_office`: uma exceção da biblioteca real (PDF malformado ou decodificação que falha) deve ser tratada como "esse candidato não funcionou", nunca como estado terminal da sessão inteira.

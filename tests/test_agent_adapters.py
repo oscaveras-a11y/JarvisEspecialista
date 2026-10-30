@@ -1,6 +1,7 @@
 """Strict CLI framing and bounded synthetic subprocesses, no provider calls."""
 import json
 from pathlib import Path
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -87,6 +88,22 @@ class AdapterContracts(unittest.TestCase):
         link.symlink_to(sys.executable)
         self.assertEqual(runner._executable(str(link)), str(link))
         self.assertNotEqual(runner._executable(str(link)), str(link.resolve()))
+    def test_a_slow_kill_cleanup_does_not_mask_the_real_timeout_error(self):
+        # The child is killed for real (it overran `timeout`); the process
+        # just doesn't get reaped within the 5s grace period this time. That
+        # must not replace "Agent timeout exceeded" with an unhandled
+        # subprocess.TimeoutExpired escaping the finally block.
+        script = self.root / 'slow.py'
+        script.write_text('import time\ntime.sleep(30)\n')
+        with patch.object(subprocess.Popen, 'wait', side_effect=subprocess.TimeoutExpired(cmd='x', timeout=5)):
+            with self.assertRaisesRegex(CoreError, 'Agent timeout exceeded'):
+                runner.run_bounded([sys.executable, str(script)], '', cwd=self.root, timeout=1)
+    def test_a_slow_kill_cleanup_does_not_prevent_a_successful_result(self):
+        script = self.root / 'fast.py'
+        script.write_text('print("ok")\n')
+        with patch.object(subprocess.Popen, 'wait', side_effect=subprocess.TimeoutExpired(cmd='x', timeout=5)):
+            result = runner.run_bounded([sys.executable, str(script)], '', cwd=self.root, timeout=10)
+        self.assertEqual(result['stdout'].strip(), 'ok')
 
 if __name__ == '__main__':
     unittest.main()

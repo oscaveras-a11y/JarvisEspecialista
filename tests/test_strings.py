@@ -20,6 +20,11 @@ class StringsUnitTests(unittest.TestCase):
         out = extract_strings(data, min_length=4)
         self.assertIn('DATA', out['utf16le'])
 
+    def test_utf16le_runs_starting_at_an_odd_offset(self):
+        data = b'\x41' + 'DATA'.encode('utf-16le') + b'\x00\x00'
+        out = extract_strings(data, min_length=4)
+        self.assertIn('DATA', out['utf16le'])
+
     def test_max_strings_cap(self):
         data = (b'abcd\x00' * 10)
         out = extract_strings(data, min_length=4, max_strings=3)

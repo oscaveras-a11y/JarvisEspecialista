@@ -169,9 +169,17 @@ def run_bounded(command, prompt, *, cwd, timeout=60, max_output=262144, should_s
                 tree.close()
         finally:
             if process:
-                if process.poll() is None:
-                    process.kill()
-                process.wait(timeout=5)
+                # tree.close() may already have reaped it; tolerate that, and
+                # tolerate the kill'd process still not being reaped within
+                # the grace period — either way, don't let this cleanup step
+                # mask whatever CoreError/AgentResourceError was already being
+                # raised, and still run the join()/close() below it.
+                try:
+                    if process.poll() is None:
+                        process.kill()
+                    process.wait(timeout=5)
+                except (ChildProcessError, OSError, subprocess.TimeoutExpired):
+                    pass
                 if writer:
                     writer.join(timeout=1)
                 for reader in readers:

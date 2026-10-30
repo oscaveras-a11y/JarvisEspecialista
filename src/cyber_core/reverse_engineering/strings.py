@@ -44,9 +44,26 @@ def _ascii_runs(data, min_length, max_strings):
 
 
 def _utf16le_runs(data, min_length, max_strings):
+    # A UTF-16LE run can start on either byte parity; scanning only even
+    # offsets misses every run whose first code unit begins one byte in
+    # (e.g. right after a 1-byte-aligned header). Scan both parities and
+    # merge, capped at the same max_strings/truncated contract.
+    out = []
+    truncated = False
+    for start in (0, 1):
+        found, hit_cap = _utf16le_scan(data, min_length, max_strings - len(out), start)
+        out.extend(found)
+        truncated = truncated or hit_cap
+        if len(out) >= max_strings:
+            truncated = True
+            break
+    return out, truncated
+
+
+def _utf16le_scan(data, min_length, max_strings, start):
     out, run = [], bytearray()
     # A printable char followed by a 0x00 high byte marks a UTF-16LE code unit.
-    for index in range(0, len(data) - 1, 2):
+    for index in range(start, len(data) - 1, 2):
         low, high = data[index], data[index + 1]
         if high == 0 and low in _PRINTABLE:
             run.append(low)
