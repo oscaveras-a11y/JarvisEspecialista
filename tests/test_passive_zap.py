@@ -177,7 +177,9 @@ class PassiveTests(unittest.TestCase):
                 Handler.seen.clear()
                 c=campaigns.create(core,case,root/'campaign.json')
                 with patch.object(campaigns,'_complete',side_effect=CoreError('synthetic checkpoint failure')):
-                    with self.assertRaises(CoreError):campaigns.work(core,case,c['campaign_id'],max_seconds=200)
+                    with self.assertRaises(CoreError) as interrupted:
+                        campaigns.work(core,case,c['campaign_id'],max_seconds=200)
+                    self.assertEqual(str(interrupted.exception.__cause__),'synthetic checkpoint failure')
                 ops=[o for o in saved_operations(core,case) if o['kind']=='dast_passive']
                 self.assertEqual(len(ops),1);op=ops[0];a=op['analysis']
                 self.assertEqual(a['status'],'completed')
