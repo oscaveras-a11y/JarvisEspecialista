@@ -91,6 +91,16 @@ def parser():
                              help='Bundled wordlist to draw from (rockyou: 14,344,391 real breached passwords)')
     materialize.add_argument('--limit', type=int, default=100000,
                              help='How many candidate lines to write (recovery-session caps candidates at 100000)')
+    generate = sub.add_parser('generate-wordlist',
+                              help='Expand hint words (names, dates, references) into a rule-based candidates '
+                                   'file, ready to pass as --candidates to recovery-session start. No AI, no '
+                                   'network: fixed local rules (case, leetspeak, digits, years, separators).')
+    generate.add_argument('case')
+    generate.add_argument('path', help='Output path inside the authorized scope; must not already exist')
+    generate.add_argument('--word', dest='words', action='append', required=True,
+                          help='A hint word; repeat --word for each one (1-50 words, not the password itself)')
+    generate.add_argument('--limit', type=int, default=100000,
+                          help='Maximum candidate lines to write (recovery-session caps candidates at 100000)')
     analyze = sub.add_parser('analyze-file', help='Acquire verified copy and analyze statically')
     analyze.add_argument('case')
     analyze.add_argument('path')
@@ -255,6 +265,8 @@ def _main(argv=None):
                 result = core.self_test_recovery(args.case, args.path, candidates, max_attempts=args.max_candidates, max_seconds=args.max_seconds)
             elif cmd == 'materialize-wordlist':
                 result = core.materialize_wordlist(args.case, args.path, source=args.source, limit=args.limit)
+            elif cmd == 'generate-wordlist':
+                result = core.materialize_generated_wordlist(args.case, args.path, args.words, limit=args.limit)
             elif cmd == 'run':
                 result = core.run_one(args.case)
             elif cmd == 'custody':

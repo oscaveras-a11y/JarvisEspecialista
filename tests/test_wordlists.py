@@ -62,5 +62,52 @@ class WordlistMaterializationTests(unittest.TestCase):
             self.core.materialize_wordlist(self.case, str(self.scope / 'x.txt'), limit=1)
 
 
+class GeneratedWordlistMaterializationTests(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        root = Path(self.tmp.name)
+        self.scope = root / 'inputs'
+        self.scope.mkdir()
+        self.core = Core(root / 'state')
+        self.addCleanup(self.core.close)
+        self.case = self.core.investigate('p', 'Gerar wordlist a partir de pistas', str(self.scope), 'owner', 'auth')
+
+    def test_materializes_rule_based_variations_from_hint_words(self):
+        out = self.core.materialize_generated_wordlist(self.case, str(self.scope / 'hints.txt'), ['Rex'], limit=50)
+        self.assertEqual(out['source'], 'generated')
+        self.assertEqual(out['lines'], 50)
+        lines = (self.scope / 'hints.txt').read_text().splitlines()
+        self.assertEqual(len(lines), 50)
+        self.assertIn('Rex', lines)
+        self.assertIn('Rex123', lines)
+
+    def test_hint_words_never_reach_the_audit_trail(self):
+        self.core.materialize_generated_wordlist(self.case, str(self.scope / 'hints.txt'),
+                                                  ['UnlikelySecretHintWord'], limit=10)
+        import json
+        blob = json.dumps(self.core.audit(self.case))
+        self.assertNotIn('UnlikelySecretHintWord', blob)
+
+    def test_rejects_invalid_words(self):
+        with self.assertRaises(CoreError):
+            self.core.materialize_generated_wordlist(self.case, str(self.scope / 'x.txt'), [])
+
+    def test_rejects_destination_outside_scope(self):
+        with tempfile.TemporaryDirectory() as other:
+            with self.assertRaises(CoreError):
+                self.core.materialize_generated_wordlist(self.case, str(Path(other) / 'x.txt'), ['rex'])
+
+    def test_rejects_existing_destination(self):
+        (self.scope / 'x.txt').write_text('already here')
+        with self.assertRaises(CoreError):
+            self.core.materialize_generated_wordlist(self.case, str(self.scope / 'x.txt'), ['rex'])
+
+    def test_rejects_while_paused(self):
+        self.core.pause(self.case)
+        with self.assertRaises(CoreError):
+            self.core.materialize_generated_wordlist(self.case, str(self.scope / 'x.txt'), ['rex'])
+
+
 if __name__ == '__main__':
     unittest.main()

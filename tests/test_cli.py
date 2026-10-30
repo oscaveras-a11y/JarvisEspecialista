@@ -53,6 +53,17 @@ class CLITests(unittest.TestCase):
         self.assertEqual(destination.read_text().splitlines(), ['123456', '12345', '123456789', 'password', 'iloveyou'])
         self.cli('materialize-wordlist', case, str(destination), '--limit', '5', success=False)
 
+    def test_generate_wordlist_expands_hint_words_into_a_candidate_file(self):
+        self.cli('init')
+        case = self.cli('investigate', '--project', 'demo', '--objective', 'synthetic', '--scope', str(self.inputs), '--owner', 'owner', '--authorization', 'Synthetic lab')['id']
+        destination = self.inputs / 'hints.txt'
+        result = self.cli('generate-wordlist', case, str(destination), '--word', 'Rex', '--word', 'Max', '--limit', '40')
+        self.assertEqual(result['source'], 'generated')
+        self.assertEqual(result['lines'], 40)
+        lines = destination.read_text().splitlines()
+        self.assertEqual(len(lines), 40)
+        self.assertIn('Rex', lines)
+
     def test_logs_exposes_raw_audit_trail(self):
         self.cli('init')
         case = self.cli('investigate', '--project', 'demo', '--objective', 'synthetic', '--scope', str(self.inputs), '--owner', 'owner', '--authorization', 'Synthetic lab')['id']

@@ -47,17 +47,33 @@ apresentar não-verificado como verificado) e não é negociável.
 
 ## O que pode ser construído AGORA (não depende do Qwen3 rodando)
 
-- [ ] Gerador local de variações a partir de pistas (regras: case,
-      leetspeak, números/anos, separadores, combinações de 2+ palavras).
-      Entrada: lista de palavras/temas-base. Saída: arquivo de candidatas
-      compatível com `recovery-session --candidates` (mesmos limites:
-      até 100.000 linhas / 8 MiB por sessão, como a camada 1).
+- [x] **Gerador local de variações a partir de pistas** — feito em
+      2026-10-30 (`cryptanalysis/wordlist_generator.py`): regras de case,
+      leetspeak, números/anos (1950-2026), separadores comuns e
+      combinações de 2+ palavras. Determinístico, sem duplicatas,
+      limitado a 100.000 linhas (mesmo limite do `recovery-session`).
+      Exposto como `Core.materialize_generated_wordlist()` e o comando
+      `cyber generate-wordlist <caso> <caminho> --word X --word Y
+      --limit N`. As palavras-pista nunca entram na trilha de auditoria
+      (mesmo tratamento dado a um segredo). Testado (unidade, serviço,
+      CLI, ponta a ponta) — ver `tests/test_wordlist_generator.py`,
+      `tests/test_wordlists.py`, `tests/test_cli.py`.
 - [ ] Lógica de "camada 2 só dispara se a camada 1 esgotar sem achar"
-      (encadeamento entre duas sessões de `recovery-session`, ou um
-      comando novo que orquestra isso).
-- [ ] Testes cobrindo: geração determinística a partir de temas fixos
-      (sem IA, só o gerador de regras), encadeamento camada 1 → camada 2,
-      e que nenhuma "senha" saia do gerador/IA sem passar pelo teste real.
+      (encadeamento entre duas sessões de `recovery-session`). **Ainda
+      não implementado**: depende do `recovery-session` real (com
+      hashcat/John/formatos) que hoje só existe em `origin/main` — esta
+      branch ainda tem a versão antiga (só CCAES1/chave SSH), e a
+      reconciliação dos dois está registrada no achado #0 de
+      `docs/review/2026-10-30-revisao-completa-claude.md` e na issue
+      https://github.com/oscaveras-a11y/JarvisEspecialista/issues/35.
+      O gerador já produz o arquivo de candidatas no formato certo;
+      falta só o encadeamento automático, que faz mais sentido construir
+      depois dessa reconciliação (evita construir sobre a versão que vai
+      ser substituída).
+- [x] Testes de geração determinística a partir de temas fixos (sem IA,
+      só o gerador de regras) — feito.
+- [ ] Teste de encadeamento camada 1 → camada 2 — pendente, junto com o
+      item acima.
 
 ## O que só entra quando rodar no computador do proprietário (adiado)
 

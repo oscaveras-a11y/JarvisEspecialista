@@ -532,6 +532,37 @@ class Core:
             audit(self.db, case, 'wordlist_materialized', {'source': source, 'lines': written, 'destination': str(destination)})
         return {'path': str(destination), 'source': source, 'lines': written}
 
+    def materialize_generated_wordlist(self, case, output_path, words, *, limit=100000):
+        # "Layer 2" of the two-layer recovery design (docs/ai-assisted-
+        # recovery-plan.md): rule-based expansion of operator-supplied hint
+        # words (names, dates, references — not a password itself) into a
+        # bounded candidates file, same contract as materialize_wordlist.
+        # The hint words are never audited: they can be identifying personal
+        # details about the investigation subject, same handling as a secret.
+        row = self.authorize(case)
+        self._ensure_not_paused(case, row)
+        target = Path(output_path)
+        parent = local_path(target.parent, directory=True)
+        if not parent.is_relative_to(local_path(row['scope'], directory=True)):
+            raise CoreError('Wordlist must be materialized inside the authorized scope')
+        name = target.name
+        if not name or name in ('.', '..') or '/' in name or '\\' in name:
+            raise CoreError('Invalid wordlist filename')
+        destination = parent / name
+        if destination.exists() or destination.is_symlink():
+            raise CoreError('Wordlist path already exists')
+        from cyber_core.cryptanalysis.wordlist_generator import generate_variations
+        written = 0
+        with destination.open('xb') as handle:
+            for candidate in generate_variations(words, limit=limit):
+                handle.write(candidate.encode('utf-8', errors='surrogateescape'))
+                handle.write(b'\n')
+                written += 1
+        with self.db:
+            self.authorize(case)
+            audit(self.db, case, 'wordlist_materialized', {'source': 'generated', 'lines': written, 'destination': str(destination)})
+        return {'path': str(destination), 'source': 'generated', 'lines': written}
+
     def make_lab_envelope(self, case, output_path, *, passphrase, content):
         # Create a CCPW1 lab target on the operator's OWN scope, to exercise the
         # recovery self-test end to end. Requires owner_consent; passphrase not logged.
