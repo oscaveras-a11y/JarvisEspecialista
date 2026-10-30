@@ -160,7 +160,7 @@ class PassiveTests(unittest.TestCase):
             g=grant(server.server_port);g['paths'].append('/image.png');manifest=root/'grant.json'
             manifest.write_text(json.dumps(g))
             plan={'version':1,'stages':['dast_passive'],'web_grant':'grant.json',
-                  'ca_file':'ca.pem','seconds':180,'body_bytes':65536}
+                  'ca_file':'ca.pem','seconds':60,'body_bytes':65536}
             (root/'campaign.json').write_text(json.dumps(plan))
             core=Core(root/'store',timeout=200)
             try:
@@ -215,7 +215,7 @@ class PassiveTests(unittest.TestCase):
                 def pause_publish(*args,**kwargs):
                     core.pause(case);return real_save(*args,**kwargs)
                 with patch.object(m,'save_result',side_effect=pause_publish):
-                    with self.assertRaises(CoreError):run_passive(core,case,manifest,ca_file=cert,seconds=180)
+                    with self.assertRaises(CoreError):run_passive(core,case,manifest,ca_file=cert,seconds=60)
                 self.assertEqual(len([o for o in saved_operations(core,case) if o['kind']=='dast_passive']),2)
                 core.resume(case)
                 manifest.write_text('{}')
