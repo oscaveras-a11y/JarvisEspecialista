@@ -37,6 +37,8 @@ jobs:
         run: python -c "import pyzipper, py7zr, pypdf, msoffcrypto"
       - name: Dependency compatibility
         run: python -m pip check
+      - name: PDF failure and candidate progression contracts
+        run: python scripts/run-tests.py test_recovery_pdf_errors.py
       - name: New encrypted format contracts
         run: python scripts/run-tests.py test_recovery_formats.py
       - name: Complete offline suite
