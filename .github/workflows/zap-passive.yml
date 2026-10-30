@@ -4,6 +4,9 @@ on:
     branches: [codex/zap-passive]
   pull_request:
     paths: ['src/cyber_core/pentest/passive*', 'src/cyber_core/pentest/zap_driver.py', 'tests/test_passive_zap.py', '.github/workflows/zap-passive.yml']
+concurrency:
+  group: zap-passive-${{ github.head_ref || github.ref_name }}
+  cancel-in-progress: true
 permissions:
   contents: read
 jobs:

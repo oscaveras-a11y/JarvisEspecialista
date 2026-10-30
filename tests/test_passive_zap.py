@@ -135,7 +135,7 @@ class PassiveTests(unittest.TestCase):
                 def do_GET(self):
                     type(self).seen.append(self.path)
                     self.send_response(302 if self.path=='/redirect' else 200)
-                    self.send_header('Content-Type','text/html; charset=utf-8')
+                    self.send_header('Content-Type','image/png' if self.path=='/image.png' else 'text/html; charset=utf-8')
                     if self.path=='/safe':
                         self.send_header('Content-Security-Policy',"default-src 'none'; frame-ancestors 'none'")
                         self.send_header('X-Frame-Options','DENY')
@@ -144,7 +144,8 @@ class PassiveTests(unittest.TestCase):
                         self.send_header('Set-Cookie','PRIVATE_NAME=PRIVATE_VALUE; Secure; HttpOnly; SameSite=Strict')
                     else:self.send_header('Set-Cookie','PRIVATE_NAME=PRIVATE_VALUE')
                     if self.path=='/redirect':self.send_header('Location','https://outside.invalid/private')
-                    body=b'<!doctype html><html><title>Synthetic</title><body>PRIVATE_BODY</body></html>'
+                    body=(b'\x89PNG\r\n\x1a\n' if self.path=='/image.png' else
+                          b'<!doctype html><html><title>Synthetic</title><body>PRIVATE_BODY</body></html>')
                     if self.path.startswith('/transfer'):
                         body=gzip.compress(body)
                         self.send_header('Transfer-Encoding','gzip, chunked' if self.path.endswith('list') else 'gzip')
@@ -156,7 +157,7 @@ class PassiveTests(unittest.TestCase):
             ctx=ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER);ctx.load_cert_chain(cert,key)
             server.socket=ctx.wrap_socket(server.socket,server_side=True)
             thread=threading.Thread(target=server.serve_forever,daemon=True);thread.start()
-            g=grant(server.server_port);manifest=root/'grant.json'
+            g=grant(server.server_port);g['paths'].append('/image.png');manifest=root/'grant.json'
             manifest.write_text(json.dumps(g))
             plan={'version':1,'stages':['dast_passive'],'web_grant':'grant.json',
                   'ca_file':'ca.pem','seconds':180,'body_bytes':65536}
@@ -183,7 +184,7 @@ class PassiveTests(unittest.TestCase):
                 ops=[o for o in saved_operations(core,case) if o['kind']=='dast_passive']
                 self.assertEqual(len(ops),1);op=ops[0];a=op['analysis']
                 self.assertEqual(a['status'],'completed')
-                self.assertTrue(a['scanner']['queue_complete']);self.assertEqual(a['scanner']['messages'],2)
+                self.assertTrue(a['scanner']['queue_complete']);self.assertEqual(a['scanner']['messages'],3)
                 self.assertEqual(a['scanner']['version'],'2.17.0')
                 self.assertTrue(a['scanner']['addons'])
                 self.assertEqual(a['scanner']['network'],'none')
