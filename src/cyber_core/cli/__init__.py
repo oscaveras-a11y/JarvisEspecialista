@@ -100,7 +100,9 @@ def parser():
     generate.add_argument('--word', dest='words', action='append', required=True,
                           help='A hint word; repeat --word for each one (1-50 words, not the password itself)')
     generate.add_argument('--limit', type=int, default=100000,
-                          help='Maximum candidate lines to write (recovery-session caps candidates at 100000)')
+                          help='Maximum candidate lines to write (up to 1,000,000). A single recovery-session '
+                               'still only consumes the first 100000 candidates of a file; a larger pool is '
+                               'meant to be split across several chained sessions.')
     analyze = sub.add_parser('analyze-file', help='Acquire verified copy and analyze statically')
     analyze.add_argument('case')
     analyze.add_argument('path')

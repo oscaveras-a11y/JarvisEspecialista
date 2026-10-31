@@ -41,6 +41,14 @@ class WordlistGeneratorUnitTests(unittest.TestCase):
         out = list(generate_variations(['Rex', 'Max', 'Buddy'], limit=37))
         self.assertEqual(len(out), 37)
 
+    def test_the_1_million_ceiling_is_actually_reachable_with_enough_hints(self):
+        # A raised ceiling that the rules can never produce enough unique
+        # candidates to hit would be a dead number. With the maximum 50
+        # hint words, generation must actually reach it.
+        words = ['w%d' % i for i in range(50)]
+        out = list(generate_variations(words, limit=1000000))
+        self.assertEqual(len(out), 1000000)
+
     def test_rejects_invalid_words(self):
         with self.assertRaises(CoreError):
             list(generate_variations([]))
@@ -59,7 +67,7 @@ class WordlistGeneratorUnitTests(unittest.TestCase):
         with self.assertRaises(CoreError):
             list(generate_variations(['rex'], limit=0))
         with self.assertRaises(CoreError):
-            list(generate_variations(['rex'], limit=100001))
+            list(generate_variations(['rex'], limit=1000001))
 
 
 if __name__ == '__main__':

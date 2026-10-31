@@ -22,7 +22,7 @@ from cyber_core.errors import CoreError
 
 MAX_WORDS = 50
 MAX_WORD_LENGTH = 64
-MAX_VARIATIONS = 100000
+MAX_VARIATIONS = 1000000
 
 _LEET = str.maketrans({'a': '4', 'e': '3', 'i': '1', 'o': '0', 's': '5'})
 _SUFFIXES = ('', '1', '12', '123', '1234', '01', '007', '!', '!!', '@', '#', '$', '_', '-', '.')
@@ -100,6 +100,23 @@ def generate_variations(words, *, limit=MAX_VARIATIONS):
                             for sep in _SEPARATORS:
                                 yield form_a + sep + form_b
                                 yield form_b + sep + form_a
+        # Round 4: arbitrary 2-, 3- and then 4-digit numeric suffixes
+        # (PIN-style, e.g. "Rex42", "Rex007", "Rex2026" as a bare number
+        # rather than a year). Lower priority than the rounds above — a
+        # real date/year or a second real hint word is a more likely
+        # password than an arbitrary number — but a common enough pattern
+        # that it is worth the exhaustive sweep once the more targeted
+        # rounds are exhausted, and it is what makes a large --limit (up
+        # to 1,000,000) actually reachable with few hint words.
+        for base in bases:
+            for number in range(100):
+                yield base + '%02d' % number
+        for base in bases:
+            for number in range(1000):
+                yield base + '%03d' % number
+        for base in bases:
+            for number in range(10000):
+                yield base + '%04d' % number
 
     for candidate in generate():
         if emit(candidate):
