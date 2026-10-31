@@ -145,10 +145,14 @@ def _seven(raw, candidate):
 
 def _pdf(raw, candidate):
     from pypdf import PdfReader
-    reader = PdfReader(io.BytesIO(raw), strict=True)
-    if not reader.is_encrypted:
+    from pypdf.errors import PyPdfError
+    try:
+        reader = PdfReader(io.BytesIO(raw), strict=True)
+        if not reader.is_encrypted:
+            return False
+        return bool(reader.decrypt(candidate.decode("utf-8")))
+    except PyPdfError:
         return False
-    return bool(reader.decrypt(candidate.decode("utf-8")))
 
 def _office(raw, candidate):
     import msoffcrypto
