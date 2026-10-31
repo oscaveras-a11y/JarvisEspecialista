@@ -12,6 +12,7 @@ dependencies = ["cryptography[ssh]>=50.0.2,<51"]
 [project.optional-dependencies]
 recovery = ["pyzipper>=0.3.6,<0.4", "py7zr>=1.1.4,<2", "pypdf>=6.19,<7", "msoffcrypto-tool>=5.4,<6"]
 reverse = ["capstone>=5.0.9,<6"]
+vulnerability = ["yara-python>=4.5.0,<5"]
 
 [project.scripts]
 cyber = "cyber_core.cli:main"
@@ -21,3 +22,4 @@ where = ["src"]
 
 [tool.setuptools.package-data]
 "cyber_core.reverse_engineering" = ["ghidra_scripts/*.java"]
+"cyber_core" = ["data/wordlists/*.gz"]

@@ -43,7 +43,7 @@ def main():
         assert source.read_bytes() == binary
         assert result['format'] == 'ELF signature'
         assert 7.99 < result['entropy'] <= 8
-        assert core.hypotheses(case) and core.checkpoints(case)
+        assert core.analysis_notes(case) and core.checkpoints(case)
         assert core.run_one(case) is None
         steps.extend(['signature_identified', 'sha256_verified', 'entropy_measured', 'hypothesis_and_experiment_recorded', 'results_and_checkpoint_persisted', 'original_unchanged_and_no_duplicate'])
         key = AESGCM.generate_key(bit_length=256)

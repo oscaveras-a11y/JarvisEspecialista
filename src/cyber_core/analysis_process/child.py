@@ -6,6 +6,7 @@ import time
 
 # -I ignores PYTHONPATH/cwd. Insert only our own trusted package installation/source root.
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+from cyber_core.analysis_process.network_guard import block_network
 from cyber_core.errors import CoreError
 from cyber_core.analysis_process.limits import MAX_TIMEOUT_SECONDS
 from cyber_core.reverse_engineering import analyze
@@ -63,6 +64,12 @@ def execute(request):
 
 
 def main():
+    # Item 14 "politica de acesso a rede": block before any analysis code runs,
+    # since this child parses untrusted evidence bytes. Called from main(), not
+    # at module import time, so importing this module for unit tests (e.g.
+    # calling execute() directly) never poisons the importing process's global
+    # socket module — only the real subprocess entry point is affected.
+    block_network()
     try:
         data = sys.stdin.buffer.read(65537)
         if len(data) > 65536:

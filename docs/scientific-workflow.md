@@ -44,6 +44,8 @@ RESOLVIDO requires no pending/failed tasks, no open/conflicting registered hypot
 
 SEM SOLUCAO VIAVEL DEMONSTRADA requires at least two reviewed strategies and cannot contradict supported solution conditions. It describes the registered investigation, never a universal impossibility claim. AGUARDANDO RECURSOS records a specific impediment without claiming validation. A final snapshot is compared again under a SQLite writer lock before the state change, so newly queued work invalidates stale verification.
 
+All 7 states from the scope (item 13) are accepted by `finalize`: RESOLVIDO, EM INVESTIGACAO, AGUARDANDO INFORMACOES, AGUARDANDO AUTORIZACAO, AGUARDANDO RECURSOS, SEM SOLUCAO VIAVEL DEMONSTRADA and FALHA DE EXECUCAO. FALHA DE EXECUCAO declares an operational execution failure (not a scientific conclusion) and, like RESOLVIDO/SEM SOLUCAO VIAVEL DEMONSTRADA, is cleared back to EM INVESTIGACAO when new work is queued — unlike the AGUARDANDO states, which stay put until the operator explicitly resumes them. It does not go through the evidence/review gates those two scientific terminal states require, and `validated` stays false.
+
 The unit tests demonstrate a known control, not a universal solution to a client problem. Criteria quality and relevance to the business objective still require a competent independent reviewer.
 
 ## Trust limits

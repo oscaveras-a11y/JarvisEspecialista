@@ -104,3 +104,34 @@ class ExternalTests(unittest.TestCase):
                "language_id": "x86:LE:64:default", "compiler_spec": "gcc", "image_base": "00400000",
                "functions_truncated": False, "unexpected": "do not forward"}
         self.assertNotIn("unexpected", self.api._ghidra_result(raw))
+
+
+class LimitExecCpuScalingTests(unittest.TestCase):
+    """_limit_exec.py sets RLIMIT_CPU, which sums CPU time across every
+    thread of the process, not wall-clock time. A caller that runs a
+    multithreaded tool (e.g. OMP_NUM_THREADS=2 for a CPU OpenCL backend)
+    must get a proportionally larger CPU budget, or the process gets
+    killed well before its real wall-clock timeout."""
+
+    def setUp(self):
+        if sys.platform == "win32":
+            self.skipTest("RLIMIT_CPU is POSIX-only")
+        self.launcher = str(Path(__file__).resolve().parents[1]
+                            / "src" / "cyber_core" / "reverse_engineering" / "_limit_exec.py")
+
+    def _soft_limit(self, env_extra):
+        probe = "import resource,sys;sys.stdout.write(str(resource.getrlimit(resource.RLIMIT_CPU)[0]))"
+        env = {"PATH": __import__("os").environ.get("PATH", "")}
+        env.update(env_extra)
+        run = subprocess.run([sys.executable, "-I", self.launcher, "10", sys.executable, "-c", probe],
+                             capture_output=True, text=True, timeout=10, env=env)
+        return int(run.stdout)
+
+    def test_default_thread_count_keeps_the_original_wall_clock_budget(self):
+        self.assertEqual(self._soft_limit({}), 10)
+
+    def test_omp_num_threads_scales_the_cpu_budget_proportionally(self):
+        self.assertEqual(self._soft_limit({"OMP_NUM_THREADS": "4"}), 40)
+
+    def test_malformed_thread_count_falls_back_to_one(self):
+        self.assertEqual(self._soft_limit({"OMP_NUM_THREADS": "not-a-number"}), 10)

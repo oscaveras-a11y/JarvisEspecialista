@@ -23,10 +23,18 @@ def _executable(value):
     if not isinstance(value, (str, os.PathLike)) or not value:
         raise AgentResourceError('unavailable')
     candidate = Path(value)
-    if (not candidate.is_absolute() or not candidate.is_file()
-            or candidate.suffix.lower() in ('.cmd', '.bat', '.ps1', '.sh')):
+    if not candidate.is_absolute():
         raise AgentResourceError('unavailable')
-    return str(candidate.resolve())
+    # Resolve only the parent directory, not the final component: candidate
+    # may itself be a symlink (classically sys.executable in a venv, whose
+    # bin/python3 points at a base interpreter with different, or missing,
+    # site-packages). Fully resolving it can silently swap in a different
+    # interpreter/installation that cannot import this very package. Same
+    # reasoning already applied to external_tool_runtime.executable().
+    resolved = candidate.parent.resolve() / candidate.name
+    if not resolved.is_file() or resolved.suffix.lower() in ('.cmd', '.bat', '.ps1', '.sh'):
+        raise AgentResourceError('unavailable')
+    return str(resolved)
 
 def _environment(agent=None):
     runtime = {'SYSTEMROOT', 'WINDIR', 'TEMP', 'TMP', 'TMPDIR', 'LANG', 'LC_ALL',
@@ -36,13 +44,38 @@ def _environment(agent=None):
     allowed = runtime | credentials.get(agent, set())
     return {key: value for key, value in os.environ.items() if key.upper() in allowed}
 
-def run_bounded(command, prompt, *, cwd, timeout=60, max_output=262144, should_stop=None, env=None):
+_DEFAULT_MAX_MEMORY_BYTES = 512 * 1024 * 1024
+
+def _resource_limits(max_memory_bytes, max_cpu_seconds):
+    # Runs inside the forked child, before exec, so the limit is set on the
+    # process_child.py wrapper and inherited by whatever it execs in turn
+    # (the real agent CLI) — POSIX only, item 12 "controle de RAM; limites
+    # de CPU". Windows has no equivalent rlimit; that gap is not hidden, see
+    # docs/review for the honest limitation note.
+    import resource
+    def limit():
+        if max_memory_bytes is not None:
+            resource.setrlimit(resource.RLIMIT_AS, (max_memory_bytes, max_memory_bytes))
+        if max_cpu_seconds is not None:
+            cpu = max(1, int(math.ceil(max_cpu_seconds)))
+            resource.setrlimit(resource.RLIMIT_CPU, (cpu, cpu))
+    return limit
+
+def run_bounded(command, prompt, *, cwd, timeout=60, max_output=262144, should_stop=None, env=None,
+                 max_memory_bytes=_DEFAULT_MAX_MEMORY_BYTES, max_cpu_seconds=None):
     """Run a stdin-gated child within the CORE's lifecycle containment."""
     if (not isinstance(command, (list, tuple)) or not command
             or not all(isinstance(v, str) and '\0' not in v for v in command)
             or type(timeout) not in (int, float) or not math.isfinite(timeout) or not 0 < timeout <= 3600
             or type(max_output) is not int or not 1 <= max_output <= 1048576):
         raise CoreError('Invalid agent process limits')
+    if max_memory_bytes is not None and (type(max_memory_bytes) is not int
+            or not 64 * 1024 * 1024 <= max_memory_bytes <= 4 * 1024 * 1024 * 1024):
+        raise CoreError('Invalid agent memory limit')
+    if max_cpu_seconds is None:
+        max_cpu_seconds = timeout + 5
+    if type(max_cpu_seconds) not in (int, float) or not math.isfinite(max_cpu_seconds) or not 0 < max_cpu_seconds <= 3605:
+        raise CoreError('Invalid agent CPU limit')
     executable = _executable(command[0])
     if not isinstance(prompt, str) or len(prompt.encode('utf-8')) > 16384:
         raise CoreError('Agent input limit exceeded')
@@ -57,6 +90,8 @@ def run_bounded(command, prompt, *, cwd, timeout=60, max_output=262144, should_s
     started = time.monotonic()
     try:
         kwargs = {'creationflags': subprocess.CREATE_NO_WINDOW} if os.name == 'nt' else {'start_new_session': True}
+        if os.name != 'nt':
+            kwargs['preexec_fn'] = _resource_limits(max_memory_bytes, max_cpu_seconds)
         try:
             process = subprocess.Popen([sys.executable, '-I', '-X', 'utf8', '-u',
                                         str(Path(__file__).with_name('process_child.py'))],
@@ -121,6 +156,9 @@ def run_bounded(command, prompt, *, cwd, timeout=60, max_output=262144, should_s
                 raise AgentResourceError('connection')
             if process.returncode == 125:
                 raise AgentResourceError('unavailable')
+            if process.returncode < 0:
+                raise CoreError('Agent exceeded resource limits or was terminated (signal '
+                                 + str(-process.returncode) + ')')
             raise CoreError('Agent execution failure (exit ' + str(process.returncode) + ')')
         return {'returncode': 0, **result}
     except UnicodeDecodeError as exc:
@@ -131,9 +169,17 @@ def run_bounded(command, prompt, *, cwd, timeout=60, max_output=262144, should_s
                 tree.close()
         finally:
             if process:
-                if process.poll() is None:
-                    process.kill()
-                process.wait(timeout=5)
+                # tree.close() may already have reaped it; tolerate that, and
+                # tolerate the kill'd process still not being reaped within
+                # the grace period — either way, don't let this cleanup step
+                # mask whatever CoreError/AgentResourceError was already being
+                # raised, and still run the join()/close() below it.
+                try:
+                    if process.poll() is None:
+                        process.kill()
+                    process.wait(timeout=5)
+                except (ChildProcessError, OSError, subprocess.TimeoutExpired):
+                    pass
                 if writer:
                     writer.join(timeout=1)
                 for reader in readers:
