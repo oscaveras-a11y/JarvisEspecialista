@@ -1,6 +1,6 @@
 # Pentest web operacional e identificação de criptografia em programas
 
-Estado: desenho para aprovação do proprietário. Não é implementação concluída.
+Estado: desenho revisado para aprovação do proprietário. Não é implementação concluída.
 Data: 2026-10-31.
 Pedido: deixar pentest e identificação de criptografia de programas funcionando; formatos solicitados: todos.
 Base funcional examinada: codex/zap-passive, 40c2b320a638e142d8eaa3181b75f122518935b4.
@@ -42,7 +42,7 @@ Comprovar contenção real por testes de egress direto, rede privada/mista, troc
 Manifesto ativo é versionado e separado do grant de leitura atual. Classes/métodos/caminhos e parâmetros de teste exigem declaração explícita. Ausência não habilita active scan. Compatibilidade com campanhas antigas permanece.
 
 ### A2. Motor ativo ZAP
-Começar com regras versionadas de XSS refletido e SQL injection não temporal (classes oficiais 40012/40018), somente em endpoints de laboratório descartável. Confirmar configuração e comportamento da versão fixada no plano; regras adicionais exigem seus próprios testes.
+Começar com regras versionadas de XSS refletido e SQL injection não temporal (classes oficiais 40012/40018). A validação de desenvolvimento/CI usa exclusivamente endpoints de laboratório descartável. A ferramenta entregue poderá aceitar sites/APIs reais posteriormente, somente quando o proprietário operar com autorização específica, perfil ativo e escopo explícitos; será o mesmo gateway e a mesma contenção comprovados no laboratório, sem bypass ou fallback nativo. Este trabalho não inicia essa operação real. Confirmar configuração e comportamento da versão fixada no plano; regras adicionais exigem seus próprios testes.
 Sem crawling/JavaScript implícito, callbacks externos, carga/DoS, persistência ou geração de tentativas de login.
 Fixtures vulnerável/corrigida devem produzir diferença comprovada. Alertas do ZAP são suspected; confirmação exige critério reproduzível da classe e controle negativo adequado. Não declarar execução de JavaScript só pela reflexão de um marcador em HTML.
 
@@ -110,3 +110,6 @@ Estrutura de arquivos, assinaturas de métodos, fixtures, parsers auxiliares e v
 - https://www.zaproxy.org/docs/alerts/40012/
 - https://www.zaproxy.org/docs/alerts/40018/
 - https://www.zaproxy.org/docs/desktop/addons/automation-framework/job-ascan/
+
+## Revisão de construção
+Revisor independente identificou uma ambiguidade entre laboratório de validação e operação autorizada posterior. Resolvida na seção A2 com as instruções já existentes do projeto: CI e trabalho dos agentes só usam laboratório; o produto pode suportar operação futura do proprietário em alvos reais explicitamente autorizados, aplicando o mesmo gateway. Nenhuma aprovação de alvo real, merge ou implantação foi inferida. Não restaram perguntas de construção adicionais no parecer recebido.
