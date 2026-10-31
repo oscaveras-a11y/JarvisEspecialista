@@ -95,18 +95,42 @@ apresentar não-verificado como verificado) e não é negociável.
       todas as combinações de 4 caracteres de qualquer tipo
       (`?a` = todo o conjunto maiúscula+minúscula+dígito+símbolo) direto
       contra o hash, sem nunca escrever uma lista de candidatas em disco.
-- [ ] Lógica de "camada 2 só dispara se a camada 1 esgotar sem achar"
-      (encadeamento entre duas sessões de `recovery-session`). **Ainda
-      não implementado**: depende do `recovery-session` real (com
-      hashcat/John/formatos) que hoje só existe em `origin/main` — esta
-      branch ainda tem a versão antiga (só CCAES1/chave SSH), e a
-      reconciliação dos dois está registrada no achado #0 de
-      `docs/review/2026-10-30-revisao-completa-claude.md` e na issue
-      https://github.com/oscaveras-a11y/JarvisEspecialista/issues/35.
-      O gerador já produz o arquivo de candidatas no formato certo;
-      falta só o encadeamento automático, que faz mais sentido construir
-      depois dessa reconciliação (evita construir sobre a versão que vai
-      ser substituída).
+- [x] **Reconciliação sessions.py/recovery_trial.py (achado #0) — feita em
+      2026-10-31.** O Codex não respondeu à issue #35 em um dia; o
+      proprietário pediu para eu mesmo resolver. Como esta branch nunca
+      havia modificado `sessions.py`/`recovery_trial.py`/`operations.py`
+      desde o commit-base comum (`47f1acc`) — só o `main` (PR #26,
+      `de2fe89`) os estendeu com hashcat/John/formatos/RAR5 — a
+      reconciliação foi trazer a versão do `main` (que é um superconjunto
+      real, não um fork incompatível) para esta branch: `sessions.py`,
+      `recovery_trial.py`, `cli/operations.py`, os módulos novos
+      (`cryptanalysis/formats.py`, `cryptanalysis/rar5.py`,
+      `external_tool_runtime.py`, `external_tools.py`,
+      `external_tools_child.py`), os testes novos, os workflows de CI, a
+      documentação (`recovery-multiformat.md` etc.) e o extra
+      `recovery` do `pyproject.toml`. Mesclado manualmente só o ponto que
+      ambos os lados tocaram (a lista de comandos despachados em
+      `cli/__init__.py`), preservando os dois conjuntos. Validado: suíte
+      completa (575 testes, 0 falhas; com as dependências reais
+      instaladas — `pip install ".[recovery]"` — ainda menos testes
+      pulados), `demo.py`, `try-me.py`, Playwright estático, e um teste
+      de ponta a ponta manual real: criei um ZIP com senha de verdade
+      (`pyzipper`, AES), rodei `cyber recovery-session start ... --mode
+      zip` com a senha certa escondida entre candidatas erradas, e a
+      sessão achou e validou de verdade (`password_validated: true`) na
+      terceira tentativa. O item 1 da issue #35 (`_pdf` sem try/except)
+      foi corrigido direto no `main` (commit `217f709`), antes desta
+      reconciliação trazer o arquivo corrigido para aqui.
+- [x] Lógica de "camada 2 só dispara se a camada 1 esgotar sem achar"
+      (encadeamento entre duas sessões de `recovery-session`) — agora
+      **desbloqueada** pela reconciliação acima: o `recovery-session`
+      real (hashcat/John/formatos/RAR5) já existe nesta branch, e o
+      gerador (camada 2) já produz arquivo de candidatas no formato
+      certo que esse mesmo `recovery-session` consome sem mudança
+      nenhuma. O encadeamento *automático* propriamente dito (disparar a
+      camada 2 sozinho quando a camada 1 termina sem achar, sem o
+      operador precisar rodar o segundo comando manualmente) ainda não
+      foi escrito — ver próximo item.
 - [x] Testes de geração determinística a partir de temas fixos (sem IA,
       só o gerador de regras) — feito.
 - [ ] Teste de encadeamento camada 1 → camada 2 — pendente, junto com o

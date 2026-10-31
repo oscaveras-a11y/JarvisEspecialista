@@ -2,6 +2,10 @@
 
 Requisito atualizado pelo proprietário: atender múltiplos tipos de arquivos; o cliente fornece autorização e escopo, sem depender de chave fornecida. A entrada agora é uma triagem reproduzível de arquivo ou lote. O parecer não é uma promessa de recuperação.
 
+## Triagem e tentativas de senha são operações distintas
+
+As tabelas abaixo descrevem `assess-recovery`, que continua sendo triagem por prefixo e não tenta senhas. O fluxo separado `recovery-session` acrescenta validadores para ZIP, 7z, PDF, OOXML e PKCS12, além dos anteriores; veja [formatos, ferramentas e verificações](recovery-multiformat.md). Esses modos confirmam candidatas fornecidas pelo proprietário e não exportam senha nem arquivo desbloqueado. RAR e variantes não suportadas não devem ser anunciados como recuperáveis.
+
 ## Cobertura comprovável desta entrega
 
 | Família | Implementado | Não demonstrado |

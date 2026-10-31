@@ -7,10 +7,15 @@ import os
 from pathlib import Path
 import sys
 import stat
+import shutil
 import time
 from uuid import uuid4
 from cyber_core.agents.runner import run_bounded
 from cyber_core.errors import CoreError
+from cyber_core.cryptanalysis.formats import MODES as INTERNAL_MODES, VALIDATION as INTERNAL_VALIDATION, select_mode
+from cyber_core.external_tools import MODES as EXTERNAL_MODES, VALIDATION as EXTERNAL_VALIDATION, select_external_mode, external_configuration
+MODES = (*INTERNAL_MODES, *EXTERNAL_MODES)
+VALIDATION = {**INTERNAL_VALIDATION, **EXTERNAL_VALIDATION}
 from cyber_core.memory import audit, encoded, utc
 from cyber_core.permissions import local_path, storage_root
 from cyber_core.verification.artifacts import verified_result, result_digest
@@ -45,7 +50,7 @@ def _cleanup_claim(core, row):
         pending = folder/"result.pending"
         if pending.exists():
             local_path(pending).unlink()
-        folder.rmdir()
+        shutil.rmtree(folder)
     # The flat path is retained for cleanup of pre-release sessions.
     legacy = root/(job+"-"+token+".pending")
     if legacy.exists():
@@ -111,6 +116,27 @@ class RecoverySessions:
         row = self._row(case, job)
         self._validate(row)
         return self._public(row)
+
+    def reveal_password(self, case, job):
+        """Explicit user-requested display; no secret is copied into durable results."""
+        with self.db:
+            self.db.execute("BEGIN IMMEDIATE")
+            self._ready(case)
+            row = self._row(case, job)
+            self._validate(row)
+            if row["status"] != "succeeded" or row["mode"] == "ccaes1" or row["cursor"] < 1:
+                raise CoreError("No recovered password is available")
+            verified_result(self.core, case, row["task_id"])
+            values, commitment = self._material(case, row["material_path"], self._secret(job))
+            if not hmac.compare_digest(commitment, row["material_commitment"]) or len(values) != row["total_candidates"]:
+                raise CoreError("Recovery candidate material changed")
+            value = values[row["cursor"] - 1]
+            try:
+                password, encoding = value.decode("utf-8"), "utf-8"
+            except UnicodeDecodeError:
+                password, encoding = value.hex(), "hex"
+            self._event(case, "recovery_password_displayed", {"session": job})
+            return {"id": job, "password": password, "password_encoding": encoding}
 
     def jobs(self, case):
         self.core.get(case)
@@ -187,7 +213,7 @@ class RecoverySessions:
 
     def start(self, case, source, material, *, mode="ccaes1", hours=24, max_candidates=100000):
         self._ready(case)
-        if mode not in ("ccaes1","ssh-private") or not _number(hours, 1/3600, 24):
+        if mode not in (*MODES, "auto") or not _number(hours, 1/3600, 24):
             raise CoreError("Invalid recovery mode or initial time window")
         if type(max_candidates) is not int or not 1 <= max_candidates <= 100000:
             raise CoreError("Invalid recovery candidate limit")
@@ -197,14 +223,17 @@ class RecoverySessions:
             raise CoreError("Target and candidate material must differ")
         with target.open("rb") as handle:
             header = handle.read(64)
-        if (target.stat().st_size > min(self.core.max_bytes, 8*1024*1024) or
-            (mode == "ccaes1" and not header.startswith(b"CCAES1")) or
-            (mode == "ssh-private" and not header.startswith((b"-----BEGIN OPENSSH PRIVATE KEY-----",
-                 b"-----BEGIN ENCRYPTED PRIVATE KEY-----",b"-----BEGIN RSA PRIVATE KEY-----",
-                 b"-----BEGIN EC PRIVATE KEY-----",b"-----BEGIN PRIVATE KEY-----")))):
+        if target.stat().st_size > min(self.core.max_bytes, 8*1024*1024):
             raise CoreError("Unsupported or oversized recovery input")
+        mode = select_external_mode(mode, header) if mode in EXTERNAL_MODES else select_mode(mode, header)
         job, secret = uuid4().hex, os.urandom(32)
         values, commitment = self._material(case, material_path, secret, max_candidates)
+        if mode in EXTERNAL_MODES:
+            from cyber_core.external_tool_runtime import MODES as BACKENDS
+            external_configuration(BACKENDS[mode])
+            maximum = 64 if mode.startswith(("john-", "hashcat-")) else 1024
+            if any(len(v) > maximum or any(c in v for c in (b"\r", b"\n", b"\0")) for v in values):
+                raise CoreError("External candidate is unsupported")
         if mode == "ccaes1":
             try:
                 if any(len(v) != 64 or len(bytes.fromhex(v.decode("ascii"))) != 32 for v in values):
@@ -350,9 +379,14 @@ class RecoverySessions:
                 candidate = bytes.fromhex(value.decode("ascii")) if row["mode"] == "ccaes1" else value
                 scratch = stage_folder/"result.pending"
                 request = {"mode":row["mode"],"source":artifact["copy"],"candidate":candidate.hex(),"output":str(scratch),"source_sha256":artifact["sha256"]}
+                if row["mode"] in EXTERNAL_MODES:
+                    from cyber_core.external_tool_runtime import MODES as BACKENDS
+                    request["config"] = external_configuration(BACKENDS[row["mode"]])
+                    request["scratch"] = str(stage_folder)
                 remaining = min(stop_at-time.monotonic(),row["deadline"]-time.time(),self.core.timeout)
                 if remaining <= 0:
                     break
+                request["timeout"] = remaining
                 try:
                     response = run_bounded([sys.executable,"-I",str(Path(__file__).with_name("recovery_trial.py"))],
                                        encoded(request),cwd=output_folder,timeout=remaining,max_output=4096,
@@ -376,7 +410,8 @@ class RecoverySessions:
                     break
                 result = json.loads(response["stdout"])
                 if type(result.get("matched")) is not bool or any(k not in
-                    ("matched","authenticated","sha256","size","algorithm","private_material_validated") for k in result):
+                    ("matched","authenticated","sha256","size","algorithm","private_material_validated",
+                     "password_validated","format","validation","backend_version","backend_sha256","converter_sha256","payload_integrity_verified") for k in result):
                     raise CoreError("Invalid recovery trial response")
                 published = None
                 if result["matched"]:
@@ -390,6 +425,28 @@ class RecoverySessions:
                         published = {k:result[k] for k in ("authenticated","sha256","size","algorithm")}
                         published_path = output_folder/(job+"-"+token+".recovered")
                         published["output"] = str(published_path)
+                    elif row["mode"] in VALIDATION:
+                        if (result.get("password_validated") is not True or result.get("format") != row["mode"]
+                                or result.get("validation") != VALIDATION[row["mode"]]):
+                            raise CoreError("Password validation contract missing")
+                        published = {"password_validated": True, "format": row["mode"],
+                                     "validation": VALIDATION[row["mode"]]}
+                        if row["mode"] in ("rar5", "john-rar5"):
+                            if result.get("payload_integrity_verified") is not False:
+                                raise CoreError("RAR5 payload integrity scope missing")
+                            published["payload_integrity_verified"] = False
+                        if row["mode"] in EXTERNAL_MODES:
+                            import re
+                            if (not isinstance(result.get("backend_version"), str) or
+                                not re.fullmatch(r"\d+(?:\.\d+){1,3}", result["backend_version"]) or
+                                not isinstance(result.get("backend_sha256"), str) or
+                                not re.fullmatch(r"[0-9a-f]{64}", result["backend_sha256"])):
+                                raise CoreError("External backend identity missing")
+                            published.update({k: result[k] for k in ("backend_version", "backend_sha256")})
+                            if "converter_sha256" in result:
+                                if not re.fullmatch(r"[0-9a-f]{64}", result["converter_sha256"]):
+                                    raise CoreError("Invalid converter identity")
+                                published["converter_sha256"] = result["converter_sha256"]
                     else:
                         if result.get("private_material_validated") is not True:
                             raise CoreError("Private key validation missing")
@@ -439,7 +496,7 @@ class RecoverySessions:
             # orphan cannot recreate a file after this directory disappears.
             stage_dir = self.core.home/"recovery-staging"/(job+"-"+token)
             if stage_dir.exists():
-                local_path(stage_dir,directory=True).rmdir()
+                shutil.rmtree(local_path(stage_dir,directory=True))
             with self.db:
                 self.db.execute("BEGIN IMMEDIATE")
                 current = self._row(case,job)
