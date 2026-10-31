@@ -109,5 +109,56 @@ class GeneratedWordlistMaterializationTests(unittest.TestCase):
             self.core.materialize_generated_wordlist(self.case, str(self.scope / 'x.txt'), ['rex'])
 
 
+class BruteforceWordlistMaterializationTests(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        root = Path(self.tmp.name)
+        self.scope = root / 'inputs'
+        self.scope.mkdir()
+        self.core = Core(root / 'state')
+        self.addCleanup(self.core.close)
+        self.case = self.core.investigate('p', 'Gerar wordlist por força bruta', str(self.scope), 'owner', 'auth')
+
+    def test_materializes_exhaustive_candidates_with_an_explicit_bound(self):
+        out = self.core.materialize_bruteforce_wordlist(self.case, str(self.scope / 'brute.txt'),
+                                                          charset='ab', min_length=1, max_length=2, limit=100)
+        self.assertEqual(out['source'], 'bruteforce')
+        self.assertEqual(out['lines'], 6)
+        lines = (self.scope / 'brute.txt').read_text().splitlines()
+        self.assertEqual(set(lines), {'a', 'b', 'aa', 'ab', 'ba', 'bb'})
+
+    def test_limit_none_means_unbounded_but_still_stoppable_by_max_length(self):
+        # Without an explicit candidate limit, max_length alone must still
+        # bound the file (otherwise this test itself would never finish).
+        out = self.core.materialize_bruteforce_wordlist(self.case, str(self.scope / 'brute.txt'),
+                                                          charset='ab', min_length=1, max_length=4)
+        self.assertEqual(out['lines'], 2 + 4 + 8 + 16)
+
+    def test_rejects_invalid_charset(self):
+        with self.assertRaises(CoreError):
+            self.core.materialize_bruteforce_wordlist(self.case, str(self.scope / 'x.txt'), charset='', limit=10)
+
+    def test_rejects_invalid_lengths(self):
+        with self.assertRaises(CoreError):
+            self.core.materialize_bruteforce_wordlist(self.case, str(self.scope / 'x.txt'),
+                                                       min_length=5, max_length=2, limit=10)
+
+    def test_rejects_destination_outside_scope(self):
+        with tempfile.TemporaryDirectory() as other:
+            with self.assertRaises(CoreError):
+                self.core.materialize_bruteforce_wordlist(self.case, str(Path(other) / 'x.txt'), limit=10)
+
+    def test_rejects_existing_destination(self):
+        (self.scope / 'x.txt').write_text('already here')
+        with self.assertRaises(CoreError):
+            self.core.materialize_bruteforce_wordlist(self.case, str(self.scope / 'x.txt'), limit=10)
+
+    def test_rejects_while_paused(self):
+        self.core.pause(self.case)
+        with self.assertRaises(CoreError):
+            self.core.materialize_bruteforce_wordlist(self.case, str(self.scope / 'x.txt'), limit=10)
+
+
 if __name__ == '__main__':
     unittest.main()

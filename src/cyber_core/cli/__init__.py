@@ -99,10 +99,28 @@ def parser():
     generate.add_argument('path', help='Output path inside the authorized scope; must not already exist')
     generate.add_argument('--word', dest='words', action='append', required=True,
                           help='A hint word; repeat --word for each one (1-50 words, not the password itself)')
-    generate.add_argument('--limit', type=int, default=100000,
-                          help='Maximum candidate lines to write (up to 1,000,000). A single recovery-session '
-                               'still only consumes the first 100000 candidates of a file; a larger pool is '
-                               'meant to be split across several chained sessions.')
+    generate.add_argument('--limit', type=int, default=None,
+                          help='Maximum candidate lines to write. Default: unbounded — keeps generating and '
+                               'growing the file until stopped (Ctrl+C) or the disk fills up. A single '
+                               'recovery-session still only consumes the first 100000 candidates of a file; a '
+                               'larger or unbounded pool is meant to be split across several chained sessions.')
+    bruteforce = sub.add_parser('bruteforce-wordlist',
+                                help='Exhaustively enumerate every string of a character set (letters, digits, '
+                                     'symbols by default), shortest length first, into a candidates file. '
+                                     'Honest limit: only short lengths (a handful of characters) can ever be '
+                                     'covered in full; see docs/ai-assisted-recovery-plan.md. For real exhaustive '
+                                     'search over a short password, a tool\'s own mask-attack mode (hashcat -a 3) '
+                                     'is far faster and needs no file at all.')
+    bruteforce.add_argument('case')
+    bruteforce.add_argument('path', help='Output path inside the authorized scope; must not already exist')
+    bruteforce.add_argument('--charset', default=None,
+                            help='Characters to use (default: upper+lower letters, digits, common symbols)')
+    bruteforce.add_argument('--min-length', type=int, default=1)
+    bruteforce.add_argument('--max-length', type=int, default=None,
+                            help='Default: unbounded — length keeps growing without end. See the honest limit above.')
+    bruteforce.add_argument('--limit', type=int, default=None,
+                            help='Maximum candidate lines to write. Default: unbounded — keeps generating and '
+                                 'growing the file until stopped (Ctrl+C) or the disk fills up.')
     analyze = sub.add_parser('analyze-file', help='Acquire verified copy and analyze statically')
     analyze.add_argument('case')
     analyze.add_argument('path')
@@ -269,6 +287,10 @@ def _main(argv=None):
                 result = core.materialize_wordlist(args.case, args.path, source=args.source, limit=args.limit)
             elif cmd == 'generate-wordlist':
                 result = core.materialize_generated_wordlist(args.case, args.path, args.words, limit=args.limit)
+            elif cmd == 'bruteforce-wordlist':
+                result = core.materialize_bruteforce_wordlist(args.case, args.path, charset=args.charset,
+                                                               min_length=args.min_length, max_length=args.max_length,
+                                                               limit=args.limit)
             elif cmd == 'run':
                 result = core.run_one(args.case)
             elif cmd == 'custody':

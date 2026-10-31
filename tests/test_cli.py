@@ -64,6 +64,17 @@ class CLITests(unittest.TestCase):
         self.assertEqual(len(lines), 40)
         self.assertIn('Rex', lines)
 
+    def test_bruteforce_wordlist_exhaustively_enumerates_a_small_charset(self):
+        self.cli('init')
+        case = self.cli('investigate', '--project', 'demo', '--objective', 'synthetic', '--scope', str(self.inputs), '--owner', 'owner', '--authorization', 'Synthetic lab')['id']
+        destination = self.inputs / 'brute.txt'
+        result = self.cli('bruteforce-wordlist', case, str(destination),
+                          '--charset', 'ab', '--min-length', '1', '--max-length', '2', '--limit', '100')
+        self.assertEqual(result['source'], 'bruteforce')
+        self.assertEqual(result['lines'], 6)
+        lines = destination.read_text().splitlines()
+        self.assertEqual(set(lines), {'a', 'b', 'aa', 'ab', 'ba', 'bb'})
+
     def test_logs_exposes_raw_audit_trail(self):
         self.cli('init')
         case = self.cli('investigate', '--project', 'demo', '--objective', 'synthetic', '--scope', str(self.inputs), '--owner', 'owner', '--authorization', 'Synthetic lab')['id']
