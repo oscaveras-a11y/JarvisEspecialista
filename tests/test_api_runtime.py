@@ -176,7 +176,7 @@ class ApiRuntimeTests(unittest.TestCase):
                 (root/'api.json').write_text(json.dumps(specification()))
                 (root/'grant.json').write_text(json.dumps(grant(server.server_port)))
                 (root/'matrix.json').write_text(json.dumps(matrix()))
-                plan={'version':1,'stages':['api','authentication'],'api_spec':'api.json',
+                plan={'version':1,'stages':['api','business_logic'],'api_spec':'api.json',
                       'api_matrix':'matrix.json','web_grant':'grant.json','ca_file':'ca.pem','seconds':15}
                 (root/'campaign.json').write_text(json.dumps(plan))
                 core=Core(root/'store',timeout=20)

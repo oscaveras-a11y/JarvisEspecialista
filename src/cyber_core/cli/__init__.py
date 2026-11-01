@@ -9,6 +9,7 @@ from cyber_core.agents import doctor
 from cyber_core.errors import CoreError
 from cyber_core.permissions import local_path
 from cyber_core.service import Core
+from cyber_core.cli.operations import COMMANDS as OPERATION_COMMANDS
 
 
 def parser():
@@ -101,7 +102,7 @@ def _main(argv=None):
             if cmd in ('hypothesis', 'experiment', 'research', 'verify', 'history'):
                 from cyber_core.cli.science import execute
                 result = execute(core, args)
-            elif cmd in ('api-inventory', 'pentest', 'web-probe', 'firmware-timeline', 'web-lab', 'symbols', 'functions', 'installer', 'keys', 'inventory-disk', 'inventory-pcap', 'agent-jobs', 'recovery-session', 'recovery-formats', 'external-analyze', 'external-tools'):
+            elif cmd in OPERATION_COMMANDS:
                 from cyber_core.cli.operations import execute
                 result = execute(core, args)
             elif cmd == 'init':

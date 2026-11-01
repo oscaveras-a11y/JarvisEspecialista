@@ -4,12 +4,12 @@ Os comandos web-active, web-session-check e web-access usam a mesma autorizaçã
 
 Exemplos após criar uma investigação:
 ```
-cyber-core web-active CASE active.json --seconds 180
-cyber-core web-active CASE active.json --retest-of OPERATION
-cyber-core web-session-check CASE active.json --session-material private.json --profile alice
-cyber-core web-access CASE active.json matrix.json --session-material private.json
-cyber-core pentest run CASE CAMPAIGN --session-material private.json
-cyber-core pentest resume-active CASE CAMPAIGN --reason "Revisei os efeitos e autorizo nova tentativa"
+cyber web-active CASE active.json --seconds 180
+cyber web-active CASE active.json --retest-of OPERATION
+cyber web-session-check CASE active.json --session-material private.json --profile alice
+cyber web-access CASE active.json matrix.json --session-material private.json
+cyber pentest run CASE CAMPAIGN --session-material private.json
+cyber pentest resume-active CASE CAMPAIGN --reason "Revisei os efeitos e autorizo nova tentativa"
 ```
 
 O manifesto ativo JSON versão 1 exige origin HTTPS pública, allow_active=true, authorization, expires_at com fuso, classes limitadas a reflected_xss e sql_injection e até oito routes. Cada rota declara path exato, methods, query_params e body_params; purpose é scan, login, check ou access. Não há curingas, crawling ou redirecionamento seguido. A leitura passiva continua usando seu manifesto separado.
