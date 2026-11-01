@@ -102,6 +102,7 @@ class SessionTests(unittest.TestCase):
         try: profile.login()
         except SessionError as exc:
             self.assertNotIn('synthetic-',str(exc)); self.assertIsNone(exc.__cause__)
+            self.assertIsNone(exc.__context__, 'Raw transport exceptions must be detached')
         else: self.fail('Failed transport must block')
         self.assertNotIn('synthetic-',repr(profile))
     def test_cookie_path_expiry_and_domain(self):
@@ -131,6 +132,25 @@ class SessionTests(unittest.TestCase):
         case['json_marker']['value']='missing'
         self.assertTrue(all(r['level']=='alert' for r in broker.assess_access(case)))
         self.assertNotIn('synthetic-',json.dumps(rows))
+    def test_missing_checker_expiry_isolation_and_immutable_grant(self):
+        config=self.material['profiles']['alice']
+        checker=config.pop('check')
+        with self.assertRaises(SessionError): self.broker()
+        config['check']=checker
+        broker=self.broker()
+        self.grant['routes'].append({'path':'/outside','methods':['GET'],'purpose':'scan'})
+        with self.assertRaises(SessionError): broker.isolated_profile('alice').get_headers('/outside')
+        one=broker.isolated_profile('form'); two=broker.isolated_profile('form')
+        one.login()
+        self.assertNotEqual(one._headers('/scan'),two._headers('/scan'))
+        self.material['profiles']['cookie']['cookies'][0]['expires']=time.time()-1
+        with self.assertRaises(SessionError): self.broker().isolated_profile('cookie').login()
+    def test_duplicate_json_and_no_secret_persistence(self):
+        broker=self.broker()
+        self.assertTrue(broker.isolated_profile('alice').login())
+        self.assertEqual(list(Path(self.temp.name).iterdir()),[self.path])
+        self.path.write_text('{"version":1,"version":1,"profiles":{}}')
+        with self.assertRaises(SessionError): SessionBroker(self.grant,self.path,transport=self.transport)
     def test_bounded_response_and_redirect(self):
         for response in ({'status':302,'headers':[('Location','https://evil.test')],'body':b''},
                          {'status':200,'headers':[],'body':b'x'*1048577}):
