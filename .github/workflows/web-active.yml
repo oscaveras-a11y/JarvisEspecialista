@@ -1,0 +1,40 @@
+name: Web active readiness
+on:
+  push:
+    branches: [codex/readiness-integration]
+concurrency:
+  group: active-readiness-${{ github.ref_name }}
+  cancel-in-progress: true
+permissions:
+  contents: read
+jobs:
+  active:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - run: python -m pip install .
+      - run: python scripts/run-tests.py test_web_active.py
+      - name: Prepare scoped HTTPS fixture and pinned ZAP
+        if: runner.os == 'Linux'
+        run: |
+          sudo ip address add 93.184.216.34/32 dev lo
+          echo '93.184.216.34 jarvis-fixture.test' | sudo tee -a /etc/hosts
+          docker pull ghcr.io/zaproxy/zaproxy@sha256:030d3df57735dacbb83464854758e674dd9ad01d79d12a129a8e58b1fd384238
+      - name: Real ZAP active and session integration
+        if: runner.os == 'Linux'
+        run: python scripts/run-tests.py test_web_active.py
+        env:
+          JARVIS_ACTIVE_REAL: '1'
+      - name: Complete regression suite
+        run: python scripts/run-tests.py
+        env:
+          JARVIS_HTTPS_FIXTURE: ${{ runner.os == 'Linux' && '1' || '0' }}
+          JARVIS_API_TLS: ${{ runner.os == 'Linux' && '1' || '0' }}

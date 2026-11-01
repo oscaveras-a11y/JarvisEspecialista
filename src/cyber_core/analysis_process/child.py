@@ -8,7 +8,7 @@ import time
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from cyber_core.analysis_process.network_guard import block_network
 from cyber_core.errors import CoreError
-from cyber_core.analysis_process.limits import MAX_TIMEOUT_SECONDS
+from cyber_core.analysis_process.limits import MAX_TIMEOUT_SECONDS, MAX_INPUT_BYTES
 from cyber_core.reverse_engineering import analyze
 
 
@@ -18,7 +18,7 @@ def execute(request):
         raise CoreError('Analysis operation is not allowlisted')
     source, output = Path(request['source']), Path(request['destination'])
     maximum, timeout = request['max_bytes'], request['timeout']
-    if type(maximum) is not int or not 0 <= maximum <= 268435456:
+    if type(maximum) is not int or not 0 <= maximum <= MAX_INPUT_BYTES:
         raise CoreError('Invalid analysis byte limit')
     if type(timeout) not in (int, float) or not 0 < timeout <= MAX_TIMEOUT_SECONDS:
         raise CoreError('Invalid analysis time limit')
@@ -32,7 +32,7 @@ def execute(request):
             raise CoreError('Paired analysis is not supported')
         secondary = Path(request['secondary_destination'])
         second_limit = request['secondary_max_bytes']
-        if type(second_limit) is not int or not 1 <= second_limit <= 268435456:
+        if type(second_limit) is not int or not 1 <= second_limit <= MAX_INPUT_BYTES:
             raise CoreError('Invalid secondary byte limit')
         remaining = timeout - (time.monotonic() - started)
         if remaining <= 0:

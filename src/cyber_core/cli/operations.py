@@ -1,5 +1,95 @@
 """Argument wiring for durable recovery, key metadata, inventories and agent jobs."""
 def configure(sub):
+    for name in ('web-active','web-session-check','web-access'):
+        parser=sub.add_parser(name,help='Explicitly scoped active web verification')
+        parser.add_argument('case');parser.add_argument('manifest')
+        if name=='web-access':parser.add_argument('matrix')
+        parser.add_argument('--ca-file')
+        parser.add_argument('--seconds',type=float,default=120)
+        parser.add_argument('--body-bytes',type=int,default=1048576)
+        parser.add_argument('--max-requests',type=int,default=128)
+        parser.add_argument('--session-material',required=name!='web-active')
+        if name!='web-access':parser.add_argument('--profile',required=name=='web-session-check',default='anonymous')
+        if name=='web-active':parser.add_argument('--retest-of')
+    crypto=sub.add_parser('crypto-inspect',help='Identify static crypto evidence without executing the specimen')
+    crypto.add_argument('case')
+    crypto.add_argument('path')
+    crypto.add_argument('--max-findings',type=int,default=256)
+    crypto.add_argument('--seconds',type=float,default=300)
+    crypto.add_argument('--output-bytes',type=int,default=262144)
+    crypto.add_argument('--capstone',action='store_true')
+    crypto.add_argument('--crypto-ghidra-home')
+    crypto.add_argument('--crypto-java-home')
+    campaign=sub.add_parser('pentest',help='Create and run durable automatic assessment campaigns')
+    actions=campaign.add_subparsers(dest='pentest_action',required=True)
+    for action in ('create','run','show','resume-active'):
+        command=actions.add_parser(action)
+        command.add_argument('case')
+        command.add_argument('manifest' if action=='create' else 'campaign')
+        if action=='resume-active':command.add_argument('--reason',required=True)
+        if action=='run':
+            command.add_argument('--session-material')
+            command.add_argument('--max-stages',type=int,default=16)
+            command.add_argument('--max-seconds',type=float,default=300)
+    api=sub.add_parser('api-inventory',help='Inventory supplied OpenAPI JSON without network requests')
+    api.add_argument('case')
+    api.add_argument('path')
+    api.add_argument('--grant',required=True)
+    api.add_argument('--max-bytes',dest='api_max_bytes',type=int,default=1048576)
+    api.add_argument('--max-operations',type=int,default=64)
+    api.add_argument('--output-bytes',type=int,default=131072)
+    api.add_argument('--seconds',type=float,default=30)
+    passive=sub.add_parser('web-passive',help='Collect authorized HTTPS and scan offline with networkless ZAP')
+    passive.add_argument('case')
+    passive.add_argument('manifest')
+    passive.add_argument('--ca-file')
+    passive.add_argument('--body-bytes',type=int,default=65536)
+    passive.add_argument('--seconds',type=float,default=120)
+    web=sub.add_parser('web-probe',help='Observe explicitly authorized HTTPS endpoints without writes')
+    web.add_argument('case')
+    web.add_argument('manifest')
+    web.add_argument('--ca-file',help='Optional scoped public CA certificate; TLS verification remains mandatory')
+    web.add_argument('--body-bytes',type=int,default=65536)
+    web.add_argument('--seconds',type=float,default=30)
+    web.add_argument('--inventory',action='store_true',help='Inventory bounded static HTML without submitting forms')
+    timeline=sub.add_parser('firmware-timeline',help='Correlate offline firmware records without a fraud verdict')
+    timeline.add_argument('case')
+    timeline.add_argument('path')
+    timeline.add_argument('--max-input-bytes',type=int,default=16777216)
+    timeline.add_argument('--max-events',type=int,default=10000)
+    timeline.add_argument('--max-findings',type=int,default=128)
+    timeline.add_argument('--max-line-bytes',type=int,default=16384)
+    timeline.add_argument('--max-seconds',type=float,default=30)
+    lab=sub.add_parser('web-lab',help='Run scoped synthetic HTTP laboratory')
+    lab.add_argument('case')
+    lab.add_argument('manifest')
+    symbols = sub.add_parser("symbols", help="Read COFF symbols and optionally demangle C++ without execution")
+    symbols.add_argument("case")
+    symbols.add_argument("path")
+    symbols.add_argument("--llvm-bin")
+    symbols.add_argument("--max-symbols", type=int, default=128)
+    symbols.add_argument("--max-records", type=int, default=100000)
+    symbols.add_argument("--max-name-bytes", type=int, default=512)
+    symbols.add_argument("--output-bytes", type=int, default=1048576)
+    functions = sub.add_parser("functions", help="Select static Ghidra functions and inspect references")
+    functions.add_argument("case")
+    functions.add_argument("path")
+    functions.add_argument("--name", action="append", default=[])
+    functions.add_argument("--address", action="append", type=lambda v:int(v,0), default=[])
+    functions.add_argument("--range", dest="entry_ranges", action="append", nargs=2, type=lambda v:int(v,0), default=[])
+    functions.add_argument("--max-functions", type=int, default=8)
+    functions.add_argument("--max-references", type=int, default=64)
+    functions.add_argument("--decompile-seconds", type=int, default=5)
+    functions.add_argument("--analysis-seconds", type=int, default=30)
+    functions.add_argument("--pseudocode-chars", type=int, default=4096)
+    functions.add_argument("--output-bytes", type=int, default=1048576)
+    installer = sub.add_parser("installer", help="List or extract selected NSIS files without running the installer")
+    installer.add_argument("case")
+    installer.add_argument("path")
+    installer.add_argument("--seven-zip", required=True)
+    installer.add_argument("--extract", action="store_true")
+    installer.add_argument("--max-extracted-bytes", type=int, default=1073741824)
+    installer.add_argument("--memory-bytes", type=int, default=536870912)
     sub.add_parser("recovery-formats", help="Show supported recovery formats and available dependencies")
     external = sub.add_parser("external-analyze", help="Static external identification of verified evidence")
     external.add_argument("case")
@@ -68,9 +158,67 @@ def configure(sub):
             parser.add_argument("--reason",required=True)
             parser.add_argument("--priority",action="store_true")
 
-COMMANDS = ("external-analyze","external-tools","recovery-formats","keys","inventory-disk","inventory-pcap","agent-jobs","recovery-session")
+COMMANDS = ("web-active","web-session-check","web-access","crypto-inspect","web-passive","api-inventory","pentest","web-probe","firmware-timeline","web-lab","symbols","functions","installer","external-analyze","external-tools","recovery-formats","keys","inventory-disk","inventory-pcap","agent-jobs","recovery-session")
 
 def execute(core,args):
+    if args.command in ('web-active','web-session-check','web-access'):
+        from cyber_core.pentest.active import run_active,run_session_check,run_access
+        options=dict(ca_file=args.ca_file,seconds=args.seconds,body_bytes=args.body_bytes,max_requests=args.max_requests)
+        if args.command=='web-active':
+            return run_active(core,args.case,args.manifest,profile=args.profile,session_material=args.session_material,retest_of=args.retest_of,**options)
+        if args.command=='web-session-check':
+            return run_session_check(core,args.case,args.manifest,args.session_material,profile=args.profile,**options)
+        return run_access(core,args.case,args.manifest,args.matrix,args.session_material,**options)
+    if args.command=='crypto-inspect':
+        from cyber_core.reverse_engineering.crypto_inspect import run_crypto_inspect
+        return run_crypto_inspect(core,args.case,args.path,max_findings=args.max_findings,seconds=args.seconds,
+                                  output_bytes=args.output_bytes,capstone=args.capstone,
+                                  ghidra_home=args.crypto_ghidra_home,java_home=args.crypto_java_home)
+    if args.command=="api-inventory":
+        from cyber_core.pentest.openapi import run_inventory
+        return run_inventory(core,args.case,args.path,args.grant,max_bytes=args.api_max_bytes,
+                             max_operations=args.max_operations,output_bytes=args.output_bytes,seconds=args.seconds)
+    if args.command=="pentest":
+        from cyber_core.pentest import campaigns
+        if args.pentest_action=='create':
+            return campaigns.create(core,args.case,args.manifest)
+        if args.pentest_action=='show':
+            return campaigns.show(core,args.case,args.campaign)
+        if args.pentest_action=='resume-active':
+            return campaigns.resume_active(core,args.case,args.campaign,reason=args.reason)
+        return campaigns.work(core,args.case,args.campaign,max_stages=args.max_stages,max_seconds=args.max_seconds,session_material=args.session_material)
+    if args.command=="web-passive":
+        from cyber_core.pentest.passive import run_passive
+        return run_passive(core,args.case,args.manifest,ca_file=args.ca_file,
+                           body_bytes=args.body_bytes,seconds=args.seconds)
+    if args.command=="web-probe":
+        from cyber_core.web_probe import run_probe
+        return run_probe(core,args.case,args.manifest,ca_file=args.ca_file,
+                         body_bytes=args.body_bytes,seconds=args.seconds,inventory=args.inventory)
+    if args.command=="firmware-timeline":
+        from cyber_core.forensics.firmware_timeline import run_timeline
+        return run_timeline(core,args.case,args.path,max_bytes=args.max_input_bytes,max_events=args.max_events,
+                            max_findings=args.max_findings,max_line_bytes=args.max_line_bytes,
+                            max_seconds=min(args.max_seconds,core.timeout))
+    if args.command=='web-lab':
+        from cyber_core.web_lab import run_lab
+        return run_lab(core,args.case,args.manifest)
+    if args.command == "symbols":
+        from cyber_core.reverse_engineering.coff_operation import analyze_symbols
+        return analyze_symbols(core,args.case,args.path,llvm_bin=args.llvm_bin,max_symbols=args.max_symbols,
+                               max_records=args.max_records,max_name_bytes=args.max_name_bytes,
+                               output_bytes=args.output_bytes)
+    if args.command == "functions":
+        from cyber_core.reverse_engineering.selected import analyze_functions
+        return analyze_functions(core,args.case,args.path,ghidra_home=args.ghidra_home,java_home=args.java_home,
+                                 names=args.name,addresses=args.address,ranges=args.entry_ranges,
+                                 max_functions=args.max_functions,max_references=args.max_references,
+                                 decompile_seconds=args.decompile_seconds,analysis_seconds=args.analysis_seconds,
+                                 pseudocode_chars=args.pseudocode_chars,output_bytes=args.output_bytes)
+    if args.command == "installer":
+        from cyber_core.installers import inspect_installer
+        return inspect_installer(core,args.case,args.path,seven_zip=args.seven_zip,extract=args.extract,
+                                 max_extracted_bytes=args.max_extracted_bytes,memory_bytes=args.memory_bytes)
     if args.command == "external-analyze":
         from cyber_core.external_tools import analyze_tool
         return analyze_tool(core,args.case,args.path,tool=args.tool)

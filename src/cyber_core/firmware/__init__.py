@@ -2,6 +2,10 @@
 from hashlib import sha256
 from pathlib import Path
 import struct
+import mmap
+import os
+from contextlib import contextmanager
+from cyber_core.analysis_process.limits import MAX_INPUT_BYTES
 
 from cyber_core.errors import CoreError
 
@@ -12,19 +16,38 @@ def _fail(message):
     raise CoreError('Firmware: ' + message)
 
 
-def _read(path, maximum):
-    if type(maximum) is not int or maximum < 1:
-        _fail('max_bytes must be a positive integer')
+@contextmanager
+def _mapped(path, maximum):
+    if type(maximum) is not int or not 1 <= maximum <= MAX_INPUT_BYTES:
+        _fail('max_bytes must be an integer between 1 and 1073741824')
     try:
-        with Path(path).open('rb') as source:
-            data = source.read(maximum + 1)
-    except (OSError, ValueError, TypeError, OverflowError):
+        source = Path(path).open('rb')
+    except (OSError, ValueError, TypeError):
         _fail('cannot read input file')
-    if not data:
-        _fail('empty input')
-    if len(data) > maximum:
-        _fail('input exceeds max_bytes')
-    return data
+    with source:
+        before = os.fstat(source.fileno())
+        if not before.st_size:
+            _fail('empty input')
+        if before.st_size > maximum:
+            _fail('input exceeds max_bytes')
+        try:
+            data = mmap.mmap(source.fileno(), 0, access=mmap.ACCESS_READ)
+        except (OSError, ValueError, OverflowError):
+            _fail('cannot map input file')
+        try:
+            yield data
+            after = os.fstat(source.fileno())
+            if (before.st_size, before.st_mtime_ns, before.st_ino) != (after.st_size, after.st_mtime_ns, after.st_ino):
+                _fail('input changed during analysis')
+        finally:
+            data.close()
+
+
+def _digest(data):
+    digest = sha256()
+    for at in range(0, len(data), 1024 * 1024):
+        digest.update(data[at:at + 1024 * 1024])
+    return digest.hexdigest()
 
 
 def _records(data, maximum):
@@ -188,25 +211,36 @@ def _pe(data):
     return {'class_bits': 32 if magic == 0x10b else 64, 'endian': 'little', 'machine': machine, 'sections': sections, **details}
 
 
-def _load(path, max_bytes, max_records, max_decoded_bytes):
+def _load(data, max_records, max_decoded_bytes):
     if type(max_records) is not int or max_records < 1:
         _fail('max_records must be a positive integer')
     if type(max_decoded_bytes) is not int or not 1 <= max_decoded_bytes <= 1048576:
         _fail('max_decoded_bytes must be an integer between 1 and 1048576')
-    data = _read(path, max_bytes)
-    signature = data.lstrip()[:2]
+    # Probe whitespace without duplicating a potentially gigabyte-sized image.
+    probe = 0
+    for at in range(0, len(data), 1024 * 1024):
+        block = data[at:at + 1024 * 1024]
+        trimmed = block.lstrip()
+        probe += len(block) - len(trimmed)
+        if trimmed:
+            break
+    signature = data[probe:probe + 2]
     memory = None
     if signature.startswith(b':'):
-        fmt, (memory, metadata) = 'intel_hex', _ihex(data, max_records, max_decoded_bytes)
+        if len(data) > 64 * 1024 * 1024:
+            _fail('text record input exceeds 64 MiB parser budget')
+        fmt, (memory, metadata) = 'intel_hex', _ihex(data[:], max_records, max_decoded_bytes)
     elif len(signature) == 2 and signature[:1] == b'S' and signature[1:2].isdigit():
-        fmt, (memory, metadata) = 'srecord', _srecord(data, max_records, max_decoded_bytes)
-    elif data.startswith(b'\x7fELF'):
+        if len(data) > 64 * 1024 * 1024:
+            _fail('text record input exceeds 64 MiB parser budget')
+        fmt, (memory, metadata) = 'srecord', _srecord(data[:], max_records, max_decoded_bytes)
+    elif data[:4] == b'\x7fELF':
         fmt, metadata = 'elf', _elf(data)
-    elif data.startswith(b'MZ'):
+    elif data[:2] == b'MZ':
         fmt, metadata = 'pe', _pe(data)
     else:
         fmt, metadata = 'bin', {'validation_scope': 'opaque bytes; architecture and load address unknown'}
-    result = {'format': fmt, 'size_bytes': len(data), 'sha256': sha256(data).hexdigest(), 'data_bytes': len(memory) if memory is not None else len(data), 'structure_validated': fmt != 'bin', 'metadata': metadata}
+    result = {'format': fmt, 'size_bytes': len(data), 'sha256': _digest(data), 'data_bytes': len(memory) if memory is not None else len(data), 'structure_validated': fmt != 'bin', 'metadata': metadata}
     if memory is not None:
         result.update(address_min=min(memory), address_max=max(memory), address_space='absolute')
     else:
@@ -218,17 +252,23 @@ def _load(path, max_bytes, max_records, max_decoded_bytes):
 
 def analyze_firmware(path, *, max_bytes=67108864, max_records=100000, max_decoded_bytes=1048576):
     """Inspect bounded bytes. Header validation does not establish executable safety."""
-    return _load(path, max_bytes, max_records, max_decoded_bytes)[0]
+    with _mapped(path, max_bytes) as data:
+        return _load(data, max_records, max_decoded_bytes)[0]
 
 
 def compare_firmware(first, second, *, max_bytes=67108864, max_decoded_bytes=1048576):
     """Compare sparse absolute addresses or opaque file offsets, without gap filling."""
-    a, left = _load(first, max_bytes, 100000, max_decoded_bytes)
-    b, right = _load(second, max_bytes, 100000, max_decoded_bytes)
+    with _mapped(first, max_bytes) as left, _mapped(second, max_bytes) as right:
+        a, left = _load(left, 100000, max_decoded_bytes)
+        b, right = _load(right, 100000, max_decoded_bytes)
+        return _compare(a, left, b, right)
+
+
+def _compare(a, left, b, right):
     if a['address_space'] != b['address_space']:
         _fail('cannot compare absolute addresses with file offsets')
     sparse = isinstance(left, dict)
-    addresses = sorted(left.keys() | right.keys()) if sparse else range(max(len(left), len(right)))
+    addresses = sorted(left.keys() | right.keys()) if sparse else _changed_offsets(left, right)
     missing_left = missing_right = differing = 0
     ranges, previous = [], None
     range_count = 0
@@ -248,3 +288,15 @@ def compare_firmware(first, second, *, max_bytes=67108864, max_decoded_bytes=104
             ranges[-1]['end_exclusive'] = address + 1
         previous = address
     return {'first': a, 'second': b, 'address_space': a['address_space'], 'differing_bytes': differing, 'missing_from_first': missing_left, 'missing_from_second': missing_right, 'changed_ranges': ranges, 'changed_ranges_total': range_count, 'ranges_truncated': range_count > 1000}
+
+
+def _changed_offsets(left, right):
+    """Skip equal chunks in native code; retain byte-exact differing ranges."""
+    chunk = 1024 * 1024
+    for at in range(0, max(len(left), len(right)), chunk):
+        a, b = left[at:at + chunk], right[at:at + chunk]
+        if a == b:
+            continue
+        for offset in range(max(len(a), len(b))):
+            if (a[offset] if offset < len(a) else None) != (b[offset] if offset < len(b) else None):
+                yield at + offset
