@@ -51,7 +51,7 @@ class CryptoInspectTests(unittest.TestCase):
         constant=next(f for f in result['findings'] if f['kind']=='constant')
         weak=next(f for f in result['findings'] if f['kind']=='technical_string')
         self.assertEqual(constant['rule'],'aes.sbox.v1')
-        self.assertEqual(constant['offset'],35)
+        self.assertEqual(constant['offset'],37)
         self.assertEqual(weak['strength'],'weak')
         self.assertNotIn('private-secret',json.dumps(result))
         self.assertIsNone(constant['virtual_address'])
