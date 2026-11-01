@@ -121,6 +121,21 @@ class CryptoInspectTests(unittest.TestCase):
         data[752:768]=b'\0\0BCryptEncryptX'
         data+=b'\0'
         with self.assertRaises(CoreError):self.scan(bytes(data))
+    def test_mapping_rejects_conflicts_inside_requested_range(self):
+        from cyber_core.reverse_engineering.crypto_structures import address,file_offset
+        meta={'section_headers':[
+            {'file_offset':512,'file_size':512,'virtual_address':4096},
+            {'file_offset':1024,'file_size':256,'virtual_address':4224}]}
+        self.assertEqual(address(meta,'pe',512,128),4096)
+        self.assertIsNone(address(meta,'pe',512,256))
+        with self.assertRaises(CoreError):file_offset(meta,'pe',4096,256)
+        data=bytearray(pe(AES+bytes(256)))
+        struct.pack_into('<H',data,134,2)
+        struct.pack_into('<8sIIIIIIHHI',data,432,b'.other',256,0x1080,256,1024,0,0,0,0,0x40000040)
+        result=self.scan(bytes(data)+bytes(256))
+        constant=next(f for f in result['findings'] if f['kind']=='constant')
+        self.assertIsNone(constant['virtual_address'])
+
     def test_core_commit_guard_rejects_evidence_tamper(self):
         from unittest.mock import patch
         from cyber_core.service import Core
