@@ -142,6 +142,16 @@ class ActiveGrantTests(unittest.TestCase):
                 with m.ActiveGateway(grant(origin)) as g:
                     self.assertIn(b'502',request(g,raw))
                     self.assertEqual(g.counters['completed'],0)
+                with m.ActiveGateway(grant(origin),ca_pem=cert.read_text()) as g:
+                    real_resolve=m.resolve_public;calls=[]
+                    def delayed_resolve(*args):
+                        calls.append(time.monotonic())
+                        if len(calls)==1:time.sleep(.65)
+                        return real_resolve(*args)
+                    with patch.object(m,'resolve_public',side_effect=delayed_resolve):
+                        g.perform('GET','/scan')
+                        began=time.monotonic();g.perform('GET','/scan')
+                        self.assertGreaterEqual(time.monotonic()-began,.45,'interval measured from upstream send')
                 answers=[(socket.AF_INET,socket.SOCK_STREAM,6,'',(ip,server.server_port)) for ip in (address,'127.0.0.1')]
                 with m.ActiveGateway(grant(origin),ca_pem=cert.read_text()) as g,patch('socket.getaddrinfo',return_value=answers):
                     self.assertIn(b'502',request(g,raw));self.assertEqual(g.counters['attempts'],1)
