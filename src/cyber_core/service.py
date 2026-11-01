@@ -8,11 +8,12 @@ from cyber_core.errors import CoreError
 from cyber_core.memory import audit, connect, encoded, utc, verify
 from cyber_core.permissions import local_path, scoped_path, storage_root
 from cyber_core.analysis_process import analyze_in_process
+from cyber_core.analysis_process.limits import MAX_INPUT_BYTES
 
 
 class Core:
     def __init__(self, home, *, max_bytes=64 * 1024 * 1024, timeout=60):
-        if not 1 <= max_bytes <= 256 * 1024 * 1024 or not 0 < timeout <= 3600:
+        if type(max_bytes) is not int or not 1 <= max_bytes <= MAX_INPUT_BYTES or type(timeout) not in (int, float) or not 0 < timeout <= 3600:
             raise CoreError('Invalid resource limits')
         self.home = storage_root(home)
         self.max_bytes, self.timeout = max_bytes, timeout

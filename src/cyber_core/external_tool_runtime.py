@@ -82,7 +82,14 @@ def scratch_limit(root):
         if count > 1024 or item.is_symlink():
             raise CoreError("External scratch entry limit")
         if item.is_file():
-            total += item.stat().st_size
+            try:
+                size = item.stat().st_size
+            except FileNotFoundError:
+                # A tool may remove/rename its own temporary file after is_file().
+                # Missing files consume no current scratch bytes; all other I/O
+                # errors, entry counts, symlinks and size violations still fail.
+                continue
+            total += size
             if total > 32*1024*1024:
                 raise CoreError("External scratch byte limit")
 
