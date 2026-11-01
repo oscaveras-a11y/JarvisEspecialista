@@ -151,6 +151,16 @@ class SessionTests(unittest.TestCase):
         self.assertEqual(list(Path(self.temp.name).iterdir()),[self.path])
         self.path.write_text('{"version":1,"version":1,"profiles":{}}')
         with self.assertRaises(SessionError): SessionBroker(self.grant,self.path,transport=self.transport)
+    def test_explicit_null_marker_must_exist_and_hash_is_supported(self):
+        import hashlib
+        check=self.material['profiles']['alice']['check']
+        check['json_marker']={'field':'absent','value':None}
+        with self.assertRaises(SessionError): self.broker().isolated_profile('alice').login()
+        del check['json_marker']
+        check['sha256']=hashlib.sha256(b'{"authenticated": true}').hexdigest()
+        self.assertTrue(self.broker().isolated_profile('alice').login())
+        check['sha256']='0'*64
+        with self.assertRaises(SessionError): self.broker().isolated_profile('alice').login()
     def test_bounded_response_and_redirect(self):
         for response in ({'status':302,'headers':[('Location','https://evil.test')],'body':b''},
                          {'status':200,'headers':[],'body':b'x'*1048577}):
