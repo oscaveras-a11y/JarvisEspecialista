@@ -116,6 +116,8 @@ class ActiveGrantTests(unittest.TestCase):
                 def log_message(self,*args):pass
                 def do_GET(self):
                     type(self).seen.append((self.path,self.headers.get('Authorization')))
+                    if self.path.startswith('/scan?q=headers'):
+                        self.send_response(200);self.send_header('X-One','x'*40000);self.send_header('X-Two','x'*40000);self.end_headers();return
                     if self.path.startswith('/scan?q=large'):
                         self.send_response(200);self.send_header('Content-Length','8192');self.end_headers();self.wfile.write(b'x'*8192);return
                     self.send_response(302);self.send_header('Location','https://127.0.0.1/private')
@@ -157,6 +159,10 @@ class ActiveGrantTests(unittest.TestCase):
                         g.perform('GET','/scan')
                         began=time.monotonic();g.perform('GET','/scan')
                         self.assertGreaterEqual(time.monotonic()-began,.45,'interval measured from upstream send')
+                with m.ActiveGateway(grant(origin),ca_pem=cert.read_text()) as g:
+                    huge=raw.replace(b'q=SECRET-MARKER',b'q=headers')
+                    self.assertIn(b'502',request(g,huge))
+                    self.assertLessEqual(g.observations[0]['wire_bytes'],65537,'oversize headers must be bounded while reading')
                 answers=[(socket.AF_INET,socket.SOCK_STREAM,6,'',(ip,server.server_port)) for ip in (address,'127.0.0.1')]
                 with m.ActiveGateway(grant(origin),ca_pem=cert.read_text()) as g,patch('socket.getaddrinfo',return_value=answers):
                     self.assertIn(b'502',request(g,raw));self.assertEqual(g.counters['attempts'],1)
