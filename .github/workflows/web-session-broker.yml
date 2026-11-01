@@ -2,11 +2,6 @@ name: Web session broker
 on:
   push:
     branches: [codex/web-session-broker]
-  pull_request:
-    paths:
-      - 'src/cyber_core/pentest/web_sessions.py'
-      - 'tests/test_web_sessions.py'
-      - '.github/workflows/web-session-broker.yml'
 permissions:
   contents: read
 jobs:

@@ -93,3 +93,18 @@ server and a trusted injected synthetic transport, plus the complete regression
 suite on Linux and Windows. That fixture proves broker behavior, not TLS/egress
 containment. Real synthetic HTTPS and ZAP gateway containment belong to the
 combined active integration. No live site operation was performed.
+
+## Execution ledger
+Ruling: use an injected gateway transport rather than a second network adapter —
+one enforcement point owns upstream TLS and all budgets; broker-only fixture
+tests cannot prove network containment, which remains the combined front's gate.
+Ruling: retain a keyed HMAC only in memory instead of a persisted input hash —
+mutation detection remains available without an offline credential verifier.
+Ruling: reject Domain/non-Secure cookies and unsupported interactive flows —
+coverage is explicit and narrower than a full browser session engine.
+Initial RED: f260c49b1bb10d1a0f74151f96bad72eb2f71f13, run 41259315591,
+eight expected missing-capability assertion failures.
+Secret-context RED: b27a9165688ae6378e6e9c46fd40cda382d3188e, run 41259475105,
+raw exception context retained; fixed by 28e374a0f0e7bb52e55001017c80b1154811c766.
+Missing-marker RED: 6feaaf1a94590dde2aa3ea79fb4c825e81df21ed, run 41259584261,
+absent field matched null; fixed by requiring field presence.
