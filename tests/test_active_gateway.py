@@ -77,6 +77,13 @@ class ActiveGrantTests(unittest.TestCase):
             self.assertEqual(g.counters['attempts'],0)
             self.assertNotIn('SECRET-MARKER',json.dumps(g.snapshot()))
 
+    @unittest.skipUnless(hasattr(socket,'AF_UNIX') and os.name!='nt','Unix gateway')
+    def test_scanner_cannot_send_session_only_routes(self):
+        m=module();g=grant();g['routes'][0]['purpose']='login'
+        with m.ActiveGateway(g) as gateway:
+            self.assertIn(b'403',request(gateway,b'GET /scan HTTP/1.1\\r\\nHost: example.com\\r\\n\\r\\n'))
+            self.assertEqual(gateway.counters['attempts'],0)
+
     @unittest.skipUnless(os.environ.get('JARVIS_HTTPS_FIXTURE')=='1','isolated GitHub TLS route')
     def test_real_tls_secrets_redirect_budget_stop_and_dns(self):
         m=module();host='jarvis-fixture.test';address='93.184.216.34'
