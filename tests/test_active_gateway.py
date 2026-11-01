@@ -97,6 +97,8 @@ class ActiveGrantTests(unittest.TestCase):
                 def log_message(self,*args):pass
                 def do_GET(self):
                     type(self).seen.append((self.path,self.headers.get('Authorization')))
+                    if self.path.startswith('/scan?q=large'):
+                        self.send_response(200);self.send_header('Content-Length','8192');self.end_headers();self.wfile.write(b'x'*8192);return
                     self.send_response(302);self.send_header('Location','https://127.0.0.1/private')
                     self.send_header('Set-Cookie','session=SECRET-MARKER')
                     self.send_header('Content-Length','13');self.end_headers();self.wfile.write(b'SECRET-MARKER')
@@ -115,6 +117,17 @@ class ActiveGrantTests(unittest.TestCase):
                     self.assertTrue(g.observations[0]['tls']['certificate_sha256'])
                 with m.ActiveGateway(grant(origin),ca_pem=cert.read_text(),control=lambda:True) as g:
                     self.assertIn(b'403',request(g,raw));self.assertEqual(g.counters['attempts'],0)
+                with m.ActiveGateway(grant(origin),ca_pem=cert.read_text(),body_bytes=8) as g:
+                    self.assertIn(b'502',request(g,raw))
+                    self.assertEqual(g.observations[0]['error'],'response_body_limit')
+                with m.ActiveGateway(grant(origin),ca_pem=cert.read_text()) as g:
+                    result=g.perform('GET','/scan?q=private',headers={'Authorization':'Bearer private'})
+                    self.assertEqual(result['status'],302)
+                    self.assertEqual(result['body'],b'SECRET-MARKER')
+                    self.assertNotIn('SECRET-MARKER',json.dumps(g.snapshot()))
+                with m.ActiveGateway(grant(origin)) as g:
+                    self.assertIn(b'502',request(g,raw))
+                    self.assertEqual(g.counters['completed'],0)
                 answers=[(socket.AF_INET,socket.SOCK_STREAM,6,'',(ip,server.server_port)) for ip in (address,'127.0.0.1')]
                 with m.ActiveGateway(grant(origin),ca_pem=cert.read_text()) as g,patch('socket.getaddrinfo',return_value=answers):
                     self.assertIn(b'502',request(g,raw));self.assertEqual(g.counters['attempts'],1)
