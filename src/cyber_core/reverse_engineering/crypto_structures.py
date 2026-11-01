@@ -25,14 +25,17 @@ def address(meta,fmt,offset,size=1):
     value=matches[0]
     # Overlapping virtual mappings must resolve to the same file bytes.
     for r in regions(meta,fmt):
-        if r['virtual_address']<=value<r['virtual_address']+r['file_size']:
-            if r['file_offset']+value-r['virtual_address']!=offset:return None
+        overlap=max(value,r['virtual_address'])
+        if overlap<min(value+size,r['virtual_address']+r['file_size']):
+            if r['file_offset']+overlap-r['virtual_address']!=offset+overlap-value:return None
     return value
 def file_offset(meta,fmt,va,size=1):
     matches=[r['file_offset']+va-r['virtual_address'] for r in regions(meta,fmt)
              if r['virtual_address']<=va and va+size<=r['virtual_address']+r['file_size']]
     if not matches or len(set(matches))!=1:fail()
-    return matches[0]
+    offset=matches[0]
+    if address(meta,fmt,offset,size)!=va:fail()
+    return offset
 def _record(name,kind,at,va=None):
     try:name=name.decode('ascii').split('@',1)[0]
     except UnicodeError:return None
