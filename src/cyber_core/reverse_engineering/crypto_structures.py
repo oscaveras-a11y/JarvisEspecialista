@@ -48,6 +48,12 @@ def pe_symbols(data,meta,check):
     base=meta['image_base']
     def rva(value,size=1):
         return file_offset(meta,'pe',base+value,size)
+    def mapped_string(value,skip=0):
+        at=rva(value,skip+1)+skip
+        ends=[r['file_offset']+r['file_size'] for r in regions(meta,'pe')
+              if r['file_offset']<=at<r['file_offset']+r['file_size']]
+        if not ends:fail()
+        return at,cstring(data,at,min(ends))
     output=[]
     if count>1:
         start,length=struct.unpack_from('<II',data,directory+8)
@@ -59,7 +65,7 @@ def pe_symbols(data,meta,check):
                 check()
                 lookup,stamp,chain,module,iat=struct.unpack_from('<IIIII',data,pos)
                 if not any((lookup,stamp,chain,module,iat)):terminated=True;break
-                cstring(data,rva(module),len(data))
+                mapped_string(module)
                 if not iat:fail()
                 table=lookup or iat
                 width=8 if wide else 4
@@ -70,8 +76,7 @@ def pe_symbols(data,meta,check):
                     if not value:break
                     if value>>(width*8-1):continue
                     if value>0xffffffff:fail()
-                    name_at=rva(value,3)+2
-                    name=cstring(data,name_at,len(data))
+                    name_at,name=mapped_string(value,2)
                     row=_record(name,'import',name_at)
                     if row:output.append(row)
                     if len(output)>256:output=output[:257]
@@ -92,8 +97,7 @@ def pe_symbols(data,meta,check):
                 ordinal=struct.unpack_from('<H',data,o+i*2)[0]
                 if ordinal>=nfunc:fail()
                 target=struct.unpack_from('<I',data,f+ordinal*4)[0]
-                at=rva(struct.unpack_from('<I',data,n+i*4)[0])
-                name=cstring(data,at,len(data))
+                at,name=mapped_string(struct.unpack_from('<I',data,n+i*4)[0])
                 # Forwarder strings are not executable addresses.
                 va=None if start<=target<start+length else base+target
                 if va is not None:rva(target)

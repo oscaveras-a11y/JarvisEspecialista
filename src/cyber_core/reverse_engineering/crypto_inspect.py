@@ -176,6 +176,14 @@ def inspect_file(path,*,max_bytes=MAX_BYTES,max_findings=256,seconds=300,
         if fmt in ('pe','elf'):
             rows=(pe_symbols if fmt=='pe' else elf_symbols)(data,meta,check)
             coverage['structures']={'status':'completed','record_limit':100000}
+            if fmt=='elf' and not any(s['type'] in (2,11) for s in meta['section_headers']):
+                coverage['structures'].update(status='partial',reason='no_section_symbol_tables')
+            if fmt=='pe':
+                optional=int.from_bytes(data[60:64],'little')+24
+                directory=optional+(112 if meta['class_bits']==64 else 96)
+                count=int.from_bytes(data[directory-4:directory],'little')
+                if count>14 and any(data[directory+14*8:directory+15*8]):
+                    coverage['format']={'status':'partial','reason':'managed_metadata_not_interpreted'}
             try:
                 for row in rows:add(row)
             except _Cap:coverage['structures']['status']='partial'
