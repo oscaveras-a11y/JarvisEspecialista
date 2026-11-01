@@ -88,6 +88,25 @@ class WebActiveTests(unittest.TestCase):
                 self.assertEqual(after['stages'][0]['state'],'blocked')
             finally:core.close()
 
+    def test_seed_readiness_waits_for_exact_history_method_using_reads_only(self):
+        from cyber_core.pentest.active_readiness import wait_seed
+        tick=[0.0];reads=[]
+        def clock():return tick[0]
+        def pause(seconds):tick[0]+=seconds
+        def api(component,kind,action,**params):
+            self.assertEqual((component,kind,action),('core','view','childNodes'))
+            reads.append(params['url'])
+            if not params['url']:
+                return {'childNodes':[{'uri':'http://127.0.0.1:8081','method':'GET','hrefId':'1','isLeaf':False}]}
+            node={'uri':'http://127.0.0.1:8081/submit','method':'GET','hrefId':'1','isLeaf':True}
+            if tick[0]>=0.2:node.update(method='POST',hrefId='7')
+            return {'childNodes':[node]}
+        wait_seed(api,'http://127.0.0.1:8081/submit','POST','7',1,clock=clock,pause=pause)
+        self.assertGreaterEqual(tick[0],0.2)
+        self.assertGreater(len(reads),2)
+        with self.assertRaises(TimeoutError):
+            wait_seed(api,'http://127.0.0.1:8081/missing','GET','8',tick[0]+0.1,clock=clock,pause=pause)
+
     def test_cli_dispatch_reaches_each_new_adapter(self):
         import io
         from contextlib import redirect_stdout
