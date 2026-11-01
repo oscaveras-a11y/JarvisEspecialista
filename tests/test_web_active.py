@@ -88,6 +88,24 @@ class WebActiveTests(unittest.TestCase):
                 self.assertEqual(after['stages'][0]['state'],'blocked')
             finally:core.close()
 
+    def test_cli_dispatch_reaches_each_new_adapter(self):
+        import io
+        from contextlib import redirect_stdout
+        from cyber_core.cli import main
+        commands=[
+            ('web-active',['CASE','grant.json'],'cyber_core.pentest.active.run_active'),
+            ('web-session-check',['CASE','grant.json','--session-material','private.json','--profile','alice'],'cyber_core.pentest.active.run_session_check'),
+            ('web-access',['CASE','grant.json','matrix.json','--session-material','private.json'],'cyber_core.pentest.active.run_access'),
+            ('crypto-inspect',['CASE','specimen.bin'],'cyber_core.reverse_engineering.crypto_inspect.run_crypto_inspect'),
+            ('web-passive',['CASE','grant.json'],'cyber_core.pentest.passive.run_passive')]
+        with tempfile.TemporaryDirectory() as folder:
+            for command,args,adapter in commands:
+                with self.subTest(command=command),patch(adapter,return_value={'adapter':command}) as called:
+                    with redirect_stdout(io.StringIO()) as output:
+                        self.assertEqual(main(['--home',folder,command,*args]),0)
+                    self.assertEqual(json.loads(output.getvalue()),{'adapter':command})
+                    called.assert_called_once()
+
     def test_expired_active_lease_blocks_unknown_effects(self):
         from cyber_core.pentest import campaigns
         from cyber_core.service import Core
@@ -176,7 +194,16 @@ class WebActiveTests(unittest.TestCase):
                 case=core.investigate('active','Synthetic active verification',root,'owner','Disposable CI only')
                 g=grant(server.server_port);manifest.write_text(json.dumps(g))
                 vulnerable=m.run_active(core,case,manifest,ca_file=cert,seconds=180)
-                va=vulnerable['analysis']
+                def verified_scan(operation,path):
+                    analysis=operation['analysis'];scanner=analysis['scanner'];snapshot=analysis['gateway']
+                    self.assertIn(analysis['status'],('completed','partial'),json.dumps(analysis,sort_keys=True))
+                    self.assertNotIn('error',scanner);self.assertEqual(scanner['scan_count'],1)
+                    denied=snapshot['counters']['rejected']
+                    self.assertLessEqual(denied,1)
+                    self.assertEqual(denied,snapshot['counters'].get('rejected_reason_route_or_method',0))
+                    self.assertTrue(all(o['path']==path and 'error' not in o for o in snapshot['observations']))
+                    return analysis
+                va=verified_scan(vulnerable,'/reflect')
                 self.assertIn(va['status'],('completed','partial'),json.dumps(va,sort_keys=True))
                 self.assertNotIn('error',va['scanner'])
                 self.assertEqual(va['scanner']['scan_count'],1)
@@ -188,6 +215,7 @@ class WebActiveTests(unittest.TestCase):
                 self.assertLessEqual(va['gateway']['counters']['requests'],128)
                 Handler.fixed=True
                 corrected=m.run_active(core,case,manifest,ca_file=cert,seconds=180,retest_of=vulnerable['id'])
+                verified_scan(corrected,'/reflect')
                 self.assertNotIn('error',corrected['analysis']['scanner'])
                 self.assertEqual(corrected['analysis']['scanner']['scan_count'],1)
                 self.assertFalse(any(x['rule_id']=='40012' for x in corrected['analysis']['findings']))
@@ -197,7 +225,13 @@ class WebActiveTests(unittest.TestCase):
                 Handler.fixed=False
                 sql=grant(server.server_port,'sql_injection','/sql');manifest.write_text(json.dumps(sql))
                 injection=m.run_active(core,case,manifest,ca_file=cert,seconds=180)
+                verified_scan(injection,'/sql')
                 self.assertTrue(any(x['rule_id']=='40018' for x in injection['analysis']['findings']))
+                Handler.fixed=True
+                safe_sql=m.run_active(core,case,manifest,ca_file=cert,seconds=180,retest_of=injection['id'])
+                verified_scan(safe_sql,'/sql')
+                self.assertFalse(any(x['rule_id']=='40018' for x in safe_sql['analysis']['findings']))
+                Handler.fixed=False
                 # Host-only form login/cookies and bearer sessions share the same gateway.
                 g=grant(server.server_port)
                 for path,methods,purpose,params in (('/login',['POST'],'login',['username','password']),
@@ -213,6 +247,12 @@ class WebActiveTests(unittest.TestCase):
                     'visitor':{'kind':'anonymous'}}}))
                 checked=m.run_session_check(core,case,manifest,material,profile='alice',ca_file=cert,seconds=30)
                 self.assertEqual(checked['analysis']['status'],'completed')
+                authenticated=m.run_active(core,case,manifest,ca_file=cert,seconds=180,
+                    session_material=material,profile='alice')
+                self.assertTrue(authenticated['analysis']['profile']['authenticated'])
+                self.assertNotIn('error',authenticated['analysis']['scanner'])
+                self.assertEqual(authenticated['analysis']['scanner']['scan_count'],1)
+                self.assertTrue(any(x['rule_id']=='40012' for x in authenticated['analysis']['findings']))
                 matrix=root/'matrix.json';matrix.write_text(json.dumps({'version':1,'cases':[
                     {'path':'/item','allowed':['alice'],'profiles':['alice','bob','visitor'],'status':200,
                      'json_marker':{'field':'resource','value':'fixture-alice'}}]}))
