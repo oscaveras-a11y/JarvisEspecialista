@@ -177,12 +177,19 @@ class WebActiveTests(unittest.TestCase):
                 g=grant(server.server_port);manifest.write_text(json.dumps(g))
                 vulnerable=m.run_active(core,case,manifest,ca_file=cert,seconds=180)
                 va=vulnerable['analysis']
-                self.assertEqual(va['status'],'completed',json.dumps(va,sort_keys=True))
+                self.assertIn(va['status'],('completed','partial'),json.dumps(va,sort_keys=True))
+                self.assertNotIn('error',va['scanner'])
+                self.assertEqual(va['scanner']['scan_count'],1)
+                if va['status']=='partial':
+                    self.assertGreater(va['gateway']['counters'].get('rejected_reason_route_or_method',0),0)
+                self.assertTrue(all(o['path']=='/reflect' for o in va['gateway']['observations']))
                 self.assertTrue(va['scanner']['egress_blocked'])
                 self.assertTrue(any(x['rule_id']=='40012' for x in va['findings']))
                 self.assertLessEqual(va['gateway']['counters']['requests'],128)
                 Handler.fixed=True
                 corrected=m.run_active(core,case,manifest,ca_file=cert,seconds=180,retest_of=vulnerable['id'])
+                self.assertNotIn('error',corrected['analysis']['scanner'])
+                self.assertEqual(corrected['analysis']['scanner']['scan_count'],1)
                 self.assertFalse(any(x['rule_id']=='40012' for x in corrected['analysis']['findings']))
                 self.assertEqual(corrected['retest_of'],vulnerable['id'])
                 self.assertNotEqual(corrected['id'],vulnerable['id'])

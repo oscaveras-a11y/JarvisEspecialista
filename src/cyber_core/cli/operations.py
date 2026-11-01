@@ -1,12 +1,34 @@
 """Argument wiring for durable recovery, key metadata, inventories and agent jobs."""
 def configure(sub):
+    for name in ('web-active','web-session-check','web-access'):
+        parser=sub.add_parser(name,help='Explicitly scoped active web verification')
+        parser.add_argument('case');parser.add_argument('manifest')
+        if name=='web-access':parser.add_argument('matrix')
+        parser.add_argument('--ca-file')
+        parser.add_argument('--seconds',type=float,default=120)
+        parser.add_argument('--body-bytes',type=int,default=1048576)
+        parser.add_argument('--max-requests',type=int,default=128)
+        parser.add_argument('--session-material',required=name!='web-active')
+        if name!='web-access':parser.add_argument('--profile',required=name=='web-session-check',default='anonymous')
+        if name=='web-active':parser.add_argument('--retest-of')
+    crypto=sub.add_parser('crypto-inspect',help='Identify static crypto evidence without executing the specimen')
+    crypto.add_argument('case')
+    crypto.add_argument('path')
+    crypto.add_argument('--max-findings',type=int,default=256)
+    crypto.add_argument('--seconds',type=float,default=300)
+    crypto.add_argument('--output-bytes',type=int,default=262144)
+    crypto.add_argument('--capstone',action='store_true')
+    crypto.add_argument('--crypto-ghidra-home')
+    crypto.add_argument('--crypto-java-home')
     campaign=sub.add_parser('pentest',help='Create and run durable automatic assessment campaigns')
     actions=campaign.add_subparsers(dest='pentest_action',required=True)
-    for action in ('create','run','show'):
+    for action in ('create','run','show','resume-active'):
         command=actions.add_parser(action)
         command.add_argument('case')
         command.add_argument('manifest' if action=='create' else 'campaign')
+        if action=='resume-active':command.add_argument('--reason',required=True)
         if action=='run':
+            command.add_argument('--session-material')
             command.add_argument('--max-stages',type=int,default=16)
             command.add_argument('--max-seconds',type=float,default=300)
     api=sub.add_parser('api-inventory',help='Inventory supplied OpenAPI JSON without network requests')
@@ -136,9 +158,22 @@ def configure(sub):
             parser.add_argument("--reason",required=True)
             parser.add_argument("--priority",action="store_true")
 
-COMMANDS = ("web-passive","api-inventory","pentest","web-probe","firmware-timeline","web-lab","symbols","functions","installer","external-analyze","external-tools","recovery-formats","keys","inventory-disk","inventory-pcap","agent-jobs","recovery-session")
+COMMANDS = ("web-active","web-session-check","web-access","crypto-inspect","web-passive","api-inventory","pentest","web-probe","firmware-timeline","web-lab","symbols","functions","installer","external-analyze","external-tools","recovery-formats","keys","inventory-disk","inventory-pcap","agent-jobs","recovery-session")
 
 def execute(core,args):
+    if args.command in ('web-active','web-session-check','web-access'):
+        from cyber_core.pentest.active import run_active,run_session_check,run_access
+        options=dict(ca_file=args.ca_file,seconds=args.seconds,body_bytes=args.body_bytes,max_requests=args.max_requests)
+        if args.command=='web-active':
+            return run_active(core,args.case,args.manifest,profile=args.profile,session_material=args.session_material,retest_of=args.retest_of,**options)
+        if args.command=='web-session-check':
+            return run_session_check(core,args.case,args.manifest,args.session_material,profile=args.profile,**options)
+        return run_access(core,args.case,args.manifest,args.matrix,args.session_material,**options)
+    if args.command=='crypto-inspect':
+        from cyber_core.reverse_engineering.crypto_inspect import run_crypto_inspect
+        return run_crypto_inspect(core,args.case,args.path,max_findings=args.max_findings,seconds=args.seconds,
+                                  output_bytes=args.output_bytes,capstone=args.capstone,
+                                  ghidra_home=args.crypto_ghidra_home,java_home=args.crypto_java_home)
     if args.command=="api-inventory":
         from cyber_core.pentest.openapi import run_inventory
         return run_inventory(core,args.case,args.path,args.grant,max_bytes=args.api_max_bytes,
@@ -149,7 +184,9 @@ def execute(core,args):
             return campaigns.create(core,args.case,args.manifest)
         if args.pentest_action=='show':
             return campaigns.show(core,args.case,args.campaign)
-        return campaigns.work(core,args.case,args.campaign,max_stages=args.max_stages,max_seconds=args.max_seconds)
+        if args.pentest_action=='resume-active':
+            return campaigns.resume_active(core,args.case,args.campaign,reason=args.reason)
+        return campaigns.work(core,args.case,args.campaign,max_stages=args.max_stages,max_seconds=args.max_seconds,session_material=args.session_material)
     if args.command=="web-passive":
         from cyber_core.pentest.passive import run_passive
         return run_passive(core,args.case,args.manifest,ca_file=args.ca_file,

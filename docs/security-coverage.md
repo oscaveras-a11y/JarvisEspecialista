@@ -28,3 +28,10 @@ Não importar listas de credenciais vazadas nem realizar credential stuffing. Pa
 ## Critério de entrega dos próximos adaptadores
 
 Cada módulo precisa separar disponível/indisponível/parcial, escopo autorizado, execução realizada, achado suspeito e confirmação. Usar fixtures positivas e corrigidas, tempo/bytes/tentativas limitados, cancelamento, nenhuma persistência de segredos e relatórios com evidência. Instalar um pacote ou adicionar uma linha ao catálogo não conclui a integração.
+
+## Referências das ferramentas candidatas
+
+- [Semgrep](https://github.com/semgrep/semgrep): análise estática; a edição comunitária tem limites de fluxo entre arquivos/funções.
+- [pip-audit](https://github.com/pypa/pip-audit) e [npm audit](https://docs.npmjs.com/cli/v11/commands/npm-audit/): vulnerabilidades conhecidas em dependências, sem garantia de ausência de código malicioso.
+- [Gitleaks](https://github.com/gitleaks/gitleaks): detecção de segredos, exigindo redação e revisão dos achados.
+- [Nmap](https://nmap.org/book/port-scanning.html): inventário de portas; requer novo escopo de rede separado.
