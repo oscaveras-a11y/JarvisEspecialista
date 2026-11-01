@@ -8,6 +8,7 @@ import subprocess
 import tempfile
 import unittest
 import zlib
+from cyber_core.errors import CoreError
 
 AES=bytes.fromhex('637c777bf26b6fc53001672bfed7ab76ca82c97dfa5947f0add4a2af9ca472c0b7fd9326363ff7cc34a5e5f171d83115304c723c31896059a071280e2eb27b27509832c1a1b6e5aa0523bd6b329e32f8453d100ed20fcb15b6acbbe394a4c58cfd0efaafb434d338545f9027f503c9fa851a3408f929d38f5bcb6da2110fff3d2cd0c13ec5f974417c4a77e3d645d197360814fdc22a908846eeb814de5e0bdb e0323a0a4906245cc2d3ac629195e479 e7c8376d8dd54ea96c56f4ea657aae08 ba78252e1ca6b4c6e8dd741f4bbd8b8a 703eb5664803f60e613557b986c11d9e e1f8981169d98e949b1e87e9ce5528df 8ca1890dbfe6426841992d0fb054bb16')
 CHACHA=b'expand 32-byte k'
@@ -75,7 +76,28 @@ class CryptoInspectTests(unittest.TestCase):
             self.assertIsNone(finding['offset'])
             self.assertEqual(finding['source_record_offset'],0)
             broken=bytearray(maker(AES));broken[10]=ord('f') if broken[10]!=ord('f') else ord('0')
-            with self.assertRaises(Exception):self.scan(bytes(broken))
+            with self.assertRaises(CoreError):self.scan(bytes(broken))
+    def test_pe_structural_import_is_distinct_from_embedded_api_name(self):
+        data=bytearray(pe(bytes(256)))
+        struct.pack_into('<II',data,272,0x1000,40)
+        struct.pack_into('<IIIII',data,512,0x1040,0,0,0x1060,0x1040)
+        struct.pack_into('<QQ',data,576,0x1080,0)
+        data[608:619]=b'bcrypt.dll\\0'
+        data[640:656]=b'\\0\\0BCryptEncrypt\\0'
+        result=self.scan(bytes(data))
+        imported=next(f for f in result['findings'] if f['kind']=='import')
+        self.assertEqual(imported['rule'],'api.BCryptEncrypt.v1')
+        self.assertEqual(imported['offset'],642)
+        plain=self.scan(b'BCryptEncrypt\\0')
+        self.assertFalse(any(f['kind']=='import' for f in plain['findings']))
+        struct.pack_into('<Q',data,576,0x9000)
+        with self.assertRaises(CoreError):self.scan(bytes(data))
+    def test_sha256_full_round_table_is_versioned(self):
+        words='428a2f98 71374491 b5c0fbcf e9b5dba5 3956c25b 59f111f1 923f82a4 ab1c5ed5 d807aa98 12835b01 243185be 550c7dc3 72be5d74 80deb1fe 9bdc06a7 c19bf174 e49b69c1 efbe4786 0fc19dc6 240ca1cc 2de92c6f 4a7484aa 5cb0a9dc 76f988da 983e5152 a831c66d b00327c8 bf597fc7 c6e00bf3 d5a79147 06ca6351 14292967 27b70a85 2e1b2138 4d2c6dfc 53380d13 650a7354 766a0abb 81c2c92e 92722c85 a2bfe8a1 a81a664b c24b8b70 c76c51a3 d192e819 d6990624 f40e3585 106aa070 19a4c116 1e376c08 2748774c 34b0bcb5 391c0cb3 4ed8aa4a 5b9cca4f 682e6ff3 748f82ee 78a5636f 84c87814 8cc70208 90befffa a4506ceb bef9a3f7 c67178f2'
+        payload=b''.join(int(w,16).to_bytes(4,'little') for w in words.split())
+        result=self.scan(payload)
+        self.assertTrue(any(f['rule']=='sha256.k.le.v1' for f in result['findings']))
+        self.assertFalse(any(f['kind']=='constant' for f in self.scan(payload[:-4])['findings']))
     def test_chunk_overlap_and_explicit_caps(self):
         result=self.scan(bytes(65530)+AES+CHACHA*300,max_findings=3)
         self.assertTrue(result['findings_truncated'])
@@ -85,9 +107,9 @@ class CryptoInspectTests(unittest.TestCase):
         self.assertLessEqual(len(self.api().encode_result(result,4096).encode())+1,4096)
     def test_malformed_structures_and_invalid_limits_fail_closed(self):
         for data in [b'MZ'+bytes(100),b'\x7fELF'+bytes(100)]:
-            with self.assertRaises(Exception):self.scan(data)
+            with self.assertRaises(CoreError):self.scan(data)
         for limits in [dict(max_findings=257),dict(max_findings=True),dict(seconds=301),dict(max_bytes=1073741825)]:
-            with self.assertRaises(Exception):self.scan(AES,**limits)
+            with self.assertRaises(CoreError):self.scan(AES,**limits)
     def test_core_verified_acquisition_audit_and_pause(self):
         from cyber_core.service import Core
         from cyber_core.operations import saved_operations
