@@ -44,9 +44,15 @@ def analyze_tool(core, case, path, *, tool):
     with tempfile.TemporaryDirectory(prefix="cyber-analysis-") as scratch:
         request = {"tool": tool, "source": evidence["copy"], "source_sha256": evidence["sha256"],
                    "config": config, "scratch": scratch, "timeout": core.timeout}
+        # die/unblob run through external_tool_runtime.Runner (same path as
+        # recovery's external backends in cryptanalysis/sessions.py) — same
+        # RAM/CPU headroom needed for the same reason: _limit_exec.py raises
+        # its own RLIMIT_CPU to timeout*OMP_NUM_THREADS, which fails if the
+        # outer hard ceiling here isn't already at least that large.
         response = run_bounded([sys.executable, "-I", str(Path(__file__).with_name("external_tools_child.py"))],
             json.dumps(request), cwd=scratch, timeout=core.timeout, max_output=65536,
-            should_stop=stopped, env={})
+            should_stop=stopped, env={},
+            max_memory_bytes=5 * 1024 * 1024 * 1024, max_cpu_seconds=min(core.timeout * 2 + 30, 3605))
         analysis = json.loads(response["stdout"])
         if (analysis.get("backend") != tool or analysis.get("input_sha256") != evidence["sha256"]
                 or analysis.get("input_bytes") != len(raw) or type(analysis.get("identified")) is not bool
