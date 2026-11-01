@@ -155,7 +155,7 @@ class WebActiveTests(unittest.TestCase):
                 g=grant(server.server_port);manifest.write_text(json.dumps(g))
                 vulnerable=m.run_active(core,case,manifest,ca_file=cert,seconds=180)
                 va=vulnerable['analysis']
-                self.assertEqual(va['status'],'completed')
+                self.assertEqual(va['status'],'completed',json.dumps(va,sort_keys=True))
                 self.assertTrue(va['scanner']['egress_blocked'])
                 self.assertTrue(any(x['rule_id']=='40012' for x in va['findings']))
                 self.assertLessEqual(va['gateway']['counters']['requests'],128)
