@@ -2,7 +2,6 @@ name: Active gateway
 on:
   push:
     branches: [codex/active-gateway]
-  pull_request:
 jobs:
   gateway:
     strategy:
