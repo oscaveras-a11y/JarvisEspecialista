@@ -88,6 +88,28 @@ class WebActiveTests(unittest.TestCase):
                 self.assertEqual(after['stages'][0]['state'],'blocked')
             finally:core.close()
 
+    def test_expired_active_lease_blocks_unknown_effects(self):
+        from cyber_core.pentest import campaigns
+        from cyber_core.service import Core
+        with tempfile.TemporaryDirectory() as f:
+            root=Path(f);(root/'active.json').write_text(json.dumps(grant()))
+            (root/'campaign.json').write_text(json.dumps({'version':1,'stages':['dast_active'],'active_grant':'active.json'}))
+            core=Core(root/'store',timeout=10)
+            try:
+                case=core.investigate('active','Crashed worker',root,'owner','Synthetic')
+                c=campaigns.create(core,case,root/'campaign.json')
+                options={'seconds':10,'body_bytes':65536,'max_requests':128,'profile':'anonymous'}
+                campaigns._update(core,case,c,0,{'state':'running','lease_until':0,'attempts':1,
+                    'token':'b'*32,'receipt':'a'*32,'options':options},'stage_started')
+                with patch('cyber_core.pentest.active.run_active',side_effect=AssertionError('must not repeat unknown effects')):
+                    result=campaigns.work(core,case,c['campaign_id'])
+                self.assertEqual(result['stages'][0]['state'],'blocked')
+                self.assertEqual(result['stages'][0]['attempts'],1)
+                resumed=campaigns.resume_active(core,case,c['campaign_id'],reason='Reviewed synthetic effects')
+                self.assertEqual(resumed['stages'][0]['state'],'planned')
+                self.assertEqual(resumed['stages'][0]['attempts'],1)
+            finally:core.close()
+
     @unittest.skipUnless(os.environ.get('JARVIS_ACTIVE_REAL')=='1','real ZAP and scoped Unix/TLS fixture on GitHub Linux')
     def test_real_zap_active_findings_retest_sessions_access_and_controls(self):
         m=self.module()
