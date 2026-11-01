@@ -57,7 +57,9 @@ class CryptoInspectTests(unittest.TestCase):
         self.assertNotIn('private-secret',json.dumps(result))
         self.assertIsNone(constant['virtual_address'])
     def test_incomplete_and_compressed_bytes_do_not_become_aes(self):
-        for data in [AES[:128], zlib.compress(AES), b'random negative without crypto']:
+        compressed=zlib.compress(AES*32)
+        self.assertNotIn(AES,compressed)
+        for data in [AES[:128], compressed, b'random negative without crypto']:
             result=self.scan(data)
             self.assertFalse(any(f['kind']=='constant' and f['family']=='AES' for f in result['findings']))
     def test_pe_exe_and_dll_preserve_offsets_and_validated_va(self):
@@ -98,6 +100,44 @@ class CryptoInspectTests(unittest.TestCase):
         result=self.scan(payload)
         self.assertTrue(any(f['rule']=='sha256.k.le.v1' for f in result['findings']))
         self.assertFalse(any(f['kind']=='constant' for f in self.scan(payload[:-4])['findings']))
+    def test_managed_pe_and_missing_elf_symbol_tables_are_explicit_partial(self):
+        data=bytearray(pe(AES))
+        struct.pack_into('<II',data,264+14*8,0x1000,72)
+        result=self.scan(bytes(data))
+        self.assertEqual(result['status'],'partial')
+        self.assertEqual(result['coverage']['format']['reason'],'managed_metadata_not_interpreted')
+        header=bytearray(64)
+        header[:7]=b'\\x7fELF\\x02\\x01\\x01'
+        struct.pack_into('<HHIQQQIHHHHHH',header,16,2,62,1,0,0,0,0,64,0,0,0,0,0)
+        result=self.scan(bytes(header)+AES)
+        self.assertEqual(result['status'],'partial')
+        self.assertEqual(result['coverage']['structures']['reason'],'no_section_symbol_tables')
+    def test_import_name_must_remain_inside_its_declared_mapping(self):
+        data=bytearray(pe(bytes(256)))
+        struct.pack_into('<II',data,272,0x1000,40)
+        struct.pack_into('<IIIII',data,512,0x1040,0,0,0x1060,0x1040)
+        struct.pack_into('<QQ',data,576,0x10f0,0)
+        data[608:619]=b'bcrypt.dll\\0'
+        data[752:768]=b'\\0\\0BCryptEncryptX'
+        data+=b'\\0'
+        with self.assertRaises(CoreError):self.scan(bytes(data))
+    def test_core_commit_guard_rejects_evidence_tamper(self):
+        from unittest.mock import patch
+        from cyber_core.service import Core
+        from cyber_core.operations import save_operation,saved_operations
+        with tempfile.TemporaryDirectory() as folder:
+            root=Path(folder);scope=root/'scope';scope.mkdir()
+            path=scope/'specimen.bin';path.write_bytes(AES)
+            core=Core(root/'core',timeout=30)
+            try:
+                case=core.investigate('synthetic','static crypto',scope,'owner','test')
+                def tamper(core,case,kind,data,**options):
+                    Path(data['evidence']['copy']).write_bytes(b'changed')
+                    return save_operation(core,case,kind,data,**options)
+                with patch('cyber_core.operations.save_operation',side_effect=tamper):
+                    with self.assertRaises(CoreError):self.api().run_crypto_inspect(core,case,path,seconds=10)
+                self.assertEqual(core.db.execute('SELECT COUNT(*) FROM operation_results').fetchone()[0],0)
+            finally:core.close()
     def test_chunk_overlap_and_explicit_caps(self):
         result=self.scan(bytes(65530)+AES+CHACHA*300,max_findings=3)
         self.assertTrue(result['findings_truncated'])
