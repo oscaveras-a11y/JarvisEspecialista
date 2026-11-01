@@ -32,6 +32,11 @@ def request(g,raw):
             chunk=sock.recv(65536)
             if not chunk:break
             chunks.append(chunk)
+            joined=b''.join(chunks)
+            if b'\r\n\r\n' in joined:
+                head,payload=joined.split(b'\r\n\r\n',1)
+                lengths=[line.split(b':',1)[1] for line in head.split(b'\r\n') if line.lower().startswith(b'content-length:')]
+                if lengths and len(payload)>=int(lengths[0]):break
         return b''.join(chunks)
 
 class ActiveGrantTests(unittest.TestCase):
@@ -81,7 +86,7 @@ class ActiveGrantTests(unittest.TestCase):
     def test_scanner_cannot_send_session_only_routes(self):
         m=module();g=grant();g['routes'][0]['purpose']='login'
         with m.ActiveGateway(g) as gateway:
-            self.assertIn(b'403',request(gateway,b'GET /scan HTTP/1.1\\r\\nHost: example.com\\r\\n\\r\\n'))
+            self.assertIn(b'403',request(gateway,b'GET /scan HTTP/1.1\r\nHost: example.com\r\n\r\n'))
             self.assertEqual(gateway.counters['attempts'],0)
 
     @unittest.skipUnless(hasattr(socket,'AF_UNIX') and os.name!='nt','Unix gateway')
@@ -92,7 +97,7 @@ class ActiveGrantTests(unittest.TestCase):
         try:
             with m.ActiveGateway(grant(),control=stop.is_set) as g,patch.object(m,'resolve_public',side_effect=lookup):
                 result=[]
-                worker=threading.Thread(target=lambda:result.append(request(g,b'GET /scan HTTP/1.1\\r\\nHost: example.com\\r\\n\\r\\n')))
+                worker=threading.Thread(target=lambda:result.append(request(g,b'GET /scan HTTP/1.1\r\nHost: example.com\r\n\r\n')))
                 worker.start();self.assertTrue(started.wait(2));stop.set();worker.join(2)
                 self.assertFalse(worker.is_alive(),'DNS must not defeat control')
                 self.assertIn(b'403',result[0])
