@@ -393,6 +393,7 @@ class RecoverySessions:
                     # OpenCL/driver context init and AVX-JIT compilation alone exceed it,
                     # turning every real trial into a resource_limited session regardless
                     # of the actual candidate. Internal-only validators keep the default.
+                    # See "Eight real tools together" CI history for the failure this fixes.
                     trial_kwargs = {"max_memory_bytes": 2 * 1024 * 1024 * 1024} if row["mode"] in EXTERNAL_MODES else {}
                     response = run_bounded([sys.executable,"-I",str(Path(__file__).with_name("recovery_trial.py"))],
                                        encoded(request),cwd=output_folder,timeout=remaining,max_output=4096,
