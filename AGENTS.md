@@ -38,11 +38,25 @@ ou artefatos do CI.
 
 ## Divisão e entrega
 
-Codex cuida das seções pares da lista original de 21 seções; Claude das
-ímpares. Ver [docs/project-ownership.md](docs/project-ownership.md).
-Cada agente trabalha em sua branch. Não editar ou integrar automaticamente
-a branch do outro agente. Ajustes em contratos compartilhados exigem preservar
-os dois lados e validar a combinação exata.
+Mudança confirmada pelo proprietário em 2026-11-01: a divisão por paridade
+(Codex nas seções pares, Claude nas ímpares) terminou. Os dois agentes agora
+trabalham juntos nas 21 seções da lista original, um ajudando o outro, **sem
+quebrar o código do outro**. Ver [docs/project-ownership.md](docs/project-ownership.md)
+para o histórico da divisão antiga.
+
+Isso não dispensa cuidado ao tocar em trabalho que o outro agente começou:
+- Antes de editar, ler o código e os testes já existentes para entender o
+  contrato e a intenção original, não só o sintoma a corrigir (ver o episódio
+  de 2026-10-31/11-01 em project-ownership.md: uma correção que ignorou a
+  intenção original teve que ser revertida).
+- Quando o outro agente já abriu um PR ou issue sobre o mesmo ponto, checar
+  isso antes de corrigir por conta própria — PRs e issues são os canais de
+  comunicação entre os dois, e um pode responder pelo outro canal.
+- Validar a combinação exata (suíte completa, demo, scripts de validação)
+  antes de integrar qualquer mudança, não só o arquivo tocado.
+- Documentar o que foi mudado, por quê, e o que ficou pendente, para o outro
+  agente conseguir continuar sem reconstruir o contexto do zero.
+- Ajustes em contratos compartilhados exigem preservar os dois lados.
 
 Apresentar o que foi implementado, o que foi executado, o resultado e o
 pendente separadamente. Não confundir número de PR com item do projeto,
