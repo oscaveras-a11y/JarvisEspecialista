@@ -393,7 +393,8 @@ class RecoverySessions:
                     # had never been exercised together before this session's real backends
                     # landed on this branch:
                     #  - RAM: 512 MiB of virtual address space is tight for OpenCL/driver
-                    #    context init or AVX-JIT compilation.
+                    #    context init or AVX-JIT compilation; raised to 5 GiB at the
+                    #    owner's explicit request for headroom beyond the observed need.
                     #  - CPU: this is the real cause of the "Eight real tools together" CI
                     #    failure (resource_limited on every external trial). run_bounded()
                     #    sets RLIMIT_CPU's *hard* ceiling equal to its soft value on this
@@ -406,7 +407,7 @@ class RecoverySessions:
                     #    outer limit the same 2x headroom up front avoids the collision.
                     # Internal-only validators never spawn a second process, so they keep
                     # both defaults.
-                    trial_kwargs = ({"max_memory_bytes": 2 * 1024 * 1024 * 1024, "max_cpu_seconds": remaining * 2 + 30}
+                    trial_kwargs = ({"max_memory_bytes": 5 * 1024 * 1024 * 1024, "max_cpu_seconds": remaining * 2 + 30}
                                      if row["mode"] in EXTERNAL_MODES else {})
                     response = run_bounded([sys.executable,"-I",str(Path(__file__).with_name("recovery_trial.py"))],
                                        encoded(request),cwd=output_folder,timeout=remaining,max_output=4096,
