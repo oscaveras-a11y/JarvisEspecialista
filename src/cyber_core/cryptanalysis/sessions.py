@@ -388,13 +388,26 @@ class RecoverySessions:
                     break
                 request["timeout"] = remaining
                 try:
-                    # External backends (hashcat/John/qpdf/openssl/die/unblob) need far
-                    # more virtual address space than the 512 MiB agent-review default:
-                    # OpenCL/driver context init and AVX-JIT compilation alone exceed it,
-                    # turning every real trial into a resource_limited session regardless
-                    # of the actual candidate. Internal-only validators keep the default.
-                    # See "Eight real tools together" CI history for the failure this fixes.
-                    trial_kwargs = {"max_memory_bytes": 2 * 1024 * 1024 * 1024} if row["mode"] in EXTERNAL_MODES else {}
+                    # External backends (hashcat/John/qpdf/openssl/die/unblob) need more
+                    # headroom than the agent-review defaults in two independent ways that
+                    # had never been exercised together before this session's real backends
+                    # landed on this branch:
+                    #  - RAM: 512 MiB of virtual address space is tight for OpenCL/driver
+                    #    context init or AVX-JIT compilation.
+                    #  - CPU: this is the real cause of the "Eight real tools together" CI
+                    #    failure (resource_limited on every external trial). run_bounded()
+                    #    sets RLIMIT_CPU's *hard* ceiling equal to its soft value on this
+                    #    process and everything it forks. external_tool_runtime.py's own
+                    #    launcher (_limit_exec.py) then tries to raise ITS OWN RLIMIT_CPU to
+                    #    remaining*OMP_NUM_THREADS (2x, to budget wall-clock time for a
+                    #    multi-threaded CPU backend) - which fails with "not allowed to raise
+                    #    maximum limit" the moment that doubled value exceeds the hard
+                    #    ceiling fixed here, well before any real work runs. Giving this
+                    #    outer limit the same 2x headroom up front avoids the collision.
+                    # Internal-only validators never spawn a second process, so they keep
+                    # both defaults.
+                    trial_kwargs = ({"max_memory_bytes": 2 * 1024 * 1024 * 1024, "max_cpu_seconds": remaining * 2 + 30}
+                                     if row["mode"] in EXTERNAL_MODES else {})
                     response = run_bounded([sys.executable,"-I",str(Path(__file__).with_name("recovery_trial.py"))],
                                        encoded(request),cwd=output_folder,timeout=remaining,max_output=4096,
                                            should_stop=lambda:self._stop(case,job,token),**trial_kwargs)
