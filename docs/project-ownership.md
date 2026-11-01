@@ -1,6 +1,31 @@
 # Responsabilidade por seções do projeto
 
-Divisão confirmada pelo proprietário nesta conversa: a numeração é a das **21 seções do documento original**, não a das nove fases.
+## Atualização — 2026-11-01: divisão por paridade terminou
+
+O proprietário confirmou: a partir de agora, **Claude e Codex trabalham
+juntos nas 21 seções**, um ajudando o outro, sem a cerca de "pares vs.
+ímpares" abaixo. Essa seção fica como registro histórico da divisão
+original e do motivo da mudança.
+
+Contexto imediato da mudança: entre 2026-10-30 e 2026-11-01, a issue #35
+(aberta por Claude, documentando um bug confirmado em `formats.py::_pdf`
+só existente na branch do Codex) ficou um dia sem resposta por comentário.
+Claude corrigiu diretamente, sem saber que o Codex já tinha respondido —
+por **Pull Request** (#37), não por comentário na issue, com uma correção
+mais cuidadosa (distinguindo erro de sintaxe malformada de criptografia não
+suportada). Claude teve que reverter sua primeira correção e adotar a do
+Codex, fechando o PR #37 como superado. Separadamente, Claude também tentou
+"corrigir" `rar5.py` com base numa leitura errada da intenção do código, e
+teve que reverter de novo ao notar que os próprios testes do Codox
+provavam que o comportamento era proposital. Ambos os episódios estão
+documentados em detalhe na conversa da sessão; a lição prática: antes de
+corrigir sozinho algo que pertencia à "seção do outro", checar PRs abertos
+(não só issues/comentários) e os testes existentes antes de assumir que
+algo é um bug.
+
+## Divisão original (histórico, não mais em vigor)
+
+Divisão confirmada pelo proprietário em conversa anterior: a numeração é a das **21 seções do documento original**, não a das nove fases.
 
 | Responsável | Seções |
 |---|---|

@@ -5,6 +5,7 @@
 <meta name="color-scheme" content="dark"><meta name="description" content="Painel demonstrativo do CYBER CORE. Organize investigações e conheça o fluxo de análise digital.">
 <title>CYBER CORE — Centro de investigações</title>
 <link rel="icon" type="image/svg+xml" href="assets/core-shield.svg"><link rel="stylesheet" href="styles.css">
+<script src="engine.js" defer></script>
 <script src="app.js" defer></script>
 </head>
 <body>
@@ -127,12 +128,15 @@
             <option value="differentiate">differentiate</option>
             <option value="assess-recovery">assess-recovery</option>
           </select>
+          <input type="file" id="task-file" aria-label="Arquivo autorizado (até 4 MiB)" hidden>
           <input id="task-path" aria-label="Caminho demonstrativo" placeholder="caminho do arquivo autorizado" required>
           <button type="submit" class="btn btn-primary">Enfileirar</button>
         </form>
+        <div class="form-actions"><button class="btn" type="button" id="engine-refresh" hidden>Atualizar motor</button><button class="btn" type="button" id="engine-run-pending" hidden>Executar pendentes</button></div>
         <div id="tasks-list" class="list"></div>
       </div>
     </section>
+<section class="card" id="engine-results-card" hidden><h2>Resultados do CORE</h2><div id="engine-results"></div></section>
 <section class="view" id="view-logs" hidden>
       <div class="card">
         <div class="card-head">

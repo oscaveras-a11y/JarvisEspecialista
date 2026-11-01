@@ -1,7 +1,20 @@
 """Lifecycle containment only: Windows Job Objects and POSIX process groups."""
 import os
 import signal
+import sys
 import time
+
+
+def _set_child_subreaper():
+    # Linux: orphaned descendants reparent to this supervisor so we can reap them,
+    # instead of lingering as zombies on runners without an init that reaps.
+    if not sys.platform.startswith('linux'):
+        return
+    try:
+        import ctypes
+        ctypes.CDLL('libc.so.6', use_errno=True).prctl(36, 1, 0, 0, 0)  # PR_SET_CHILD_SUBREAPER
+    except (OSError, AttributeError, ValueError):
+        pass
 
 
 class PosixTree:
@@ -9,12 +22,34 @@ class PosixTree:
         self.pid = process.pid
 
     def close(self):
-        if self.pid is not None:
+        if self.pid is None:
+            return
+        pgid, self.pid = self.pid, None
+        try:
+            os.killpg(pgid, signal.SIGKILL)
+        except ProcessLookupError:
+            return
+        # Signalling is asynchronous and a killed descendant lingers as a zombie
+        # until reaped. Drain the group: reap terminated members and re-signal any
+        # survivors until the group is empty, bounded so we never block forever.
+        deadline = time.monotonic() + 5
+        while time.monotonic() < deadline:
+            while True:
+                try:
+                    reaped, _ = os.waitpid(-pgid, os.WNOHANG)
+                except (ChildProcessError, OSError):
+                    reaped = 0
+                if not reaped:
+                    break
             try:
-                os.killpg(self.pid, signal.SIGKILL)
+                os.killpg(pgid, 0)
             except ProcessLookupError:
-                pass
-            self.pid = None
+                return
+            try:
+                os.killpg(pgid, signal.SIGKILL)
+            except ProcessLookupError:
+                return
+            time.sleep(.02)
 
 
 class WindowsTree:
@@ -159,4 +194,7 @@ class WindowsTree:
 
 
 def attach(process):
-    return WindowsTree(process) if os.name == 'nt' else PosixTree(process)
+    if os.name == 'nt':
+        return WindowsTree(process)
+    _set_child_subreaper()
+    return PosixTree(process)

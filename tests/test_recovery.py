@@ -68,6 +68,18 @@ class RecoveryTests(unittest.TestCase):
         with self.assertRaisesRegex(CoreError, 'budget'):
             self.core.recover(self.case, self.source, self.key)
 
+    def test_malformed_envelope_does_not_spend_an_attempt(self):
+        truncated = self.scope / 'truncated.ccaes'
+        truncated.write_bytes(b'CCAES1')
+        for _ in range(5):
+            with self.assertRaisesRegex(CoreError, 'Unsupported or truncated'):
+                self.core.recover(self.case, truncated, self.key)
+        self.assertEqual(self.core.get(self.case)['recovery_attempts'], 0)
+        # The real key still works afterwards — no budget was spent on the bad path.
+        result = self.core.recover(self.case, self.source, self.key)
+        self.assertTrue(result['authenticated'])
+        self.assertEqual(self.core.get(self.case)['recovery_attempts'], 1)
+
     def test_outside_scope_and_revoked(self):
         outside = self.root / 'copy.ccaes'
         outside.write_bytes(self.source.read_bytes())

@@ -31,7 +31,7 @@ class CoreTests(unittest.TestCase):
         self.assertEqual(self.source.read_bytes(), before)
         self.assertEqual(self.core.tasks(self.case)[0]['status'], 'done')
         self.assertEqual(self.core.tasks(self.case)[0]['id'], task)
-        self.assertTrue(self.core.hypotheses(self.case))
+        self.assertTrue(self.core.analysis_notes(self.case))
         self.assertTrue(self.core.checkpoints(self.case))
         self.assertIn(result['sha256'], self.core.report(self.case).read_text(encoding='utf-8'))
         self.assertEqual(self.core.get(self.case)['state'], 'EM INVESTIGACAO')
@@ -131,7 +131,7 @@ class CoreTests(unittest.TestCase):
         self.core.db.commit()
         upgraded = Core(self.root / 'state')
         self.addCleanup(upgraded.close)
-        self.assertEqual(upgraded.db.execute('PRAGMA user_version').fetchone()[0], 3)
+        self.assertEqual(upgraded.db.execute('PRAGMA user_version').fetchone()[0], 8)
         self.assertEqual(upgraded.results(self.case)[0]['sha256'], result['sha256'])
         self.assertTrue(upgraded.verify_audit(self.case))
 

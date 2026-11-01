@@ -1,0 +1,22 @@
+{
+  "name": "CYBER CORE — beta pessoal conectado",
+  "image": "mcr.microsoft.com/devcontainers/python:3.3.0-3.12-bookworm",
+  "features": {
+    "ghcr.io/devcontainers/features/java:1.8.3": {
+      "version": "21",
+      "jdkDistro": "tem"
+    }
+  },
+  "remoteUser": "vscode",
+  "forwardPorts": [
+    8765
+  ],
+  "portsAttributes": {
+    "8765": {
+      "label": "CYBER CORE — motor conectado",
+      "onAutoForward": "openBrowser"
+    }
+  },
+  "postCreateCommand": "bash .devcontainer/setup.sh",
+  "postStartCommand": "bash .devcontainer/start.sh"
+}

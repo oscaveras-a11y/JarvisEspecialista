@@ -1,5 +1,10 @@
-# Public reference; runtime values are configured via environment or CLI.
+# Default limits, loaded at startup. Point CYBER_CONFIG at another file, or run
+# from a directory containing config/default.toml, to use these values. Matching
+# environment variables (CYBER_MAX_BYTES, CYBER_TIMEOUT, CYBER_MAX_ATTEMPTS,
+# CYBER_AGENT_CALLS) and CLI flags override whatever is loaded here.
 max_bytes = 67108864
+# Per-task time budget in seconds. This is not an operational deadline: raise it
+# freely (e.g. 86400 for a day) when a single authorized task runs long.
 timeout_seconds = 60
 max_attempts = 3
 agent_calls_per_case = 5

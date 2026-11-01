@@ -28,18 +28,10 @@ def recover(core, case, source, key, *, expected_sha256=None, expected_format=No
         if expected_sha256 is not None:
             if len(expected_sha256) != 64 or any(c not in '0123456789abcdefABCDEF' for c in expected_sha256):
                 raise CoreError('Expected SHA-256 must have 64 hex characters')
-        core.db.execute('BEGIN IMMEDIATE')
-        try:
-            row = core.authorize(case, path, recovery=True)
-            budget = core.get(case)['recovery_attempts']
-            if budget >= 3:
-                raise CoreError('Recovery attempt budget exhausted')
-            core.db.execute('UPDATE investigations SET recovery_attempts=recovery_attempts+1 WHERE id=?', (case,))
-            audit(core.db, case, 'recovery_attempt', {'material_id': material_id, 'source': str(path), 'attempt': budget + 1})
-            core.db.commit()
-        except BaseException:
-            core.db.rollback()
-            raise
+        # Validate the envelope itself (exists, right magic, not truncated)
+        # BEFORE spending any of the case's 3 lifetime recovery attempts: an
+        # operator typo in the path, or a non-CCAES1 file, must never consume
+        # a real attempt without ever testing the key against ciphertext.
         with path.open('rb') as handle:
             before = os.fstat(handle.fileno())
             # AESGCM is an in-memory primitive. A 64 MiB maximum bounds copies well below 8 GiB.
@@ -54,6 +46,18 @@ def recover(core, case, source, key, *, expected_sha256=None, expected_format=No
             raise CoreError('Unsupported or truncated CCAES1 envelope')
         if time.monotonic() - started > core.timeout:
             raise CoreError('Recovery time limit exceeded')
+        core.db.execute('BEGIN IMMEDIATE')
+        try:
+            row = core.authorize(case, path, recovery=True)
+            budget = core.get(case)['recovery_attempts']
+            if budget >= 3:
+                raise CoreError('Recovery attempt budget exhausted')
+            core.db.execute('UPDATE investigations SET recovery_attempts=recovery_attempts+1 WHERE id=?', (case,))
+            audit(core.db, case, 'recovery_attempt', {'material_id': material_id, 'source': str(path), 'attempt': budget + 1})
+            core.db.commit()
+        except BaseException:
+            core.db.rollback()
+            raise
         try:
             plain = AESGCM(key).decrypt(envelope[6:18], envelope[18:], MAGIC)
         except InvalidTag as exc:

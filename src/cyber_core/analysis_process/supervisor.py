@@ -117,9 +117,13 @@ def run_monitored(request, *, cwd, timeout, should_stop=None, on_started=None, m
         if tree:
             tree.close()
         if process:
-            if process.poll() is None:
-                process.kill()
-            process.wait(timeout=5)
+            # tree.close() may already have reaped the group leader; tolerate it.
+            try:
+                if process.poll() is None:
+                    process.kill()
+                process.wait(timeout=5)
+            except (ChildProcessError, OSError, subprocess.TimeoutExpired):
+                pass
             if writer:
                 writer.join(timeout=1)
             for reader in readers:
