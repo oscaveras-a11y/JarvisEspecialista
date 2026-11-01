@@ -147,8 +147,11 @@ class Runner:
                 raise CoreError("External tool execution failed")
             return process.returncode,bytes(buffers[0]),bytes(buffers[1])
         finally:
-            if process.poll() is None: process.kill()
-            process.wait(timeout=3)
+            try:
+                if process.poll() is None: process.kill()
+                process.wait(timeout=3)
+            except (ChildProcessError, OSError, subprocess.TimeoutExpired):
+                pass
             for stream in (process.stdin,process.stdout,process.stderr):
                 if not stream.closed: stream.close()
 
