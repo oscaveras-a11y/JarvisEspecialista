@@ -75,7 +75,12 @@ class ActiveGrantTests(unittest.TestCase):
              b'GET /scan HTTP/1.1\r\nHost: example.com\r\nHost: example.com\r\n\r\n',
              b'POST /scan HTTP/1.1\r\nHost: example.com\r\nContent-Length: 1\r\nTransfer-Encoding: chunked\r\n\r\nx',
              b'POST /scan HTTP/1.1\r\nHost: example.com\r\nContent-Length: 1\r\nContent-Length: 1\r\n\r\nx',
-             b'POST /scan HTTP/1.1\r\nHost: example.com\r\nContent-Type: application/json\r\nContent-Length: 16\r\n\r\n{"unknown":"x"}']
+             b'POST /scan HTTP/1.1\r\nHost: example.com\r\nContent-Type: application/json\r\nContent-Length: 15\r\n\r\n{"unknown":"x"}']
+        for body,kind in ((b'unknown=x','application/x-www-form-urlencoded'),
+                          (b'input=x&input=y','application/x-www-form-urlencoded'),
+                          (b'{"input":"x","input":"y"}','application/json'),
+                          (b'{"input":{"unknown":"x"}}','application/json')):
+            bad.append(b'POST /scan HTTP/1.1\r\nHost: example.com\r\nContent-Type: '+kind.encode()+b'\r\nContent-Length: '+str(len(body)).encode()+b'\r\n\r\n'+body)
         with m.ActiveGateway(grant()) as g,patch.object(m,'resolve_public',side_effect=AssertionError('must not resolve')):
             for raw in bad:
                 self.assertIn(request(g,raw).split(b' ')[1],(b'400',b'403',b'413'))
@@ -116,6 +121,10 @@ class ActiveGrantTests(unittest.TestCase):
                 def log_message(self,*args):pass
                 def do_GET(self):
                     type(self).seen.append((self.path,self.headers.get('Authorization')))
+                    if self.path.startswith('/scan?q=framing'):
+                        self.send_response(200);self.send_header('Content-Length','13,13');self.end_headers();self.wfile.write(b'SECRET-MARKER');return
+                    if self.path.startswith('/scan?q=headers'):
+                        self.send_response(200);self.send_header('X-One','x'*40000);self.send_header('X-Two','x'*40000);self.end_headers();return
                     if self.path.startswith('/scan?q=large'):
                         self.send_response(200);self.send_header('Content-Length','8192');self.end_headers();self.wfile.write(b'x'*8192);return
                     self.send_response(302);self.send_header('Location','https://127.0.0.1/private')
@@ -157,6 +166,20 @@ class ActiveGrantTests(unittest.TestCase):
                         g.perform('GET','/scan')
                         began=time.monotonic();g.perform('GET','/scan')
                         self.assertGreaterEqual(time.monotonic()-began,.45,'interval measured from upstream send')
+                with m.ActiveGateway(grant(origin),ca_pem=cert.read_text()) as g:
+                    huge=raw.replace(b'q=SECRET-MARKER',b'q=headers')
+                    self.assertIn(b'502',request(g,huge))
+                    self.assertLessEqual(g.observations[0]['wire_bytes'],65537,'oversize headers must be bounded while reading')
+                with m.ActiveGateway(grant(origin),ca_pem=cert.read_text()) as g:
+                    self.assertIn(b'502',request(g,raw.replace(b'q=SECRET-MARKER',b'q=framing')))
+                    self.assertEqual(g.observations[0]['error'],'response_framing')
+                public_answers=[(socket.AF_INET,socket.SOCK_STREAM,6,'',(address,server.server_port))]
+                private_answers=[(socket.AF_INET,socket.SOCK_STREAM,6,'',('127.0.0.1',server.server_port))]
+                with m.ActiveGateway(grant(origin),ca_pem=cert.read_text()) as g,patch('socket.getaddrinfo',side_effect=[public_answers,private_answers]):
+                    self.assertIn(b'302',request(g,raw))
+                    self.assertIn(b'502',request(g,raw))
+                    self.assertEqual(g.counters['attempts'],2)
+                    self.assertEqual(g.counters['completed'],1)
                 answers=[(socket.AF_INET,socket.SOCK_STREAM,6,'',(ip,server.server_port)) for ip in (address,'127.0.0.1')]
                 with m.ActiveGateway(grant(origin),ca_pem=cert.read_text()) as g,patch('socket.getaddrinfo',return_value=answers):
                     self.assertIn(b'502',request(g,raw));self.assertEqual(g.counters['attempts'],1)
