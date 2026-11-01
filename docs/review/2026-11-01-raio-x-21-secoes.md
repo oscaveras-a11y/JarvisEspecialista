@@ -38,10 +38,18 @@ funcionalidade "desaparecida".
   existem e testados. Gap: comunicação real com credenciais de API
   (`CYBER_CODEX_API_KEY`/`CYBER_ANTHROPIC_API_KEY`) ainda não validada
   (`docs/pending-modules-beta.md`).
-- **4. Motor de raciocínio** — beta operacional (`analysis_process`,
-  `tests/test_reasoning.py`). Ranking heurístico, não calibração
-  científica; hipóteses/fontes seguem fornecidas por operador/agente, sem
-  pesquisa autônoma.
+- ~~4. Motor de raciocínio — 🟡 parcial~~ **CORREÇÃO (2026-11-01): já
+  estava concluído.** O X-ray inicial foi conservador demais. O Codex
+  já tinha declarado o item 4 concluído em outubro
+  (`docs/item-4-reasoning.md`), com revisão independente e as 15 etapas
+  do escopo mapeadas uma a uma. Reconfirmado agora, ao vivo: 50/50 testes
+  (`tests/test_reasoning.py` + `tests/test_scientific_workflow.py`) e
+  `scripts/check-reasoning-handoff.py` passando (`"item4_item5_handoff":
+  "passed"`, dois ciclos reais com outcomes `refutes`/`supports`,
+  relatório e recall persistentes). ✅ Pronto. Única ressalva honesta:
+  o passo 4 do ciclo ("pesquisar documentação") depende de fontes
+  registradas manualmente — a busca autônoma é escopo da seção 11
+  (pesquisa técnica), que continua fraca.
 - **6. Engenharia reversa** — `reverse_engineering/{coff.py,
   disassembly.py,strings.py,crypto_inspect.py,external.py}` com Ghidra/
   Capstone/Binwalk via subprocess limitado, parte testada real em CI
