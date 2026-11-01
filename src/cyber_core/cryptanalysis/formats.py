@@ -146,12 +146,12 @@ def _seven(raw, candidate):
 def _pdf(raw, candidate):
     from pypdf import PdfReader
     from pypdf.errors import PyPdfError
+    reader = PdfReader(io.BytesIO(raw), strict=True)
+    if not reader.is_encrypted:
+        return False
     try:
-        reader = PdfReader(io.BytesIO(raw), strict=True)
-        if not reader.is_encrypted:
-            return False
         return bool(reader.decrypt(candidate.decode("utf-8")))
-    except PyPdfError:
+    except (PyPdfError, UnicodeDecodeError):
         return False
 
 def _office(raw, candidate):
@@ -165,7 +165,7 @@ def _office(raw, candidate):
         raise ValueError("Unsupported Office encryption")
     try:
         office.load_key(password=candidate.decode("utf-8"), verify_password=True)
-    except InvalidKeyError:
+    except (InvalidKeyError, UnicodeDecodeError):
         return False
     # A verifier match followed by corrupt payload is not a wrong password.
     # Leave the session at a retryable failure rather than exhausting the list.
