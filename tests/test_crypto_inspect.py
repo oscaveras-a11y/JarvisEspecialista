@@ -82,13 +82,13 @@ class CryptoInspectTests(unittest.TestCase):
         struct.pack_into('<II',data,272,0x1000,40)
         struct.pack_into('<IIIII',data,512,0x1040,0,0,0x1060,0x1040)
         struct.pack_into('<QQ',data,576,0x1080,0)
-        data[608:619]=b'bcrypt.dll\\0'
-        data[640:656]=b'\\0\\0BCryptEncrypt\\0'
+        data[608:619]=b'bcrypt.dll\0'
+        data[640:656]=b'\0\0BCryptEncrypt\0'
         result=self.scan(bytes(data))
         imported=next(f for f in result['findings'] if f['kind']=='import')
         self.assertEqual(imported['rule'],'api.BCryptEncrypt.v1')
         self.assertEqual(imported['offset'],642)
-        plain=self.scan(b'BCryptEncrypt\\0')
+        plain=self.scan(b'BCryptEncrypt\0')
         self.assertFalse(any(f['kind']=='import' for f in plain['findings']))
         struct.pack_into('<Q',data,576,0x9000)
         with self.assertRaises(CoreError):self.scan(bytes(data))

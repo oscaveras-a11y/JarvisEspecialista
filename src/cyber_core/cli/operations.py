@@ -1,5 +1,14 @@
 """Argument wiring for durable recovery, key metadata, inventories and agent jobs."""
 def configure(sub):
+    crypto=sub.add_parser('crypto-inspect',help='Identify static crypto evidence without executing the specimen')
+    crypto.add_argument('case')
+    crypto.add_argument('path')
+    crypto.add_argument('--max-findings',type=int,default=256)
+    crypto.add_argument('--seconds',type=float,default=300)
+    crypto.add_argument('--output-bytes',type=int,default=262144)
+    crypto.add_argument('--capstone',action='store_true')
+    crypto.add_argument('--crypto-ghidra-home')
+    crypto.add_argument('--crypto-java-home')
     campaign=sub.add_parser('pentest',help='Create and run durable automatic assessment campaigns')
     actions=campaign.add_subparsers(dest='pentest_action',required=True)
     for action in ('create','run','show'):
@@ -136,9 +145,14 @@ def configure(sub):
             parser.add_argument("--reason",required=True)
             parser.add_argument("--priority",action="store_true")
 
-COMMANDS = ("web-passive","api-inventory","pentest","web-probe","firmware-timeline","web-lab","symbols","functions","installer","external-analyze","external-tools","recovery-formats","keys","inventory-disk","inventory-pcap","agent-jobs","recovery-session")
+COMMANDS = ("crypto-inspect","web-passive","api-inventory","pentest","web-probe","firmware-timeline","web-lab","symbols","functions","installer","external-analyze","external-tools","recovery-formats","keys","inventory-disk","inventory-pcap","agent-jobs","recovery-session")
 
 def execute(core,args):
+    if args.command=='crypto-inspect':
+        from cyber_core.reverse_engineering.crypto_inspect import run_crypto_inspect
+        return run_crypto_inspect(core,args.case,args.path,max_findings=args.max_findings,seconds=args.seconds,
+                                  output_bytes=args.output_bytes,capstone=args.capstone,
+                                  ghidra_home=args.crypto_ghidra_home,java_home=args.crypto_java_home)
     if args.command=="api-inventory":
         from cyber_core.pentest.openapi import run_inventory
         return run_inventory(core,args.case,args.path,args.grant,max_bytes=args.api_max_bytes,
