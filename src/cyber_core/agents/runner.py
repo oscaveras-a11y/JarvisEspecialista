@@ -70,7 +70,7 @@ def run_bounded(command, prompt, *, cwd, timeout=60, max_output=262144, should_s
             or type(max_output) is not int or not 1 <= max_output <= 1048576):
         raise CoreError('Invalid agent process limits')
     if max_memory_bytes is not None and (type(max_memory_bytes) is not int
-            or not 64 * 1024 * 1024 <= max_memory_bytes <= 4 * 1024 * 1024 * 1024):
+            or not 64 * 1024 * 1024 <= max_memory_bytes <= 8 * 1024 * 1024 * 1024):
         raise CoreError('Invalid agent memory limit')
     if max_cpu_seconds is None:
         max_cpu_seconds = timeout + 5
