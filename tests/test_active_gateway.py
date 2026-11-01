@@ -84,6 +84,20 @@ class ActiveGrantTests(unittest.TestCase):
             self.assertIn(b'403',request(gateway,b'GET /scan HTTP/1.1\\r\\nHost: example.com\\r\\n\\r\\n'))
             self.assertEqual(gateway.counters['attempts'],0)
 
+    @unittest.skipUnless(hasattr(socket,'AF_UNIX') and os.name!='nt','Unix gateway')
+    def test_hanging_dns_obeys_control_and_cleanup(self):
+        m=module();release=threading.Event();started=threading.Event();stop=threading.Event()
+        def lookup(*args):
+            started.set();release.wait(5);return ['93.184.216.34']
+        try:
+            with m.ActiveGateway(grant(),control=stop.is_set) as g,patch.object(m,'resolve_public',side_effect=lookup):
+                result=[]
+                worker=threading.Thread(target=lambda:result.append(request(g,b'GET /scan HTTP/1.1\\r\\nHost: example.com\\r\\n\\r\\n')))
+                worker.start();self.assertTrue(started.wait(2));stop.set();worker.join(2)
+                self.assertFalse(worker.is_alive(),'DNS must not defeat control')
+                self.assertIn(b'403',result[0])
+        finally:release.set()
+
     @unittest.skipUnless(os.environ.get('JARVIS_HTTPS_FIXTURE')=='1','isolated GitHub TLS route')
     def test_real_tls_secrets_redirect_budget_stop_and_dns(self):
         m=module();host='jarvis-fixture.test';address='93.184.216.34'
