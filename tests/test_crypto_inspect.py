@@ -107,7 +107,7 @@ class CryptoInspectTests(unittest.TestCase):
         self.assertEqual(result['status'],'partial')
         self.assertEqual(result['coverage']['format']['reason'],'managed_metadata_not_interpreted')
         header=bytearray(64)
-        header[:7]=b'\\x7fELF\\x02\\x01\\x01'
+        header[:7]=b'\x7fELF\x02\x01\x01'
         struct.pack_into('<HHIQQQIHHHHHH',header,16,2,62,1,0,0,0,0,64,0,0,0,0,0)
         result=self.scan(bytes(header)+AES)
         self.assertEqual(result['status'],'partial')
@@ -117,9 +117,9 @@ class CryptoInspectTests(unittest.TestCase):
         struct.pack_into('<II',data,272,0x1000,40)
         struct.pack_into('<IIIII',data,512,0x1040,0,0,0x1060,0x1040)
         struct.pack_into('<QQ',data,576,0x10f0,0)
-        data[608:619]=b'bcrypt.dll\\0'
-        data[752:768]=b'\\0\\0BCryptEncryptX'
-        data+=b'\\0'
+        data[608:619]=b'bcrypt.dll\0'
+        data[752:768]=b'\0\0BCryptEncryptX'
+        data+=b'\0'
         with self.assertRaises(CoreError):self.scan(bytes(data))
     def test_core_commit_guard_rejects_evidence_tamper(self):
         from unittest.mock import patch
