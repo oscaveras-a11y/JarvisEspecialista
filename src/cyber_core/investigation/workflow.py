@@ -253,6 +253,15 @@ class Workflow:
             audit(self.db, case, 'source_registered', {'id': identifier, 'url': url, 'version': version, 'provenance': provenance})
         return identifier
 
+    def add_retrieved_source(self, case, retrieved, *, title, version, provenance, author):
+        # Registers the source as usual and audits the retrieval digest (item 11).
+        identifier = self.add_source(case, title=title, url=retrieved['url'], version=version, provenance=provenance, author=author)
+        with self.db:
+            audit(self.db, case, 'source_retrieved', {'id': identifier, 'url': retrieved['url'], 'sha256': retrieved['sha256'],
+                                                       'bytes': retrieved['bytes'], 'content_type': retrieved['content_type'],
+                                                       'retrieved_at': retrieved['retrieved_at']})
+        return identifier
+
     def snapshot(self, case):
         self.core.get(case)
         data = {name: [dict(r) for r in self.db.execute('SELECT * FROM ' + table + ' WHERE case_id=? ORDER BY rowid', (case,))]

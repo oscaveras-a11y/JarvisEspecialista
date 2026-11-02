@@ -55,3 +55,9 @@ Reviewer names and operator names are local declarations, not authenticated mult
 The research command registers metadata for an operator-consulted HTTPS reference, its version and provenance (documented, inference or experimental). It does not fetch or independently validate the document. The recorded timestamp is registration time. Source contents are never treated as agent instructions. Automatic documented-source retrieval is still pending.
 
 Failed tasks currently block terminal verification and remain visible; an audited operator disposition/retry workflow is still required for investigations that intentionally abandon a failing tool. Provider authentication, worktree orchestration and production worker validation remain separate pending deliverables.
+
+## Recuperação explícita de referência (item 11)
+
+`cyber research-fetch CASE --title T --url https://host/p --version V --author A --allow-host host` busca **uma única** referência, só por ação explícita do operador. Regras: apenas https sem credenciais; o host precisa constar em `--allow-host`; redirecionamentos são recusados; hosts que resolvem para endereço privado/loopback/link-local são recusados; limite de 2 MiB e de 60 s; só tipos de texto/JSON/XML. O conteúdo é tratado como texto inerte (SHA-256, título e trecho de 1000 caracteres) e **nunca executado**. A fonte é registrada como em `research` e a recuperação é auditada (`source_retrieved`: hash, bytes, tipo, data).
+
+Continua sem existir: busca/descoberta de fontes, consulta a bases de vulnerabilidades, rastreamento de versão automático. A categoria de autoridade segue sendo heurística por domínio. Testes: `tests/test_research_fetch.py` (rede simulada; nenhuma chamada real). Suíte completa: as 6 falhas/erros existentes (recuperação RAR5/PDF/senha/SSH, limites de recurso no container) ocorrem igualmente sem esta mudança.
