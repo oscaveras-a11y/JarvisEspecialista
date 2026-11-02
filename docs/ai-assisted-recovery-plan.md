@@ -6,6 +6,19 @@ combinado para não se perder entre sessões, e deixar claro o que pode ser
 construído agora (sem depender do Qwen3 já estar rodando) e o que só entra
 quando isso rodar no computador do proprietário.
 
+> **Atualização confirmada pelo proprietário em 2026-11-02:** o beta roda
+> **só no GitHub** (Actions/Codespaces); não há "computador do proprietário"
+> rodando o modelo. Qualquer execução do Qwen3 (ou outro modelo local) terá
+> de rodar dentro de um runner/Codespace do GitHub, dentro dos limites de
+> recursos desse ambiente — isso ainda não foi desenhado nem implementado.
+> Também confirmado: a mesma IA offline, além da recuperação de senha
+> (camada 2 abaixo), pode **sugerir** o próximo passo dentro de um pentest
+> já autorizado e com escopo fechado por caso (módulo `pentest/` existente).
+> Ela nunca escolhe alvo nem executa sozinha — ver seção 9 de
+> `docs/escopo.md`. Codex e Claude Code **não** são essa IA: eles só ajudam
+> a escrever o código do projeto, fora do produto (ver seção 2/3 de
+> `docs/escopo.md`).
+
 ## Decisão de arquitetura (fechada, não renegociar sem o proprietário)
 
 A IA **nunca** testa, nunca confirma e nunca "acha" uma senha. Ela só

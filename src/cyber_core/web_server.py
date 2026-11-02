@@ -25,7 +25,9 @@ from cyber_core.service import Core
 
 MAX_FILE = 4 * 1024 * 1024
 MAX_BODY = 6 * 1024 * 1024
-TOOLS = {"analyze-file", "analyze-firmware", "assess-recovery", "inventory-disk", "inventory-pcap"}
+OFFLINE_TOOLS = {"offline-" + kind for kind in ("secrets", "nmap-xml", "nvd-json", "canfd", "uart", "i2c", "spi")}
+TOOLS = {"analyze-file", "analyze-firmware", "assess-recovery", "inventory-disk", "inventory-pcap"} | OFFLINE_TOOLS
+DIRECT_TOOLS = {"inventory-disk", "inventory-pcap"} | OFFLINE_TOOLS
 ASSETS = {"index.html", "app.js", "engine.js", "styles.css",
           "assets/icons.svg", "assets/core-shield.svg"}
 CASE_ROUTE = re.compile(r"/api/cases/([a-f0-9]{32})/(files|pause|resume|cancel|report|run)")
@@ -187,7 +189,7 @@ class Application:
                 with source.open("xb") as handle:
                     handle.write(raw)
                 task = None
-                if tool not in {"inventory-disk", "inventory-pcap"}:
+                if tool not in DIRECT_TOOLS:
                     task = core.enqueue(identifier, source, tool=tool)
             self.last_error = None
             self.worker = threading.Thread(target=self.execute, args=(identifier, tool, source, task), daemon=True)
@@ -208,6 +210,9 @@ class Application:
                 elif tool == "inventory-pcap":
                     from cyber_core.operations import inventory_pcap
                     inventory_pcap(core, identifier, source, max_bytes=MAX_FILE)
+                elif tool in OFFLINE_TOOLS:
+                    from cyber_core.operations import offline_analysis
+                    offline_analysis(core, identifier, source, tool.removeprefix("offline-"), max_bytes=MAX_FILE)
                 elif tool == "pending":
                     core.run_queue(identifier, max_tasks=20, max_seconds=300)
                 else:

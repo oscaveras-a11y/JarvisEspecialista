@@ -3,7 +3,7 @@ import json
 from cyber_core.errors import CoreError
 from cyber_core.investigation.workflow import Workflow
 
-COMMANDS = ('hypothesis', 'experiment', 'research', 'verify', 'history')
+COMMANDS = ('hypothesis', 'experiment', 'research', 'research-fetch', 'verify', 'history')
 
 def configure(sub):
     hyp = sub.add_parser('hypothesis', help='Register, revise and inspect scientific hypotheses')
@@ -35,6 +35,14 @@ def configure(sub):
     for name in ('title', 'url', 'version', 'author'):
         source.add_argument('--' + name, required=True)
     source.add_argument('--provenance', choices=('documented', 'inference', 'experimental'), required=True)
+    fetch = sub.add_parser('research-fetch', help='Explicitly retrieve ONE https reference from an allowed host (inert text, hash recorded, never executed)')
+    fetch.add_argument('case')
+    for name in ('title', 'url', 'version', 'author'):
+        fetch.add_argument('--' + name, required=True)
+    fetch.add_argument('--provenance', choices=('documented', 'inference', 'experimental'), default='documented')
+    fetch.add_argument('--allow-host', action='append', required=True, help='Exact host permitted for this call (repeatable)')
+    fetch.add_argument('--max-bytes', type=int, default=2 * 1024 * 1024)
+    fetch.add_argument('--timeout', type=float, default=20)
     verify = sub.add_parser('verify', help='Apply evidence and independent-review gates before changing state')
     verify.add_argument('case')
     for name in ('state', 'actor', 'reason'):
@@ -77,6 +85,14 @@ def execute(core, args):
         return {'id': flow.add_source(args.case, title=args.title, url=args.url, version=args.version,
                                       provenance=args.provenance, author=args.author),
                 'retrieval': 'operator_reference_registration_only'}
+    if cmd == 'research-fetch':
+        from cyber_core.research.fetch import fetch_reference
+        core.get(args.case)
+        retrieved = fetch_reference(args.url, allow_hosts=args.allow_host, max_bytes=args.max_bytes, timeout=args.timeout)
+        identifier = flow.add_retrieved_source(args.case, retrieved, title=args.title, version=args.version,
+                                               provenance=args.provenance, author=args.author)
+        return {'id': identifier, 'retrieval': 'explicit_single_reference', **{k: retrieved[k] for k in (
+            'host', 'category', 'sha256', 'bytes', 'content_type', 'page_title', 'excerpt', 'retrieved_at', 'limitation')}}
     if cmd == 'verify':
         return flow.finalize(args.case, args.state, actor=args.actor, reason=args.reason)
     raise CoreError('Unknown scientific workflow operation')

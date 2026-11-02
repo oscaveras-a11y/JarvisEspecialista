@@ -88,7 +88,7 @@ function prepareEngineUI(){
  document.getElementById('task-path').hidden=true;document.getElementById('task-path').required=false;
  document.getElementById('task-file').hidden=false;document.getElementById('task-file').required=true;
  document.querySelector('#form-new-task button[type=submit]').textContent='Enviar e analisar';
- for(const option of [...document.getElementById('task-tool').options])if(!['analyze-file','analyze-firmware','assess-recovery','inventory-disk','inventory-pcap'].includes(option.value))option.remove();
+ for(const option of [...document.getElementById('task-tool').options])if(!(['analyze-file','analyze-firmware','assess-recovery','inventory-disk','inventory-pcap'].includes(option.value)||option.value.startsWith('offline-')))option.remove();
  document.getElementById('engine-results-card').hidden=false;
  document.getElementById('engine-run-pending').hidden=false;
  document.getElementById('engine-refresh').hidden=false;

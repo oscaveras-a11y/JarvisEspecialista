@@ -136,6 +136,30 @@ class WebServerTests(unittest.TestCase):
         self.assertEqual(state["operations"][case][0]["kind"], "pcap_inventory")
         self.assertTrue(state["audit_valid"][case])
 
+    def test_offline_analyzers_are_real_redacted_and_reportable(self):
+        case = self.case()
+        raw = b'token = "supersecretvalue123"\n'
+        status, reply = self.upload(case, raw, tool="offline-secrets", name="cfg.txt")
+        self.assertEqual(status, 202, reply)
+        state = self.settled()
+        self.assertIsNone(state["last_error"])
+        operation = state["operations"][case][0]
+        self.assertEqual(operation["kind"], "offline_secrets")
+        self.assertEqual(operation["analysis"]["findings"][0]["rule"], "generic_assignment")
+        self.assertNotIn("supersecretvalue123", json.dumps(state["operations"]))
+        status, _ = self.upload(case, b"(1.000000) can0 123##1" + b"AA" * 12 + b"\n", tool="offline-canfd", name="fd.log")
+        self.assertEqual(status, 202)
+        state = self.settled()
+        self.assertEqual(state["operations"][case][-1]["analysis"]["frames"], 1)
+
+    def test_offline_analyzer_rejects_malformed_input_without_result(self):
+        case = self.case()
+        status, _ = self.upload(case, b"not a can log\n", tool="offline-canfd", name="bad.log")
+        self.assertEqual(status, 202)
+        state = self.settled()
+        self.assertTrue(state["last_error"])
+        self.assertEqual(state["operations"][case], [])
+
     def test_recovery_assessment_uses_core_without_claiming_decryption(self):
         case = self.case()
         raw = b"CCAES1" + bytes(range(12)) + b"x" * 32
