@@ -223,6 +223,7 @@ def external_configuration(args):
 
 def _main(argv=None):
     core = None
+    args = None
     try:
         args = parser().parse_args(argv)
         if args.command == 'knowledge':
@@ -363,7 +364,10 @@ def _main(argv=None):
         return 0
     except (CoreError, OSError, ValueError, sqlite3.Error) as exc:
         # OS errors can contain sensitive paths. Never print arbitrary exception data.
-        if args is not None and args.command == 'knowledge' and isinstance(exc, (FileNotFoundError, ValueError)):\n            message = str(exc)\n        else:\n            message = str(exc) if isinstance(exc, CoreError) else 'Invalid configuration or inaccessible local resource'
+        if args is not None and args.command == 'knowledge' and isinstance(exc, (FileNotFoundError, ValueError)):\n            message = str(exc)\n        else:\n            if args is not None and args.command == 'knowledge' and isinstance(exc, (FileNotFoundError, ValueError)):
+            message = str(exc)
+        else:
+            message = str(exc) if isinstance(exc, CoreError) else 'Invalid configuration or inaccessible local resource'
         print('cyber: ' + message, file=sys.stderr)
         return 2
     except KeyboardInterrupt:
