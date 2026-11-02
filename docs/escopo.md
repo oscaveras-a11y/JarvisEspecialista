@@ -12,6 +12,8 @@ Desenvolver uma plataforma profissional de investigação tecnológica, engenhar
 ## 2. Ambiente de desenvolvimento
 Windows 10/11; 8 GB de RAM; GPU integrada; IA prioritariamente na nuvem; Codex já instalado; Claude Code a instalar depois; repositório privado no GitHub; execução principal local; sem servidor pago; Python no núcleo; SQLite para memória/histórico; Git para versionamento; PowerShell para instalação/inicialização. Modular e preparado para futura migração para Linux/servidores. Não enviar dados confidenciais, firmware proprietário, credenciais, evidências ou dados de clientes a serviços externos sem autorização.
 
+> **Correção confirmada pelo proprietário em 2026-11-02:** o beta e seu desenvolvimento rodam **só no GitHub** (Actions/Codespaces), não localmente no Windows de 8 GB descrito acima. Essa frase do escopo original está superada pela prática real; ver `docs/project-ownership.md` e `AGENTS.md`. Mantida aqui como registro histórico, não como requisito vigente.
+
 ## 3. Arquitetura central
 **CORE — orquestrador principal:** recebe problemas/objetivos; identifica o tipo de investigação; verifica escopo autorizado; cria planos; divide problemas em tarefas; distribui entre agentes; escolhe ferramentas; acompanha execução; identifica falhas/bloqueios; formula hipóteses; controla recursos; registra evidências; verifica resultados; produz relatórios. Controla todo o fluxo.
 
@@ -20,6 +22,8 @@ Windows 10/11; 8 GB de RAM; GPU integrada; IA prioritariamente na nuvem; Codex j
 **CLAUDE CODE — agente de investigação e revisão (integração futura):** revisão independente, análise de hipóteses, investigação técnica, identificação de inconsistências, revisão de código, avaliação de resultados, proposição de novos experimentos.
 
 Agentes compartilham tarefas/resultados pelo CORE. Adaptadores independentes por agente; o sistema funciona inicialmente só com Codex, sem depender do Claude Code. Não presumir permissões, interfaces ou limites iguais entre as ferramentas.
+
+> **Correção confirmada pelo proprietário em 2026-11-02:** Codex e Claude Code **não operam dentro do produto** como agentes orquestrados pelo CORE em tempo de execução — eles só ajudam a escrever e revisar o código-fonte durante o desenvolvimento, no GitHub. `agents/`, `orchestrator/` e os comandos de agente na CLI continuam existindo e testados, mas como recurso **opcional e não usado por padrão** no fluxo do produto, não removidos. A IA usada *dentro* do produto (item 7/4) é uma IA **offline/local**, separada de Codex e Claude Code — ver seção 4 e 7, e `docs/ai-assisted-recovery-plan.md`.
 
 ## 4. Motor de raciocínio e investigação
 Ciclos de: 1) entender o problema; 2) coletar informações; 3) identificar tecnologias; 4) pesquisar documentação; 5) formular hipóteses; 6) classificar por evidência/custo/risco/probabilidade; 7) selecionar experimentos; 8) executar ferramentas autorizadas; 9) interpretar resultados; 10) comparar com hipóteses; 11) descartar caminhos inválidos; 12) desenvolver alternativas; 13) validar descobertas; 14) registrar conclusões; 15) gerar relatório técnico. Evitar repetir testes idênticos sem justificativa. Distinguir sempre fatos, inferências, hipóteses e desconhecidos. Reconhecer quando faltam dados, hardware, chaves, permissões ou recursos.
@@ -38,6 +42,8 @@ Análise forense de arquivos; imagens de disco; recuperação de dados; identifi
 
 ## 9. Módulo de pesquisa de vulnerabilidades
 Auditorias **autorizadas** em Windows, Linux, web, APIs, servidores, redes, dispositivos, firmware e aplicações próprias. Integrar Nmap, Wireshark, Semgrep, OWASP ZAP, YARA e auditoria de dependências. Identificar configurações inseguras, componentes vulneráveis, falhas de autenticação, problemas de código e exposição. Testes ativos exigem escopo autorizado e limites operacionais; experimentos invasivos só em laboratórios isolados ou ambientes expressamente autorizados.
+
+> **Decisão do proprietário em 2026-11-02, sobre o papel da IA offline no pentest:** a IA só **sugere** o próximo passo, a partir de uma lista fixa de ferramentas já permitidas no caso (o módulo `pentest/` existente, com manifesto de escopo). Ela **nunca** escolhe alvo, nunca decide sozinha e nunca executa; toda execução continua exigindo aprovação explícita por caso, como já faz `pentest create/run`. Isso é extensão de sugestão, não um motor de ataque autônomo — não implementar nada que rode exploração sem esse gate.
 
 ## 10. Módulo de análise de protocolos
 CAN, CAN FD, USB, UART, SPI, I2C, TCP/IP, HTTP e protocolos binários proprietários. Importar capturas, identificar padrões, comparar mensagens, reconstruir estruturas, investigar máquinas de estado. Integrar python-can, cantools, SavvyCAN e Wireshark conforme necessidade. Priorizar análise passiva. Não transmitir comandos a equipamentos críticos sem aprovação e validação em ambiente controlado.
