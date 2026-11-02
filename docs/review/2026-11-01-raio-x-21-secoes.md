@@ -54,7 +54,19 @@ funcionalidade "desaparecida".
   disassembly.py,strings.py,crypto_inspect.py,external.py}` com Ghidra/
   Capstone/Binwalk via subprocess limitado, parte testada real em CI
   dedicado. PE/ELF parcial; sem decompilação completa, sem firmware
-  automotivo real, sem equivalente a HxD.
+  automotivo real, sem equivalente a HxD. **Atualização (2026-11-02):**
+  skill de terceiros de engenharia reversa (EncidXVII,
+  `claude-reverse-engineering-skill`, Apache-2.0) auditada de verdade
+  (zero achados reais no `semgrep`/`detect-secrets`, sem rede, sem
+  backdoor — ver `src/cyber_core/reverse_engineering/vendor/
+  reverse-engineering/VENDORED.md`) e vendorizada por completo em
+  `src/cyber_core/reverse_engineering/vendor/reverse-engineering/`
+  (instruções + scripts Python/Java, funciona sem internet). Ainda não
+  conectada a nenhum fluxo do CORE — é material de referência disponível
+  offline por enquanto. Integração com uma IA offline (Qwen3/Ollama) para
+  operar essa skill e o programa como um todo foi deixada para depois do
+  treinamento do Qwen3 (decisão do proprietário). Firmware real completo
+  continua pendente.
 - **8. Perícia digital** — `forensics/{disk.py,firmware_timeline.py}`:
   MBR/GPT sim (`test_forensics_protocols.py`). Sem Autopsy/TSK/YARA
   forense integrado como suíte; sem recuperação de apagados; cadeia de

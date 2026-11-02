@@ -21,5 +21,8 @@ cyber = "cyber_core.cli:main"
 where = ["src"]
 
 [tool.setuptools.package-data]
-"cyber_core.reverse_engineering" = ["ghidra_scripts/*.java"]
+"cyber_core.reverse_engineering" = ["ghidra_scripts/*.java",
+    "vendor/reverse-engineering/*.md", "vendor/reverse-engineering/LICENSE",
+    "vendor/reverse-engineering/references/*.md", "vendor/reverse-engineering/assets/*.md",
+    "vendor/reverse-engineering/scripts/*.py", "vendor/reverse-engineering/scripts/ghidra/*"]
 "cyber_core" = ["data/wordlists/*.gz"]
