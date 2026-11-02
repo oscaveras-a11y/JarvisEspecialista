@@ -24,7 +24,7 @@ def _catalog():
     entries = json.loads(resource.read_text(encoding='utf-8'))
     for item in entries:
         name = item['path']
-        if not name.endswith('.md') or '/' in name or '\\\\' in name or name in ('.', '..'):
+        if not name.endswith('.md') or Path(name).name != name:
             raise ValueError('Invalid packaged guide path')
     return entries
 
