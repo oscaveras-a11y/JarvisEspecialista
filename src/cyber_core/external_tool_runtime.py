@@ -103,12 +103,23 @@ def binary_digest(path):
             value.update(block)
     return value.hexdigest()
 
-def scratch_limit(root):
+def scratch_limit(root, *, max_bytes=32*1024*1024, max_entries=1024, allow_symlinks=False):
     total,count = 0,0
     for item in root.rglob("*"):
         count += 1
-        if count > 1024 or item.is_symlink():
+        if count > max_entries:
             raise CoreError("External scratch entry limit")
+        if item.is_symlink():
+            # A password-recovery trial backend never legitimately produces a
+            # symlink in its own scratch dir, so one there still fails closed
+            # by default. A real extracted filesystem tree (unblob/die) does
+            # contain ordinary symlinks (busybox applets, /bin -> usr/bin); the
+            # entry itself is harmless as long as it is never followed — which
+            # is why this loop checks is_symlink() first and never reaches
+            # is_file()/stat() for it either way.
+            if not allow_symlinks:
+                raise CoreError("External scratch entry limit")
+            continue
         if item.is_file():
             try:
                 size = item.stat().st_size
@@ -118,13 +129,23 @@ def scratch_limit(root):
                 # errors, entry counts, symlinks and size violations still fail.
                 continue
             total += size
-            if total > 32*1024*1024:
+            if total > max_bytes:
                 raise CoreError("External scratch byte limit")
 
 class Runner:
-    def __init__(self, root, timeout):
+    def __init__(self, root, timeout, *, max_scratch_bytes=32*1024*1024, max_scratch_entries=1024,
+                 max_file_bytes=16*1024*1024, allow_symlinks=False):
         if type(timeout) not in (int,float) or not math.isfinite(timeout) or not 0 < timeout <= 3600:
             raise CoreError("Invalid external timeout")
+        if type(max_scratch_bytes) is not int or not 1024*1024 <= max_scratch_bytes <= 32*1024*1024*1024:
+            raise CoreError("Invalid external scratch byte limit")
+        if type(max_scratch_entries) is not int or not 16 <= max_scratch_entries <= 1_000_000:
+            raise CoreError("Invalid external scratch entry limit")
+        if type(max_file_bytes) is not int or not 1024*1024 <= max_file_bytes <= 16*1024*1024*1024:
+            raise CoreError("Invalid external file byte limit")
+        self.max_scratch_bytes = max_scratch_bytes
+        self.max_scratch_entries = max_scratch_entries
+        self.allow_symlinks = bool(allow_symlinks)
         self.root = Path(root)
         self.deadline = time.monotonic()+timeout
         home = self.root/"home"
@@ -135,7 +156,12 @@ class Runner:
                     # (e.g. Semgrep's OpenTelemetry client) attempting an outbound call
                     # despite its own CLI opt-out flags: this disables the SDK outright,
                     # independent of application-level flags, for every external backend.
-                    "OTEL_SDK_DISABLED":"true"}
+                    "OTEL_SDK_DISABLED":"true",
+                    # Read by _limit_exec.py's own RLIMIT_FSIZE; defaults to the
+                    # long-standing 16 MiB ceiling, raised per-Runner by a caller
+                    # that knows it needs to write a larger single file (unblob
+                    # carving/extracting a real firmware image).
+                    "CYBER_MAX_FSIZE_BYTES":str(max_file_bytes)}
     def run(self, command, *, data=b"", allowed=(0,), output_limit=262144, network=False):
         if sys.platform != "linux":
             raise CoreError("External tools require Linux")
@@ -187,12 +213,12 @@ class Runner:
             while process.poll() is None:
                 if exceeded.is_set() or time.monotonic()>=self.deadline:
                     raise CoreError("External output or time limit exceeded")
-                scratch_limit(self.root)
+                scratch_limit(self.root, max_bytes=self.max_scratch_bytes, max_entries=self.max_scratch_entries, allow_symlinks=self.allow_symlinks)
                 time.sleep(.02)
             for thread in threads: thread.join(timeout=1)
             if exceeded.is_set() or any(thread.is_alive() for thread in threads):
                 raise CoreError("External output or stream limit exceeded")
-            scratch_limit(self.root)
+            scratch_limit(self.root, max_bytes=self.max_scratch_bytes, max_entries=self.max_scratch_entries, allow_symlinks=self.allow_symlinks)
             if time.monotonic()>=self.deadline or process.returncode not in allowed:
                 raise CoreError("External tool execution failed")
             return process.returncode,bytes(buffers[0]),bytes(buffers[1])

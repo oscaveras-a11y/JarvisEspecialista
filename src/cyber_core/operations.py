@@ -2,9 +2,23 @@
 import json
 import hashlib
 from uuid import uuid4
+from cyber_core.analysis_process.limits import MAX_INPUT_BYTES
 from cyber_core.errors import CoreError
 from cyber_core.memory import audit, encoded, utc
 from cyber_core.verification.artifacts import verified_result
+
+def _read_bounded(handle, maximum):
+    # handle.read(n) with a large explicit n asks the interpreter to
+    # pre-allocate a buffer of that size up front — harmless at small scale,
+    # but confirmed raising MemoryError for a multi-GiB maximum against a
+    # modest real file, under the same RLIMIT_AS this value is bounded by.
+    chunks = bytearray()
+    while len(chunks) <= maximum:
+        block = handle.read(min(1048576, maximum + 1 - len(chunks)))
+        if not block:
+            break
+        chunks += block
+    return bytes(chunks)
 
 SCHEMA = """CREATE TABLE IF NOT EXISTS operation_results(
  id TEXT PRIMARY KEY,case_id TEXT NOT NULL REFERENCES investigations(id),
@@ -59,7 +73,12 @@ def _acquire(core,case,path,maximum):
     if row["paused"]:
         raise CoreError("Investigation is paused")
     source = core.authorize(case,path)
-    if type(maximum) is not int or not 1 <= maximum <= min(core.max_bytes,64*1024*1024):
+    # The 64 MiB floor-style ceiling here used to block ANY caller from ever
+    # acquiring more than that, regardless of core.max_bytes — real firmware
+    # over 5 GiB (confirmed with a real OpenWrt image) needs more. Bounded by
+    # the same MAX_INPUT_BYTES ceiling as core.max_bytes itself, so this never
+    # allows more than the operator already explicitly configured.
+    if type(maximum) is not int or not 1 <= maximum <= min(core.max_bytes,MAX_INPUT_BYTES):
         raise CoreError("Invalid inventory byte limit")
     with source.open("rb") as handle:
         if handle.seek(0,2) > maximum:
@@ -68,7 +87,7 @@ def _acquire(core,case,path,maximum):
     core.run_one(case,task_id=task)
     result,_ = verified_result(core,case,task)
     with open(result["copy"],"rb") as handle:
-        raw = handle.read(maximum+1)
+        raw = _read_bounded(handle, maximum)
     if len(raw) > maximum or len(raw) != result["size"] or hashlib.sha256(raw).hexdigest() != result["sha256"]:
         raise CoreError("Inventory copy changed or exceeds byte limit")
     return raw,result

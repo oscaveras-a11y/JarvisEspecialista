@@ -94,13 +94,38 @@ class LargeInputTests(unittest.TestCase):
         left.unlink()
         right.unlink()
 
+    def test_bounded_read_does_not_preallocate_the_whole_ceiling(self):
+        # Regression: stream.read(huge_n) asks the interpreter to pre-allocate
+        # a buffer of that size up front, independent of how much data is
+        # actually there. A multi-GiB ceiling against a small real file raised
+        # MemoryError under RLIMIT_AS before a single real byte was read —
+        # found by testing _acquire()/external_tools_child against a real
+        # ~126 MB firmware image with an 8 GiB ceiling. These must stay fast
+        # and allocation-proportional-to-actual-size regardless of the ceiling.
+        from cyber_core.operations import _read_bounded as acquire_read_bounded
+        from cyber_core.external_tools_child import _read_bounded as analysis_read_bounded
+        path = sparse(self.root / 'small-real.bin', 4 * MIB, b'firmware-like-prefix')
+        huge_ceiling = 8 * 1024 * MIB  # 8 GiB
+        for read_bounded in (acquire_read_bounded, analysis_read_bounded):
+            with self.subTest(read_bounded=read_bounded.__module__):
+                tracemalloc.start()
+                try:
+                    with path.open('rb') as handle:
+                        data = read_bounded(handle, huge_ceiling)
+                    peak = tracemalloc.get_traced_memory()[1]
+                finally:
+                    tracemalloc.stop()
+                self.assertEqual(len(data), 4 * MIB)
+                self.assertEqual(data, path.read_bytes())
+                self.assertLess(peak, 16 * MIB, 'Pre-allocated toward the ceiling instead of the real size')
+
     def test_custom_limit_and_failure_release_file(self):
         path = sparse(self.root / 'limit', 65 * MIB)
         with self.assertRaises(CoreError):
             analyze_firmware(path)
         with self.assertRaises(CoreError):
             analyze_firmware(path, max_bytes=64 * MIB)
-        for invalid in (True, 0, -1, 1024 * MIB + 1):
+        for invalid in (True, 0, -1, 8192 * MIB + 1):
             with self.subTest(limit=invalid), self.assertRaises(CoreError):
                 analyze_firmware(path, max_bytes=invalid)
         path.unlink()

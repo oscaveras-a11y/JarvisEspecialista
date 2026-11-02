@@ -34,7 +34,13 @@ def analyze_tool(core, case, path, *, tool):
     config = external_configuration(tool)
     from cyber_core.operations import _acquire, save_operation
     from cyber_core.verification.artifacts import verified_result
-    raw, evidence = _acquire(core, case, path, min(core.max_bytes, 8*1024*1024))
+    # die/unblob identify and decompose real firmware/program images, which can
+    # exceed 5 GiB (confirmed blocking a real OpenWrt image during section-6
+    # testing); they follow the operator's own core.max_bytes ceiling, up to
+    # the system-wide MAX_INPUT_BYTES. semgrep/detect-secrets/pip-audit are
+    # source/text-oriented and keep the smaller practical ceiling.
+    acquire_limit = core.max_bytes if tool in ("die", "unblob") else min(core.max_bytes, 8*1024*1024)
+    raw, evidence = _acquire(core, case, path, acquire_limit)
     def stopped():
         try:
             return bool(core.authorize(case)["paused"])
@@ -57,10 +63,15 @@ def analyze_tool(core, case, path, *, tool):
         # variables at all).
         child_env = ({name: os.environ[name] for name in NETWORK_ENV_NAMES if name in os.environ}
                      if tool in NETWORK_TOOLS else {})
+        # die/unblob get the full 8 GiB RLIMIT_AS headroom (the run_bounded
+        # ceiling) for real firmware/program evidence over 5 GiB; the other
+        # three tools keep the existing 5 GiB, which was already generous for
+        # source-code/text-scale input.
+        analysis_memory_bytes = 8 * 1024 * 1024 * 1024 if tool in ("die", "unblob") else 5 * 1024 * 1024 * 1024
         response = run_bounded([sys.executable, "-I", str(Path(__file__).with_name("external_tools_child.py"))],
             json.dumps(request), cwd=scratch, timeout=core.timeout, max_output=65536,
             should_stop=stopped, env=child_env,
-            max_memory_bytes=5 * 1024 * 1024 * 1024, max_cpu_seconds=min(core.timeout * 2 + 30, 3605))
+            max_memory_bytes=analysis_memory_bytes, max_cpu_seconds=min(core.timeout * 2 + 30, 3605))
         analysis = json.loads(response["stdout"])
         if (analysis.get("backend") != tool or analysis.get("input_sha256") != evidence["sha256"]
                 or analysis.get("input_bytes") != len(raw) or type(analysis.get("identified")) is not bool
@@ -74,8 +85,13 @@ def analyze_tool(core, case, path, *, tool):
                 raise CoreError("Invalid external analysis findings")
         # Revalidate the acquired evidence after the entire process tree exits.
         verified_result(core, case, evidence["task_id"]) if "task_id" in evidence else None
+        # Stream-hash rather than reading a second copy of (possibly multi-GB)
+        # evidence into memory to compare byte-for-byte; same reasoning as the
+        # equivalent check in external_tools_child.py::analyze().
+        final = hashlib.sha256()
         with open(evidence["copy"], "rb") as stream:
-            final = stream.read(len(raw) + 1)
-        if final != raw:
+            while block := stream.read(1048576):
+                final.update(block)
+        if final.hexdigest() != evidence["sha256"]:
             raise CoreError("External analysis evidence changed")
         return save_operation(core, case, "external_analysis", {"evidence": evidence, "analysis": analysis})

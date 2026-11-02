@@ -18,6 +18,15 @@ except ValueError:
     threads = 1
 cpu_seconds = seconds * threads
 resource.setrlimit(resource.RLIMIT_CPU, (cpu_seconds, cpu_seconds + 1))
-resource.setrlimit(resource.RLIMIT_FSIZE, (16 * 1024 * 1024, 16 * 1024 * 1024))
+# Default matches the long-standing 16 MiB ceiling; a caller that knows it
+# needs to write a larger single file (e.g. unblob carving/extracting a real
+# firmware image, where one padding/partition range alone can exceed 16 MiB)
+# sets CYBER_MAX_FSIZE_BYTES in the environment it launches this with — never
+# read from anything derived from the sample itself.
+try:
+    fsize_bytes = max(1024 * 1024, int(os.environ.get('CYBER_MAX_FSIZE_BYTES', str(16 * 1024 * 1024))))
+except ValueError:
+    fsize_bytes = 16 * 1024 * 1024
+resource.setrlimit(resource.RLIMIT_FSIZE, (fsize_bytes, fsize_bytes))
 resource.setrlimit(resource.RLIMIT_CORE, (0, 0))
 os.execvpe(sys.argv[2], sys.argv[2:], os.environ)

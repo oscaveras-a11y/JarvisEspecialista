@@ -65,8 +65,24 @@ funcionalidade "desaparecida".
   conectada a nenhum fluxo do CORE — é material de referência disponível
   offline por enquanto. Integração com uma IA offline (Qwen3/Ollama) para
   operar essa skill e o programa como um todo foi deixada para depois do
-  treinamento do Qwen3 (decisão do proprietário). Firmware real completo
-  continua pendente.
+  treinamento do Qwen3 (decisão do proprietário).
+  **Firmware real completo — concluído e validado (2026-11-02):**
+  testado contra um firmware OpenWrt 25.12.6 real baixado pelo
+  proprietário (checksum SHA-256 conferido contra a página oficial),
+  decomposição recursiva de verdade até profundidade 3 (MBR → partição
+  de boot → kernel XZ → SquashFS → binários ELF64 reais, 184 chunks).
+  Corrigidos quatro limites que travavam qualquer firmware real: teto de
+  aquisição de evidência (8 MB → `core.max_bytes`, até o novo teto global
+  `MAX_INPUT_BYTES` de 8 GiB), `--depth 1` → recursão real até 10 níveis
+  (unblob precisa extrair de verdade para enxergar dentro de um chunk;
+  o relatório continua só reportando offset/tamanho/handler/profundidade,
+  nunca o conteúdo extraído), limite de scratch (32 MB/1024 entradas →
+  16 GiB/200 mil entradas só para die/unblob) e um `MemoryError` real
+  pré-alocando um buffer do tamanho do teto inteiro em vez do arquivo de
+  verdade (corrigido lendo em blocos). `sasquatch` (extrator de SquashFS
+  de firmware) compilado a partir do código-fonte com autorização
+  explícita do proprietário, depois de auditado. CI provisiona tudo
+  automaticamente agora (`scripts/setup-external-recovery-tools.sh`).
 - **8. Perícia digital** — `forensics/{disk.py,firmware_timeline.py}`:
   MBR/GPT sim (`test_forensics_protocols.py`). Sem Autopsy/TSK/YARA
   forense integrado como suíte; sem recuperação de apagados; cadeia de

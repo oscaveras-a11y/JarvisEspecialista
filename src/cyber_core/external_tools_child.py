@@ -10,6 +10,23 @@ from cyber_core.errors import CoreError
 from cyber_core.external_tool_runtime import Runner, MODES, VALIDATION, binary_digest, executable, version
 
 MAX_INPUT = 8 * 1024 * 1024
+# die/unblob identify and decompose real firmware/program images, which can
+# exceed 5 GiB; the owner confirmed this blocking a real OpenWrt image during
+# section-6 testing. Matches the MAX_INPUT_BYTES/run_bounded RAM ceiling raised
+# for the same reason. The other analyze() tools (semgrep/detect-secrets/
+# pip-audit) are source/text-oriented and keep the smaller MAX_INPUT.
+MAX_FIRMWARE_INPUT = 8 * 1024 * 1024 * 1024
+# unblob's own default is effectively unbounded recursion; a firmware/archive
+# crafted as a decompression bomb could otherwise exhaust scratch disk before
+# the byte/entry limits below even get checked between files. 10 covers every
+# real nested-firmware case seen so far (bootloader > kernel > initramfs >
+# squashfs > files) with headroom, while still bounding the recursion itself.
+UNBLOB_MAX_DEPTH = 10
+# Real firmware extracts into far more than a password-recovery scratch dir
+# ever needs: validated against a real 126 MB OpenWrt image (1314 files, ~170
+# MB extracted). Generous headroom for larger images, still bounded.
+FIRMWARE_SCRATCH_MAX_BYTES = 16 * 1024 * 1024 * 1024
+FIRMWARE_SCRATCH_MAX_ENTRIES = 200_000
 
 def private_file(root, name, data):
     path = root / name
@@ -18,11 +35,25 @@ def private_file(root, name, data):
         stream.write(data)
     return path
 
+def _read_bounded(stream, maximum):
+    # A single stream.read(n) with a large explicit n asks the interpreter to
+    # pre-allocate a buffer of that size before any bytes arrive — harmless at
+    # the old 256 KiB/8 MiB scale, but an 8 GiB limit against a 126 MB real
+    # file raised MemoryError under RLIMIT_AS before a single real byte was
+    # read. Reading in fixed chunks bounds memory by what is actually there.
+    chunks = bytearray()
+    while len(chunks) <= maximum:
+        block = stream.read(min(1048576, maximum + 1 - len(chunks)))
+        if not block:
+            break
+        chunks += block
+    return bytes(chunks)
+
 def read_small(path, maximum=262144):
     if path.is_symlink() or not path.is_file():
         raise CoreError("External result missing")
     with path.open("rb") as stream:
-        value = stream.read(maximum + 1)
+        value = _read_bounded(stream, maximum)
     if len(value) > maximum:
         raise CoreError("External result exceeds limit")
     return value
@@ -144,33 +175,88 @@ def normalize_die(data):
     return {"identified": bool(types), "formats": sorted(set(types)),
             "detections_total": len(records), "truncated": False, "extraction_enabled": False}
 
+MAX_UNBLOB_TASKS = 200_000
+MAX_UNBLOB_CHUNKS = 4096
+
 def normalize_unblob(data, source, size):
-    if not isinstance(data, list) or len(data) != 1:
+    """Walk unblob's real recursive task tree (a flat list; each task's
+    "subtasks" are {path,...} references resolved against the same list, not
+    nested objects) and collect only the structural chunk/container records
+    at every depth. Deliberately drops everything else a task can carry
+    (StatReport/FileMagicReport/HashReport for ordinary extracted files,
+    CarveDirectoryReport's local scratch path) — those describe the ephemeral
+    scratch tree itself, which is never exposed or persisted, only the
+    container/format boundaries unblob found inside it.
+    """
+    if not isinstance(data, list) or not data or len(data) > MAX_UNBLOB_TASKS:
         raise CoreError("Invalid Unblob envelope")
-    item = data[0]
-    if not isinstance(item, dict) or item.get("task", {}).get("path") != str(source) or item.get("subtasks"):
-        raise CoreError("Unexpected Unblob task")
-    reports = item.get("reports")
-    if not isinstance(reports, list) or len(reports) > 1024:
-        raise CoreError("Invalid Unblob reports")
-    chunks = []
-    for report in reports:
-        if not isinstance(report, dict):
-            raise CoreError("Invalid Unblob report")
-        kind = report.get("__typename__", "")
-        if "Error" in kind:
-            raise CoreError("Unblob reported an error")
-        if kind != "ChunkReport":
-            continue
-        start, end = report.get("start_offset"), report.get("end_offset")
-        name = report.get("handler_name")
-        if (type(start) is not int or type(end) is not int or not 0 <= start < end <= size
-                or not isinstance(name, str) or not re.fullmatch(r"[a-zA-Z0-9_ -]{1,64}", name)
-                or report.get("extraction_reports")):
-            raise CoreError("Invalid Unblob chunk")
-        chunks.append({"offset": start, "size": end-start, "handler": name})
-    return {"identified": bool(chunks), "chunks": chunks[:128], "chunks_total": len(chunks),
-            "truncated": len(chunks) > 128, "extraction_enabled": False}
+    by_path = {}
+    for item in data:
+        if not isinstance(item, dict) or set(item) != {"task", "reports", "subtasks"}:
+            raise CoreError("Invalid Unblob task")
+        task = item["task"]
+        if (not isinstance(task, dict) or not isinstance(task.get("path"), str)
+                or type(task.get("depth")) is not int or task["depth"] < 0
+                or not isinstance(item["reports"], list) or len(item["reports"]) > 1024
+                or not isinstance(item["subtasks"], list) or len(item["subtasks"]) > 1024):
+            raise CoreError("Invalid Unblob task")
+        by_path[task["path"]] = item
+    root = by_path.get(str(source))
+    if root is None or root["task"]["depth"] != 0:
+        raise CoreError("Unexpected Unblob task root")
+    chunks, total, visited = [], [0], set()
+    def walk(item):
+        if id(item) in visited:
+            return
+        visited.add(item["task"]["path"])
+        for report in item["reports"]:
+            if not isinstance(report, dict):
+                raise CoreError("Invalid Unblob report")
+            kind = report.get("__typename__", "")
+            if kind not in ("ChunkReport", "UnknownChunkReport"):
+                # unblob's own ErrorReport base class is the one with a
+                # severity field; a plain StatReport/HashReport/FileMagicReport
+                # for an ordinary extracted file never carries one. This is the
+                # actual signal, not the report's class name.
+                if report.get("severity") == "ERROR":
+                    raise CoreError("Unblob reported an error")
+                continue
+            start, end = report.get("start_offset"), report.get("end_offset")
+            if type(start) is not int or type(end) is not int or not 0 <= start < end <= size:
+                raise CoreError("Invalid Unblob chunk")
+            if kind == "UnknownChunkReport":
+                record = {"offset": start, "size": end - start, "handler": "unknown",
+                          "depth": item["task"]["depth"], "encrypted": False, "extractor_available": True}
+            else:
+                name = report.get("handler_name")
+                encrypted = report.get("is_encrypted")
+                extraction_reports = report.get("extraction_reports")
+                if (not isinstance(name, str) or not re.fullmatch(r"[a-zA-Z0-9_ -]{1,64}", name)
+                        or type(encrypted) is not bool
+                        or not isinstance(extraction_reports, list) or len(extraction_reports) > 16):
+                    raise CoreError("Invalid Unblob chunk")
+                # A missing extractor (e.g. a format this environment has no
+                # decoder for) narrows what was decomposed; it never aborts
+                # the whole analysis the way a malformed report does.
+                missing = any(isinstance(r, dict) and r.get("__typename__") == "ExtractorDependencyNotFoundReport"
+                              for r in extraction_reports)
+                record = {"offset": start, "size": end - start, "handler": name,
+                          "depth": item["task"]["depth"], "encrypted": encrypted,
+                          "extractor_available": not missing}
+            total[0] += 1
+            if len(chunks) < MAX_UNBLOB_CHUNKS:
+                chunks.append(record)
+        for ref in item["subtasks"]:
+            if not isinstance(ref, dict) or not isinstance(ref.get("path"), str):
+                raise CoreError("Invalid Unblob subtask reference")
+            child = by_path.get(ref["path"])
+            if child is None:
+                raise CoreError("Unblob subtask reference not found")
+            walk(child)
+    walk(root)
+    return {"identified": bool(chunks), "chunks": chunks, "chunks_total": total[0],
+            "truncated": total[0] > len(chunks), "extraction_enabled": False,
+            "max_depth": max((c["depth"] for c in chunks), default=0)}
 
 MAX_FINDINGS = 256
 
@@ -258,7 +344,8 @@ def normalize_pip_audit(data):
             "truncated": total > len(findings), "extraction_enabled": False}
 
 def analyze(tool, raw, config, *, timeout, scratch_parent):
-    if tool not in ("die", "unblob", "semgrep", "detect-secrets", "pip-audit") or not 0 < len(raw) <= MAX_INPUT:
+    limit = MAX_FIRMWARE_INPUT if tool in ("die", "unblob") else MAX_INPUT
+    if tool not in ("die", "unblob", "semgrep", "detect-secrets", "pip-audit") or not 0 < len(raw) <= limit:
         raise CoreError("Unsupported external analysis")
     if tool == "pip-audit":
         try:
@@ -271,7 +358,16 @@ def analyze(tool, raw, config, *, timeout, scratch_parent):
     config = validate_config(config, tool, rules_path=tool == "semgrep")
     with tempfile.TemporaryDirectory(prefix="external-", dir=scratch_parent) as directory:
         root = Path(directory)
-        runner = Runner(root, timeout)
+        if tool in ("die", "unblob"):
+            # unblob actually extracts into this throwaway scratch dir now (see
+            # below), and a real filesystem tree ordinarily contains symlinks
+            # (busybox applets, /bin -> usr/bin); die never extracts anything,
+            # so it keeps the strict default.
+            runner = Runner(root, timeout, max_scratch_bytes=FIRMWARE_SCRATCH_MAX_BYTES,
+                            max_scratch_entries=FIRMWARE_SCRATCH_MAX_ENTRIES,
+                            max_file_bytes=MAX_FIRMWARE_INPUT, allow_symlinks=tool == "unblob")
+        else:
+            runner = Runner(root, timeout)
         path = config["executable"]
         backend_version = version(runner, tool, path)
         source = private_file(root, "target", raw)
@@ -280,10 +376,21 @@ def analyze(tool, raw, config, *, timeout, scratch_parent):
             result = normalize_die(json.loads(output))
         elif tool == "unblob":
             report = root / "report.json"
-            runner.run([path, "--skip-extraction", "--depth", "1", "--process-num", "1",
+            # Real (not --skip-extraction) extraction into this throwaway scratch
+            # dir is required for unblob to look inside a chunk and recurse — the
+            # report it writes still only ever carries offset/size/handler/depth,
+            # never extracted content, so normalize_unblob's output contract is
+            # unchanged. --depth bounds the recursion itself (decompression-bomb
+            # protection); the scratch byte/entry limits above are the real
+            # backstop against a bomb's actual disk usage.
+            # unblob exits 1 (not 0) whenever any single chunk couldn't be
+            # fully extracted (e.g. one missing optional extractor dependency)
+            # even though the run itself completed and wrote a valid report;
+            # normalize_unblob already surfaces that per-chunk, never silently.
+            runner.run([path, "--depth", str(UNBLOB_MAX_DEPTH), "--process-num", "1",
                         "--randomness-depth", "0", "--report", report, "--log", root / "unblob.log",
-                        "--extract-dir", root / "carved", source])
-            result = normalize_unblob(json.loads(read_small(report)), source, len(raw))
+                        "--extract-dir", root / "carved", source], allowed=(0, 1))
+            result = normalize_unblob(json.loads(read_small(report, maximum=268435456)), source, len(raw))
         elif tool == "semgrep":
             output = root / "semgrep.json"
             # --no-trace is required even with --metrics=off: Semgrep's OpenTelemetry
@@ -307,18 +414,30 @@ def analyze(tool, raw, config, *, timeout, scratch_parent):
                                         "-s", "pypi", "--timeout", str(min(int(timeout), 60)),
                                         "-f", "json"], allowed=(0, 1), network=True)
             result = normalize_pip_audit(json.loads(stdout))
-        if source.read_bytes() != raw:
+        input_sha256 = hashlib.sha256(raw).hexdigest()
+        # Stream-hash rather than reading a second copy into memory and
+        # comparing bytes: for a multi-GB firmware, re-reading the whole file
+        # into a second buffer would momentarily double peak memory right at
+        # the finish line. SHA-256 equality is exactly as rigorous here as the
+        # byte-for-byte compare it replaces, and matches how every other
+        # evidence-integrity check in this project already compares digests.
+        check = hashlib.sha256()
+        with source.open("rb") as stream:
+            while block := stream.read(1048576):
+                check.update(block)
+        if check.hexdigest() != input_sha256:
             raise CoreError("External analysis changed input")
         return {"backend": tool, "backend_version": backend_version, "backend_sha256": binary_digest(path),
-                "input_sha256": hashlib.sha256(raw).hexdigest(), "input_bytes": len(raw), **result}
+                "input_sha256": input_sha256, "input_bytes": len(raw), **result}
 
 def main():
     try:
         data = json.loads(sys.stdin.buffer.read(16385))
         source = Path(data["source"])
+        limit = MAX_FIRMWARE_INPUT if data.get("tool") in ("die", "unblob") else MAX_INPUT
         with source.open("rb") as stream:
-            raw = stream.read(MAX_INPUT + 1)
-        if not 0 < len(raw) <= MAX_INPUT or hashlib.sha256(raw).hexdigest() != data["source_sha256"]:
+            raw = _read_bounded(stream, limit)
+        if not 0 < len(raw) <= limit or hashlib.sha256(raw).hexdigest() != data["source_sha256"]:
             raise CoreError("External verified source changed")
         result = analyze(data["tool"], raw, data["config"], timeout=data["timeout"], scratch_parent=data["scratch"])
         print(json.dumps(result, ensure_ascii=True))

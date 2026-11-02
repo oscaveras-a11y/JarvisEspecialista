@@ -5,6 +5,7 @@ import io
 import json
 import os
 from pathlib import Path
+import shutil
 import subprocess
 import sys
 import tarfile
@@ -64,13 +65,53 @@ class ExternalFailureContracts(unittest.TestCase):
         from cyber_core.external_tools_child import normalize_die, normalize_unblob
         with self.assertRaises(CoreError):
             normalize_die({"detects": "truncated"})
+
+        def task(path, depth, reports=(), subtasks=()):
+            return {"task": {"path": path, "depth": depth, "blob_id": "x", "is_multi_file": False},
+                    "reports": list(reports), "subtasks": list(subtasks)}
+
+        def chunk(start, end, handler="tar", encrypted=False, extraction_reports=()):
+            return {"__typename__": "ChunkReport", "start_offset": start, "end_offset": end,
+                    "handler_name": handler, "is_encrypted": encrypted,
+                    "extraction_reports": list(extraction_reports)}
+
+        # A real two-level tree: root has one chunk and one subtask, the
+        # subtask (the squashfs it points to) has a chunk of its own.
+        child_path = "/scratch/image.img_extract/0-100.tar_extract"
+        valid = [
+            task("/target", 0, reports=[chunk(0, 100)],
+                 subtasks=[{"path": child_path, "depth": 1}]),
+            task(child_path, 1, reports=[chunk(0, 10, handler="squashfs")]),
+        ]
+        result = normalize_unblob(valid, Path("/target"), 100)
+        self.assertEqual(result["chunks_total"], 2)
+        self.assertEqual(sorted(c["depth"] for c in result["chunks"]), [0, 1])
+        self.assertFalse(result["truncated"])
+
+        # Chunk extends past the verified input size.
         with self.assertRaises(CoreError):
-            normalize_unblob([{"task": {"path": "/target"}, "reports": [
-                {"__typename__": "ChunkReport", "start_offset": 0, "end_offset": 100,
-                 "handler_name": "tar", "extraction_reports": []}], "subtasks": []}], Path("/target"), 10)
+            normalize_unblob([task("/target", 0, reports=[chunk(0, 100)])], Path("/target"), 10)
+        # Root task missing from the report entirely.
         with self.assertRaises(CoreError):
-            normalize_unblob([{"task": {"path": "/target"}, "reports": [],
-                              "subtasks": [{"path": "/unexpected"}]}], Path("/target"), 10)
+            normalize_unblob([task("/other", 0)], Path("/target"), 100)
+        # Root task not actually at depth 0.
+        with self.assertRaises(CoreError):
+            normalize_unblob([task("/target", 1)], Path("/target"), 100)
+        # Subtask reference that doesn't resolve to any task in the report.
+        with self.assertRaises(CoreError):
+            normalize_unblob([task("/target", 0, subtasks=[{"path": "/unexpected", "depth": 1}])],
+                              Path("/target"), 100)
+        # A genuine top-level failure report (not a per-chunk missing extractor).
+        with self.assertRaises(CoreError):
+            normalize_unblob([task("/target", 0, reports=[
+                {"__typename__": "ExtractCommandFailedReport", "severity": "ERROR"}])],
+                              Path("/target"), 100)
+        # A missing extractor on one chunk degrades that chunk, never aborts.
+        degraded = normalize_unblob(
+            [task("/target", 0, reports=[chunk(0, 10, extraction_reports=[
+                {"__typename__": "ExtractorDependencyNotFoundReport", "dependencies": ["sasquatch"]}])])],
+            Path("/target"), 100)
+        self.assertFalse(degraded["chunks"][0]["extractor_available"])
 
     def test_malformed_semgrep_and_detect_secrets_analysis_is_rejected(self):
         from cyber_core.external_tools_child import normalize_semgrep, normalize_detect_secrets
@@ -276,6 +317,31 @@ class RealExternalRecoveryTests(unittest.TestCase):
         self.core.pause(self.case)
         with self.assertRaises(CoreError):
             analyze_tool(self.core, self.case, elf, tool="die")
+
+    @unittest.skipUnless(os.environ.get("CYBER_REAL_FIRMWARE_PATH"),
+                         "Opt-in: set CYBER_REAL_FIRMWARE_PATH to a real firmware image "
+                         "(e.g. an OpenWrt *-squashfs-combined.img, gunzipped) to validate "
+                         "recursive decomposition against it; not fetched automatically.")
+    def test_unblob_recursively_decomposes_a_real_firmware_image(self):
+        try:
+            from cyber_core.external_tools import analyze_tool
+        except ImportError:
+            self.fail("External analysis integration is not implemented")
+        source = Path(os.environ["CYBER_REAL_FIRMWARE_PATH"])
+        self.core.max_bytes = max(self.core.max_bytes, source.stat().st_size + 1)
+        self.core.timeout = max(self.core.timeout, 600)
+        shutil.copy(source, self.scope / source.name)
+        result = analyze_tool(self.core, self.case, self.scope / source.name, tool="unblob")
+        analysis = result["analysis"]
+        self.assertEqual(analysis["backend"], "unblob")
+        self.assertTrue(analysis["identified"])
+        # A real nested firmware (bootloader > kernel > rootfs > files) always
+        # decomposes past the top level; depth 0 alone would mean the old
+        # --skip-extraction/--depth 1 regression came back.
+        self.assertGreater(analysis["max_depth"], 0)
+        self.assertGreater(analysis["chunks_total"], 1)
+        self.assertFalse(analysis["extraction_enabled"])
+        self.assertTrue(self.core.verify_audit(self.case))
 
     def test_semgrep_and_detect_secrets_find_real_synthetic_issues(self):
         try:
