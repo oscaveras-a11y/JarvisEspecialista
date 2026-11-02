@@ -90,3 +90,34 @@ def inventory_pcap(core,case,path,*,max_bytes=16777216,max_packets=256):
     except ValueError:
         raise CoreError("Invalid PCAP or inventory limits") from None
     return save_operation(core,case,"pcap_inventory",{"evidence":evidence,"inventory":result})
+
+
+OFFLINE_KINDS = ("secrets","nmap-xml","nvd-json","canfd","uart","i2c","spi")
+
+def offline_analysis(core,case,path,kind,*,max_bytes=4194304,baud=9600):
+    """Offline text analyzers on a copy verified by CORE; nothing is executed or transmitted."""
+    if kind not in OFFLINE_KINDS:
+        raise CoreError("Unknown offline analysis")
+    raw,evidence = _acquire(core,case,path,max_bytes)
+    content = raw.decode("utf-8","replace")
+    if kind == "secrets":
+        from cyber_core.vulnerability.secrets import scan_secrets
+        result = scan_secrets(content)
+    elif kind == "nmap-xml":
+        from cyber_core.vulnerability.nmap_xml import parse_nmap_xml
+        result = parse_nmap_xml(content)
+    elif kind == "nvd-json":
+        from cyber_core.research.nvd import parse_nvd
+        result = parse_nvd(content)
+    elif kind == "canfd":
+        from cyber_core.automotive.canfd import analyze_canfd
+        result = analyze_canfd(content)
+    else:
+        from cyber_core.protocol import serial
+        if kind == "uart":
+            result = serial.decode_uart(serial.parse_csv(content,1),baud)
+        elif kind == "i2c":
+            result = serial.decode_i2c(serial.parse_csv(content,2))
+        else:
+            result = serial.decode_spi(serial.parse_csv(content,4))
+    return save_operation(core,case,"offline_"+kind.replace("-","_"),{"evidence":evidence,"analysis":result})

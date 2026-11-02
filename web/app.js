@@ -8,7 +8,7 @@ const engineRequired=document.querySelector('meta[name="cyber-engine"]')?.conten
 const DEFAULT_STATE={cases:[],tasks:[],audit:[],reports:[],activeCase:null};
 const VIEWS=['dashboard','new','investigations','tasks','logs','reports','recovery','forensics','tools','agents'];
 const VIEW_TITLES={dashboard:'Visão geral',new:'Nova investigação',investigations:'Investigações',tasks:'Tarefas e progresso',logs:'Registros',reports:'Relatórios',recovery:'Recuperação',forensics:'Perícia digital',tools:'Ferramentas',agents:'Agentes'};
-const TOOL_LABELS={'analyze-file':'Análise estática','analyze-firmware':'Ghidra / Binwalk','assess-recovery':'Chaves candidatas','inventory-disk':'Disco MBR / GPT','inventory-pcap':'PCAP','inspect-disk':'Disco MBR / GPT','inspect-pcap':'PCAP','audit-config':'Configuração','audit-crypto':'Criptografia','strings':'Strings','differentiate':'Tipo de conteúdo'};
+const TOOL_LABELS={'analyze-file':'Análise estática','analyze-firmware':'Ghidra / Binwalk','assess-recovery':'Chaves candidatas','inventory-disk':'Disco MBR / GPT','inventory-pcap':'PCAP','inspect-disk':'Disco MBR / GPT','inspect-pcap':'PCAP','audit-config':'Configuração','audit-crypto':'Criptografia','strings':'Strings','differentiate':'Tipo de conteúdo','offline-secrets':'Segredos (offline)','offline-nmap-xml':'Nmap XML (offline)','offline-nvd-json':'NVD JSON (offline)','offline-canfd':'CAN FD (offline)','offline-uart':'UART (offline)','offline-i2c':'I2C (offline)','offline-spi':'SPI (offline)'};
 let storageIssue=false;
 function loadState(){
  try{
