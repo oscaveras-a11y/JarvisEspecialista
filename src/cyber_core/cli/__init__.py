@@ -196,6 +196,14 @@ def parser():
     recall.add_argument('--sha256', help='Find prior investigations that analyzed this exact evidence hash')
     recall.add_argument('--type', dest='recall_type', help='List prior investigations of this type')
     recall.add_argument('--limit', type=int, default=20)
+    knowledge = sub.add_parser('knowledge', help='Search the offline secure programming reference memory')
+    knowledge_sub = knowledge.add_subparsers(dest='knowledge_action', required=True)
+    knowledge_index = knowledge_sub.add_parser('index', help='Build or refresh the separate local knowledge index')
+    knowledge_index.add_argument('--db', help='Knowledge database path (defaults to the user data directory)')
+    knowledge_search = knowledge_sub.add_parser('search', help='Search secure programming and defensive review guides')
+    knowledge_search.add_argument('query')
+    knowledge_search.add_argument('--db', help='Knowledge database path (defaults to the user data directory)')
+    knowledge_search.add_argument('--limit', type=int, default=5)
     from cyber_core.cli.science import configure
     configure(sub)
     from cyber_core.cli.extras import configure as configure_extras
@@ -217,8 +225,15 @@ def external_configuration(args):
 
 def _main(argv=None):
     core = None
+    args = None
     try:
         args = parser().parse_args(argv)
+        if args.command == 'knowledge':
+            from cyber_core.memory.knowledge import build_index, search_index
+            result = (build_index(args.db) if args.knowledge_action == 'index'
+                      else search_index(args.query, args.db, limit=args.limit))
+            print(json.dumps(result, ensure_ascii=True, indent=2))
+            return 0
         if args.command in ('doctor', 'agents', 'crypto-demo'):
             if args.command == 'crypto-demo':
                 from cyber_core.cryptanalysis.algorithms import demonstrate_all
@@ -354,7 +369,10 @@ def _main(argv=None):
         return 0
     except (CoreError, OSError, ValueError, sqlite3.Error) as exc:
         # OS errors can contain sensitive paths. Never print arbitrary exception data.
-        message = str(exc) if isinstance(exc, CoreError) else 'Invalid configuration or inaccessible local resource'
+        if args is not None and args.command == 'knowledge' and isinstance(exc, (FileNotFoundError, ValueError)):
+            message = str(exc)
+        else:
+            message = str(exc) if isinstance(exc, CoreError) else 'Invalid configuration or inaccessible local resource'
         print('cyber: ' + message, file=sys.stderr)
         return 2
     except KeyboardInterrupt:
