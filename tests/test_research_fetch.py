@@ -82,17 +82,18 @@ class FetchTests(unittest.TestCase):
 class FetchWorkflowTests(unittest.TestCase):
     def test_retrieval_registers_source_and_audits_digest(self):
         from cyber_core.investigation.workflow import Workflow
-        with tempfile.TemporaryDirectory() as tmp:
-            root = Path(tmp)
-            (root / 'in').mkdir()
-            core = Core(root / 'state')
-            self.addCleanup(core.close)
-            case = core.investigate('p', 'Pesquisa', str(root / 'in'), 'owner', 'auth')
-            r = fetch_reference('https://www.ietf.org/rfc', allow_hosts=['www.ietf.org'], opener=opener_for(FakeResponse(PAGE)))
-            Workflow(core).add_retrieved_source(case, r, title='RFC', version='1', provenance='documented', author='op')
-            self.assertEqual(core.sources(case)[0]['authority'], 'official')
-            events = [dict(x) for x in core.db.execute("SELECT * FROM audit WHERE case_id=?", (case,))]
-            self.assertTrue(any('source_retrieved' in str(e) and r['sha256'] in str(e) for e in events))
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)          # runs last: after the database is closed (Windows file locks)
+        root = Path(tmp.name)
+        (root / 'in').mkdir()
+        core = Core(root / 'state')
+        self.addCleanup(core.close)
+        case = core.investigate('p', 'Pesquisa', str(root / 'in'), 'owner', 'auth')
+        r = fetch_reference('https://www.ietf.org/rfc', allow_hosts=['www.ietf.org'], opener=opener_for(FakeResponse(PAGE)))
+        Workflow(core).add_retrieved_source(case, r, title='RFC', version='1', provenance='documented', author='op')
+        self.assertEqual(core.sources(case)[0]['authority'], 'official')
+        events = [dict(x) for x in core.db.execute("SELECT * FROM audit WHERE case_id=?", (case,))]
+        self.assertTrue(any('source_retrieved' in str(e) and r['sha256'] in str(e) for e in events))
 
 
 if __name__ == '__main__':
