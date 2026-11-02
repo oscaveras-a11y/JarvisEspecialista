@@ -4,7 +4,7 @@ import os
 import re
 import sqlite3
 from importlib.resources import files
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 
 _MAX_QUERY = 256
 _MAX_LIMIT = 10
@@ -24,7 +24,7 @@ def _catalog():
     entries = json.loads(resource.read_text(encoding='utf-8'))
     for item in entries:
         name = item['path']
-        if not name.endswith('.md') or Path(name).name != name:
+        if (not name.endswith('.md') or Path(name).name != name\n                or PureWindowsPath(name).name != name):
             raise ValueError('Invalid packaged guide path')
     return entries
 
