@@ -59,13 +59,28 @@ funcionalidade "desaparecida".
   MBR/GPT sim (`test_forensics_protocols.py`). Sem Autopsy/TSK/YARA
   forense integrado como suíte; sem recuperação de apagados; cadeia de
   custódia é hash+auditoria, não assinatura digital.
-- **9. Pesquisa de vulnerabilidades** — maior salto da sessão (ZAP ativo/
-  passivo, inventário web/API, campanhas — mergeado em 2026-11-01,
-  commit `0c59911`). `pentest/{active.py,passive.py,zap_driver.py,
-  api_runtime.py,campaigns.py}`, `vulnerability/yara_scan.py`. Validação
-  com ZAP real só no workflow dedicado. `docs/security-coverage.md` é
-  honesto: faltam Semgrep (SAST), SCA (pip-audit/npm audit), Gitleaks
-  (segredos), Nmap.
+- **9. Pesquisa de vulnerabilidades** — ZAP ativo/passivo, inventário
+  web/API, campanhas (`pentest/{active.py,passive.py,zap_driver.py,
+  api_runtime.py,campaigns.py}`), auditoria estática de configuração/
+  segredos (`vulnerability/__init__.py`), YARA (`vulnerability/
+  yara_scan.py`). **Atualização (2026-11-02): Semgrep (SAST) e
+  detect-secrets (segredos) integrados de verdade**, pelo mesmo caminho
+  isolado/limitado do DIE/Unblob (`external_tool_runtime.py`,
+  `external_tools.py`, `external_tools_child.py`), com regras próprias
+  trazidas pelo operador (`config/semgrep-rules/python-security.yml`,
+  nunca a URL/registro público), achados nunca incluem o trecho de código
+  correspondido nem o valor do segredo (só regra/severidade/linha, ou o
+  SHA1 já produzido pela própria ferramenta). Testado de verdade com os
+  binários reais instalados neste ambiente
+  (`test_semgrep_and_detect_secrets_find_real_synthetic_issues`), provido
+  no CI dedicado (`scripts/setup-external-recovery-tools.sh`, workflow
+  "Ten real tools together"). Honesto sobre o que falta: **pip-audit/npm
+  audit (SCA) e Nmap (inventário de rede) continuam pendentes** — ambos
+  exigem rede por natureza (consulta a base de vulnerabilidades ou
+  varredura de portas), o que conflita com a postura "sem rede" deste
+  módulo; decisão do proprietário necessária (liberar rede explicitamente
+  para esse caso, ou providenciar uma base OSV offline / escopo de rede
+  autorizado separado). `docs/security-coverage.md` detalha.
 - **10. Análise de protocolos** — `protocol/__init__.py` (captura hex
   genérica) e `automotive/__init__.py` (CAN clássico offline) testados.
   Sem CAN FD/DBC, sem USB/UART/SPI/I2C, sem PCAPNG real.
@@ -121,3 +136,12 @@ funcionalidade "desaparecida".
 
 Ordem de trabalho combinada: 4 → 6 → 8 → 9, depois retomar o resto do
 raio-x.
+
+## Progresso em 2026-11-02
+
+- **4** — confirmado concluído (ver correção acima), nada pendente de código.
+- **9** — Semgrep e detect-secrets integrados e testados de verdade (ver
+  seção 9 acima). Falta uma decisão do proprietário sobre rede para
+  pip-audit/npm audit (SCA) e sobre o escopo de Nmap (inventário de rede);
+  sem essa decisão, os dois ficam fora por exigirem rede.
+- **6 e 8** ainda pendentes nesta sessão — próximos da ordem combinada.

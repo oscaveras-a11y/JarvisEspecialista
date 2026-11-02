@@ -1,0 +1,83 @@
+rules:
+  - id: insecure-pickle-loads
+    patterns:
+      - pattern-either:
+          - pattern: pickle.loads(...)
+          - pattern: pickle.load(...)
+          - pattern: pickle.Unpickler(...)
+    message: >-
+      Loading pickle data deserializes and can execute arbitrary code.
+      Never unpickle data from an untrusted or unauthorized source.
+    languages: [python]
+    severity: ERROR
+
+  - id: unsafe-yaml-load
+    patterns:
+      - pattern: yaml.load(...)
+      - pattern-not: yaml.load(..., Loader=yaml.SafeLoader, ...)
+    message: >-
+      yaml.load without an explicit SafeLoader can construct arbitrary
+      Python objects. Use yaml.safe_load or pass Loader=yaml.SafeLoader.
+    languages: [python]
+    severity: ERROR
+
+  - id: subprocess-shell-true
+    patterns:
+      - pattern-either:
+          - pattern: subprocess.$FUNC(..., shell=True, ...)
+          - pattern: os.system(...)
+    message: >-
+      shell=True (or os.system) invokes a shell that can be abused for
+      command injection if any part of the command is attacker-influenced.
+    languages: [python]
+    severity: ERROR
+
+  - id: eval-or-exec-call
+    patterns:
+      - pattern-either:
+          - pattern: eval(...)
+          - pattern: exec(...)
+    message: eval/exec on dynamic input can execute arbitrary code.
+    languages: [python]
+    severity: WARNING
+
+  - id: weak-hash-for-security
+    patterns:
+      - pattern-either:
+          - pattern: hashlib.md5(...)
+          - pattern: hashlib.sha1(...)
+    message: >-
+      MD5/SHA1 are not safe for passwords, signatures or integrity checks
+      against an adversary; use SHA-256 or a dedicated password hash (bcrypt,
+      scrypt, Argon2) instead.
+    languages: [python]
+    severity: WARNING
+
+  - id: tls-verification-disabled
+    patterns:
+      - pattern-either:
+          - pattern: requests.$FUNC(..., verify=False, ...)
+          - pattern: ssl._create_unverified_context(...)
+    message: Disabling TLS certificate verification allows man-in-the-middle attacks.
+    languages: [python]
+    severity: ERROR
+
+  - id: flask-debug-enabled
+    patterns:
+      - pattern: $APP.run(..., debug=True, ...)
+    message: >-
+      A debug server exposes an interactive debugger/evaluator to anyone
+      who can reach it; never enable debug=True in production.
+    languages: [python]
+    severity: WARNING
+
+  - id: sql-fstring-query
+    patterns:
+      - pattern-either:
+          - pattern: $CURSOR.execute(f"...")
+          - pattern: $CURSOR.execute("..." + ...)
+    message: >-
+      Building SQL with an f-string or string concatenation instead of
+      parameter binding risks SQL injection.
+    languages: [python]
+    severity: ERROR

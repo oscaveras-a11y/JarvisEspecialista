@@ -19,7 +19,37 @@ Este inventário registra o pedido do proprietário. Não é um resultado de pen
 
 ## Ferramentas
 
-Há base suficiente para o pentest web limitado e a inspeção estática de criptografia. Faltam adaptadores específicos para cobrir a lista inteira: SAST, SCA, segredos, inventário de rede, upload e atualização assinada. Semgrep, npm audit/pip-audit, um detector de segredos e Nmap são candidatos a integrar; não estão declarados instalados ou funcionais por este documento. Seleção de versão, licença, limites, formato de saída e testes reais em runner devem preceder a disponibilidade operacional.
+**Atualização de 2026-11-02:** Semgrep (SAST) e detect-secrets (segredos) estão
+integrados e testados de verdade, pelo mesmo caminho isolado/limitado que já
+sustentava DIE e Unblob (`external_tool_runtime.py`, `external_tools.py`,
+`external_tools_child.py`): executável absoluto configurado via variável de
+ambiente (`CYBER_SEMGREP_EXECUTABLE`, `CYBER_DETECT_SECRETS_EXECUTABLE`),
+subprocesso com RAM/CPU/saída limitados e sem rede liberada, resultado validado
+campo a campo antes de persistir. O Semgrep usa um conjunto de regras próprio e
+confiável (`config/semgrep-rules/python-security.yml`, nunca a origem/URL do
+registro público) com o mesmo padrão de configuração do YARA. O achado nunca
+inclui o trecho de código correspondido (poderia conter um segredo da própria
+amostra) — só identificador de regra, severidade e linha. O detect-secrets
+nunca retorna o valor do segredo, só o SHA1 já produzido pela própria
+ferramenta. Cobertos por `tests/test_external_recovery_tools.py`
+(`test_semgrep_and_detect_secrets_find_real_synthetic_issues` e o teste de
+rejeição de JSON malformado), providos no CI dedicado por
+`scripts/setup-external-recovery-tools.sh`.
+
+Pendente nesta entrega, por exigirem rede (incompatível com a postura "sem
+rede" deste módulo) ou escopo próprio ainda não definido:
+
+- **pip-audit/npm audit (SCA)** — consultam bases de vulnerabilidade on-line
+  (OSV/PyPI) por padrão; não há cache/base offline provisionada neste ambiente.
+  Precisa de decisão do proprietário: aceitar rede explicitamente liberada
+  só para essa consulta, ou providenciar uma base OSV offline.
+- **Nmap (inventário de rede)** — precisa de um escopo de rede autorizado
+  explícito (IPs/portas fixos), separado do gateway web atual, igual ao que
+  o pentest ativo (seção 9 original) já exige para HTTP. Ainda não
+  implementado.
+
+Seleção de versão, licença, limites, formato de saída e testes reais em runner
+devem preceder a disponibilidade operacional de qualquer adaptador novo.
 
 YARA pode ajudar em assinaturas estáticas, mas não substitui SAST/SCA, autorização ou testes de atualização. Ghidra/Capstone e regras próprias já sustentam a identificação de constantes/instruções; não é necessário instalar todas as ferramentas possíveis.
 

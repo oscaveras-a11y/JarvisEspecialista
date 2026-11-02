@@ -19,14 +19,15 @@ from cyber_core.service import Core
 from cyber_core.cryptanalysis.sessions import RecoverySessions
 
 class ToolInventoryContracts(unittest.TestCase):
-    def test_six_backends_have_explicit_availability_without_executing_input(self):
+    def test_eight_backends_have_explicit_availability_without_executing_input(self):
         try:
             from cyber_core.external_tools import tool_inventory
         except ImportError:
             self.fail("External tool adapters have not been implemented")
         with patch.dict(os.environ, {}, clear=True):
             inventory = tool_inventory()
-        self.assertEqual(set(inventory), {"hashcat", "john", "qpdf", "openssl", "die", "unblob"})
+        self.assertEqual(set(inventory), {"hashcat", "john", "qpdf", "openssl", "die", "unblob",
+                                           "semgrep", "detect-secrets"})
         for item in inventory.values():
             self.assertFalse(item["available"])
             self.assertIn("reason", item)
@@ -70,6 +71,27 @@ class ExternalFailureContracts(unittest.TestCase):
         with self.assertRaises(CoreError):
             normalize_unblob([{"task": {"path": "/target"}, "reports": [],
                               "subtasks": [{"path": "/unexpected"}]}], Path("/target"), 10)
+
+    def test_malformed_semgrep_and_detect_secrets_analysis_is_rejected(self):
+        from cyber_core.external_tools_child import normalize_semgrep, normalize_detect_secrets
+        source = Path("/target")
+        with self.assertRaises(CoreError):
+            normalize_semgrep({"results": "truncated", "errors": []}, source)
+        with self.assertRaises(CoreError):
+            normalize_semgrep({"results": [], "errors": [{"message": "scan failed"}]}, source)
+        with self.assertRaises(CoreError):
+            # A finding for a different path than the one that was scanned.
+            normalize_semgrep({"results": [{"path": "/other", "check_id": "r", "start": {"line": 1},
+                                             "end": {"line": 1}, "extra": {"severity": "INFO"}}], "errors": []}, source)
+        with self.assertRaises(CoreError):
+            normalize_detect_secrets({"results": {"target": [{"filename": "target", "type": "x",
+                                                                "hashed_secret": "not-a-hash", "line_number": 1}]}}, source)
+        with self.assertRaises(CoreError):
+            # Results keyed to a file other than the one that was scanned.
+            normalize_detect_secrets({"results": {"other": []}}, source)
+        clean = normalize_semgrep({"results": [], "errors": []}, source)
+        self.assertEqual(clean, {"identified": False, "findings": [], "findings_total": 0,
+                                  "truncated": False, "extraction_enabled": False})
 
     @unittest.skipUnless(sys.platform == "linux", "Linux CLI runtime")
     def test_raw_failure_output_and_environment_are_not_exposed(self):
@@ -150,13 +172,14 @@ class RealExternalRecoveryTests(unittest.TestCase):
         self.assertNotIn(self.password.decode(), self.core.report(self.case).read_text(encoding="utf-8"))
         return done
 
-    def test_all_six_real_tools_are_available(self):
+    def test_all_eight_real_tools_are_available(self):
         try:
             from cyber_core.external_tools import tool_inventory
         except ImportError:
             self.fail("External tool inventory is not implemented")
         inventory = tool_inventory()
-        self.assertEqual(set(inventory), {"hashcat","john","qpdf","openssl","die","unblob"})
+        self.assertEqual(set(inventory), {"hashcat","john","qpdf","openssl","die","unblob",
+                                           "semgrep","detect-secrets"})
         self.assertTrue(all(item["available"] for item in inventory.values()), inventory)
 
     def test_qpdf_wrong_correct_without_plaintext_export(self):
@@ -242,6 +265,43 @@ class RealExternalRecoveryTests(unittest.TestCase):
         self.core.pause(self.case)
         with self.assertRaises(CoreError):
             analyze_tool(self.core, self.case, elf, tool="die")
+
+    def test_semgrep_and_detect_secrets_find_real_synthetic_issues(self):
+        try:
+            from cyber_core.external_tools import analyze_tool
+        except ImportError:
+            self.fail("External analysis integration is not implemented")
+        source = self.scope / "sample.py"
+        secret = "synthetic-owner-secret-2026"
+        source.write_text('import pickle\npickle.loads(b"x")\npassword = "%s"\n' % secret)
+        rules = self.root / "semgrep-rules.yml"
+        rules.write_text(
+            "rules:\n"
+            "  - id: insecure-pickle-loads\n"
+            "    patterns:\n"
+            "      - pattern: pickle.loads(...)\n"
+            "    message: Insecure deserialization via pickle.loads\n"
+            "    languages: [python]\n"
+            "    severity: ERROR\n", encoding="utf-8")
+        self.enterContext(patch.dict(os.environ, {"CYBER_SEMGREP_RULES_PATH": str(rules)}))
+
+        semgrep = analyze_tool(self.core, self.case, source, tool="semgrep")
+        analysis = semgrep["analysis"]
+        self.assertEqual(analysis["backend"], "semgrep")
+        self.assertTrue(analysis["identified"])
+        self.assertTrue(any(f["rule_id"].endswith("insecure-pickle-loads") for f in analysis["findings"]))
+        self.assertNotIn(secret, json.dumps(semgrep))
+
+        detected = analyze_tool(self.core, self.case, source, tool="detect-secrets")
+        analysis = detected["analysis"]
+        self.assertEqual(analysis["backend"], "detect-secrets")
+        self.assertTrue(analysis["identified"])
+        self.assertTrue(all(len(f["secret_sha1"]) == 40 for f in analysis["findings"]))
+        self.assertNotIn(secret, json.dumps(detected))
+
+        self.assertTrue(self.core.verify_audit(self.case))
+        report = self.core.report(self.case).read_text(encoding="utf-8")
+        self.assertNotIn(secret, report)
 
     def test_external_profile_rechecks_pause_and_cancel(self):
         source = self.scope / "sha256.txt"

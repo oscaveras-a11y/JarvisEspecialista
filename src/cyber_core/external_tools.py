@@ -28,7 +28,7 @@ def external_trial(mode, raw, candidate, config, *, timeout=60, scratch_parent=N
     return trial(mode, raw, candidate, config, timeout=timeout, scratch_parent=scratch_parent)
 
 def analyze_tool(core, case, path, *, tool):
-    if tool not in ("die", "unblob"):
+    if tool not in ("die", "unblob", "semgrep", "detect-secrets"):
         raise CoreError("Unsupported external analysis tool")
     config = external_configuration(tool)
     from cyber_core.operations import _acquire, save_operation
@@ -58,6 +58,12 @@ def analyze_tool(core, case, path, *, tool):
                 or analysis.get("input_bytes") != len(raw) or type(analysis.get("identified")) is not bool
                 or analysis.get("extraction_enabled") is not False):
             raise CoreError("Invalid external analysis result")
+        if tool in ("semgrep", "detect-secrets"):
+            findings = analysis.get("findings")
+            if (not isinstance(findings, list) or len(findings) > 256
+                    or type(analysis.get("findings_total")) is not int or analysis["findings_total"] < len(findings)
+                    or type(analysis.get("truncated")) is not bool):
+                raise CoreError("Invalid external analysis findings")
         # Revalidate the acquired evidence after the entire process tree exits.
         verified_result(core, case, evidence["task_id"]) if "task_id" in evidence else None
         with open(evidence["copy"], "rb") as stream:

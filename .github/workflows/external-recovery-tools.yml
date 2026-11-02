@@ -1,4 +1,4 @@
-name: Eight real tools together
+name: Ten real tools together
 on:
   pull_request:
     branches: [main]
@@ -9,6 +9,7 @@ on:
       - 'scripts/setup-reverse-tools-actions.sh'
       - 'scripts/check-real-backends.py'
       - 'scripts/setup-external-recovery-tools.sh'
+      - 'config/semgrep-rules/**'
       - '.github/workflows/external-recovery-tools.yml'
 permissions:
   contents: read
@@ -64,7 +65,7 @@ jobs:
         run: python scripts/probe-external-recovery.py
       - name: Real encrypted-file and identification contracts
         run: python scripts/run-tests.py test_external_recovery_tools.py
-      - name: Complete suite with all eight real tools
+      - name: Complete suite with all ten real tools
         if: ${{ !cancelled() && steps.provision.outcome == 'success' }}
         run: python scripts/run-tests.py
       - name: Synthetic demonstration

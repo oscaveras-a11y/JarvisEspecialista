@@ -10,8 +10,8 @@ import threading
 import time
 from cyber_core.errors import CoreError
 
-TOOLS = ("hashcat","john","qpdf","openssl","die","unblob")
-ENV_NAMES = {tool:"CYBER_"+tool.upper()+"_EXECUTABLE" for tool in TOOLS}
+TOOLS = ("hashcat","john","qpdf","openssl","die","unblob","semgrep","detect-secrets")
+ENV_NAMES = {tool:"CYBER_"+tool.upper().replace("-","_")+"_EXECUTABLE" for tool in TOOLS}
 MODES = {"qpdf-pdf":"qpdf", "openssl-pkcs12":"openssl", 
          "hashcat-sha256":"hashcat", "john-sha256":"john",
          "john-zip":"john", "hashcat-zip-aes":"hashcat", "john-rar5":"john"}
@@ -39,6 +39,25 @@ def executable(value):
         raise CoreError("External tool executable unavailable")
     return str(path)
 
+def semgrep_rules_path(value):
+    # Operator CONFIGURATION, like YARA's rules path: never accept a rules
+    # location, source or URL drawn from the sample being analyzed, an agent
+    # response or the network. Must be a pre-existing, trusted, absolute path.
+    if not isinstance(value,str) or not value:
+        raise CoreError("Semgrep requires an explicit, trusted rules path")
+    path = Path(value)
+    if not path.is_absolute() or path.is_symlink():
+        raise CoreError("Semgrep rules path must be absolute, trusted and not a symlink")
+    if path.is_file():
+        if path.suffix not in (".yml",".yaml"):
+            raise CoreError("Semgrep rules file must be .yml or .yaml")
+    elif path.is_dir():
+        if not any(p.suffix in (".yml",".yaml") for p in path.rglob("*") if p.is_file() and not p.is_symlink()):
+            raise CoreError("No Semgrep rule files found at the configured path")
+    else:
+        raise CoreError("Semgrep rules path does not exist")
+    return str(path.resolve())
+
 def external_configuration(tool):
     if tool not in TOOLS:
         raise CoreError("Unknown external tool")
@@ -51,6 +70,8 @@ def external_configuration(tool):
     rar_converter = os.environ.get("CYBER_RAR2JOHN_EXECUTABLE")
     if tool == "john" and rar_converter:
         config["rar_converter"] = executable(rar_converter)
+    if tool == "semgrep":
+        config["rules_path"] = semgrep_rules_path(os.environ.get("CYBER_SEMGREP_RULES_PATH"))
     return config
 
 def tool_inventory():
@@ -102,7 +123,12 @@ class Runner:
         home = self.root/"home"
         home.mkdir()
         self.env = {"PATH":"/usr/bin:/bin","HOME":str(home),"TMPDIR":str(self.root),
-                    "LANG":"C.UTF-8","LC_ALL":"C.UTF-8","OMP_NUM_THREADS":"2","POCL_MAX_PTHREAD_COUNT":"2"}
+                    "LANG":"C.UTF-8","LC_ALL":"C.UTF-8","OMP_NUM_THREADS":"2","POCL_MAX_PTHREAD_COUNT":"2",
+                    # Belt-and-suspenders against any backend's own telemetry/tracing SDK
+                    # (e.g. Semgrep's OpenTelemetry client) attempting an outbound call
+                    # despite its own CLI opt-out flags: this disables the SDK outright,
+                    # independent of application-level flags, for every external backend.
+                    "OTEL_SDK_DISABLED":"true"}
     def run(self, command, *, data=b"", allowed=(0,), output_limit=262144):
         if sys.platform != "linux":
             raise CoreError("External tools require Linux")
@@ -164,7 +190,11 @@ class Runner:
 
 def version(runner,tool,path):
     args = {"hashcat":["--version"],"john":["--list=build-info"],"qpdf":["--version"],
-            "openssl":["version"],"die":["--version"],"unblob":["--version"]}[tool]
+            "openssl":["version"],"die":["--version"],"unblob":["--version"],
+            # Bare "semgrep --version" (unlike "semgrep scan") checks for updates over
+            # the network by default even with a fresh HOME; --disable-version-check
+            # is required here too, not just on the scan invocation in analyze().
+            "semgrep":["--version","--disable-version-check"],"detect-secrets":["--version"]}[tool]
     _,stdout,stderr = runner.run([path,*args])
     match = re.search(rb"(?<![0-9.])\d+(?:\.\d+){1,3}(?![0-9.])",stdout+stderr)
     if not match:

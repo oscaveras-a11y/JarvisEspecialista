@@ -27,14 +27,17 @@ def read_small(path, maximum=262144):
         raise CoreError("External result exceeds limit")
     return value
 
-def validate_config(config, tool, *, converter=False, rar_converter=False):
-    if not isinstance(config, dict) or set(config) - {"executable", "converter", "rar_converter"}:
+def validate_config(config, tool, *, converter=False, rar_converter=False, rules_path=False):
+    if not isinstance(config, dict) or set(config) - {"executable", "converter", "rar_converter", "rules_path"}:
         raise CoreError("Invalid external configuration")
     result = {"executable": executable(config.get("executable"))}
     if converter:
         result["converter"] = executable(config.get("converter"))
     if rar_converter:
         result["converter"] = executable(config.get("rar_converter"))
+    if rules_path:
+        from cyber_core.external_tool_runtime import semgrep_rules_path
+        result["rules_path"] = semgrep_rules_path(config.get("rules_path"))
     return result
 
 def trial(mode, raw, candidate, config, *, timeout=60, scratch_parent=None):
@@ -169,10 +172,63 @@ def normalize_unblob(data, source, size):
     return {"identified": bool(chunks), "chunks": chunks[:128], "chunks_total": len(chunks),
             "truncated": len(chunks) > 128, "extraction_enabled": False}
 
+MAX_FINDINGS = 256
+
+def normalize_semgrep(data, source):
+    if not isinstance(data, dict) or not isinstance(data.get("results"), list) or not isinstance(data.get("errors"), list):
+        raise CoreError("Invalid Semgrep JSON")
+    if data["errors"]:
+        raise CoreError("Semgrep reported a scan error")
+    records = data["results"]
+    if len(records) > 4096:
+        raise CoreError("Invalid Semgrep result count")
+    findings = []
+    for item in records:
+        if (not isinstance(item, dict) or item.get("path") != str(source)
+                or not isinstance(item.get("check_id"), str) or not isinstance(item.get("extra"), dict)):
+            raise CoreError("Invalid Semgrep finding")
+        start, end = item.get("start"), item.get("end")
+        severity = item["extra"].get("severity")
+        if (not isinstance(start, dict) or not isinstance(end, dict)
+                or type(start.get("line")) is not int or type(end.get("line")) is not int
+                or severity not in ("ERROR", "WARNING", "INFO")):
+            raise CoreError("Invalid Semgrep finding location")
+        if len(findings) < MAX_FINDINGS:
+            # The rule's own message (operator-authored) is kept; the matched
+            # "lines" excerpt is dropped since it may echo sample secrets.
+            findings.append({"rule_id": item["check_id"][:256], "severity": severity,
+                              "line": start["line"], "end_line": end["line"],
+                              "message": str(item["extra"].get("message", ""))[:512]})
+    return {"identified": bool(findings), "findings": findings, "findings_total": len(records),
+            "truncated": len(records) > len(findings), "extraction_enabled": False}
+
+def normalize_detect_secrets(data, source):
+    if not isinstance(data, dict) or not isinstance(data.get("results"), dict):
+        raise CoreError("Invalid detect-secrets JSON")
+    name = source.name
+    records = data["results"].get(name, [])
+    if set(data["results"]) - {name} or not isinstance(records, list) or len(records) > 4096:
+        raise CoreError("Invalid detect-secrets results")
+    findings = []
+    for item in records:
+        if (not isinstance(item, dict) or item.get("filename") != name
+                or not isinstance(item.get("type"), str)
+                or not isinstance(item.get("hashed_secret"), str)
+                or re.fullmatch(r"[0-9a-f]{40}", item["hashed_secret"]) is None
+                or type(item.get("line_number")) is not int):
+            raise CoreError("Invalid detect-secrets finding")
+        if len(findings) < MAX_FINDINGS:
+            # Only the detector's own identifier, line number and the secret's
+            # SHA1 (never the secret value itself) ever leave this function.
+            findings.append({"detector": item["type"][:128], "line": item["line_number"],
+                              "secret_sha1": item["hashed_secret"]})
+    return {"identified": bool(findings), "findings": findings, "findings_total": len(records),
+            "truncated": len(records) > len(findings), "extraction_enabled": False}
+
 def analyze(tool, raw, config, *, timeout, scratch_parent):
-    if tool not in ("die", "unblob") or not 0 < len(raw) <= MAX_INPUT:
+    if tool not in ("die", "unblob", "semgrep", "detect-secrets") or not 0 < len(raw) <= MAX_INPUT:
         raise CoreError("Unsupported external analysis")
-    config = validate_config(config, tool)
+    config = validate_config(config, tool, rules_path=tool == "semgrep")
     with tempfile.TemporaryDirectory(prefix="external-", dir=scratch_parent) as directory:
         root = Path(directory)
         runner = Runner(root, timeout)
@@ -182,12 +238,24 @@ def analyze(tool, raw, config, *, timeout, scratch_parent):
         if tool == "die":
             _, output, _ = runner.run([path, "--json", source])
             result = normalize_die(json.loads(output))
-        else:
+        elif tool == "unblob":
             report = root / "report.json"
             runner.run([path, "--skip-extraction", "--depth", "1", "--process-num", "1",
                         "--randomness-depth", "0", "--report", report, "--log", root / "unblob.log",
                         "--extract-dir", root / "carved", source])
             result = normalize_unblob(json.loads(read_small(report)), source, len(raw))
+        elif tool == "semgrep":
+            output = root / "semgrep.json"
+            # --no-trace is required even with --metrics=off: Semgrep's OpenTelemetry
+            # tracing is a separate code path that otherwise retries a DNS/connect to
+            # telemetry.semgrep.dev with ~100s of exponential backoff before giving up.
+            runner.run([path, "--config", config["rules_path"], "--json", "--quiet", "--metrics=off",
+                        "--no-trace", "--oss-only", "--disable-version-check", "--scan-unknown-extensions",
+                        "--output", output, source], allowed=(0, 1))
+            result = normalize_semgrep(json.loads(read_small(output, maximum=4194304)), source)
+        else:
+            _, stdout, _ = runner.run([path, "scan", source], allowed=(0,))
+            result = normalize_detect_secrets(json.loads(stdout), source)
         if source.read_bytes() != raw:
             raise CoreError("External analysis changed input")
         return {"backend": tool, "backend_version": backend_version, "backend_sha256": binary_digest(path),
