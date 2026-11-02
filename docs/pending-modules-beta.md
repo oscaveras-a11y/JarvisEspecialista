@@ -52,8 +52,11 @@ Arquivos sem senha não confirmam uma candidata arbitrária. Novos modos não ex
 
     cyber inventory-disk CASE IMAGEM
     cyber inventory-pcap CASE CAPTURA
+    cyber disk-partitions CASE IMAGEM
+    cyber disk-entries CASE IMAGEM --partition-offset-sectors N [--deleted-only] [--recursive]
+    cyber disk-recover CASE IMAGEM --partition-offset-sectors N --inode INODE
 
-Analisam cópia verificada e persistem inventário, hash e referência de evidência no relatório. Disco: MBR/GPT e limites documentados, sem montagem ou recuperação de apagados. PCAP clássico: Ethernet/IPv4/TCP/UDP, sem captura ativa, remontagem de fluxos ou PCAPNG. Não equiparar esses inventários a uma suíte forense profissional completa.
+Analisam cópia verificada e persistem inventário, hash e referência de evidência no relatório. `inventory-disk` continua sendo o parser Python puro de MBR/GPT (sem montar, sem Sleuth Kit). `disk-partitions`/`disk-entries`/`disk-recover` (2026-11-02) são o Sleuth Kit real (`mmls`/`fls`/`icat`), com um fluxo de três passos explícitos: identificar partições, listar entradas do sistema de arquivos — **incluindo apagadas** —, e recuperar um arquivo específico por inode, nunca em massa nem automaticamente. O conteúdo recuperado nunca entra no relatório: fica só em `cases/<caso>/recovered/`, com hash e caminho no registro da operação (mesmo padrão de custódia já usado pela recuperação de senhas). PCAP clássico: Ethernet/IPv4/TCP/UDP, sem captura ativa, remontagem de fluxos ou PCAPNG. Ainda sem Autopsy/YARA forense como suíte integrada, sem cadeia de custódia com assinatura digital (continua hash+auditoria). Não equiparar esses inventários a uma suíte forense profissional completa.
 
 ## Dois agentes
 

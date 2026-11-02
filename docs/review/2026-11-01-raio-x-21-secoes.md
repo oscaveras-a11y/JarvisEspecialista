@@ -84,9 +84,23 @@ funcionalidade "desaparecida".
   explícita do proprietário, depois de auditado. CI provisiona tudo
   automaticamente agora (`scripts/setup-external-recovery-tools.sh`).
 - **8. Perícia digital** — `forensics/{disk.py,firmware_timeline.py}`:
-  MBR/GPT sim (`test_forensics_protocols.py`). Sem Autopsy/TSK/YARA
-  forense integrado como suíte; sem recuperação de apagados; cadeia de
-  custódia é hash+auditoria, não assinatura digital.
+  MBR/GPT sim (`test_forensics_protocols.py`). **Atualização
+  (2026-11-02): The Sleuth Kit real integrado**
+  (`forensics/sleuthkit.py`/`sleuthkit_child.py`) — `mmls` (identificação
+  real de partições), `fls` (listagem de entradas do sistema de
+  arquivos, **incluindo apagadas** — primeira capacidade real de
+  "recuperação de dados" do projeto) e `icat` (recuperação de um
+  arquivo específico por inode, nunca em massa/automática). Testado de
+  verdade: partição MBR sintética identificada corretamente, arquivo
+  apagado de uma imagem FAT real listado e recuperado byte a byte
+  (`tests/test_forensics_sleuthkit.py`, CI dedicado). Conteúdo
+  recuperado nunca entra no relatório — fica em `cases/<caso>/
+  recovered/`, só hash+caminho no registro da operação, mesmo padrão de
+  custódia da recuperação de senhas. Avaliado: Autopsy é GUI, não serve
+  pra esse motor headless — descartado por desenho, não por falta de
+  tentativa; YARA já integrado desde a seção 9. Ainda falta: cadeia de
+  custódia com assinatura digital (continua hash+auditoria), Autopsy/
+  TSK como suíte completa (só os 3 comandos essenciais por enquanto).
 - **9. Pesquisa de vulnerabilidades** — ZAP ativo/passivo, inventário
   web/API, campanhas (`pentest/{active.py,passive.py,zap_driver.py,
   api_runtime.py,campaigns.py}`), auditoria estática de configuração/

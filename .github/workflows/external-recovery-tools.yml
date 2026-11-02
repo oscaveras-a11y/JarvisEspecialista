@@ -1,10 +1,11 @@
-name: Eleven real tools together
+name: Fifteen real tools together
 on:
   pull_request:
     branches: [main]
     paths:
       - 'src/cyber_core/**'
       - 'tests/test_external_recovery_tools.py'
+      - 'tests/test_forensics_sleuthkit.py'
       - 'tests/test_recovery_rar5.py'
       - 'scripts/setup-reverse-tools-actions.sh'
       - 'scripts/check-real-backends.py'
@@ -69,7 +70,9 @@ jobs:
         run: python scripts/probe-external-recovery.py
       - name: Real encrypted-file and identification contracts
         run: python scripts/run-tests.py test_external_recovery_tools.py
-      - name: Complete suite with all eleven real tools
+      - name: Real Sleuth Kit partition/entry/recovery contracts
+        run: python scripts/run-tests.py test_forensics_sleuthkit.py
+      - name: Complete suite with all fifteen real tools
         if: ${{ !cancelled() && steps.provision.outcome == 'success' }}
         run: python scripts/run-tests.py
       - name: Synthetic demonstration

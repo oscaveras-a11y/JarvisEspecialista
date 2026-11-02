@@ -117,6 +117,24 @@ def configure(sub):
             parser.add_argument("--sector-size",type=int,choices=(512,4096),default=512)
         else:
             parser.add_argument("--max-packets",type=int,default=256)
+    disk_partitions = sub.add_parser("disk-partitions",help="Real Sleuth Kit (mmls) partition identification")
+    disk_partitions.add_argument("case")
+    disk_partitions.add_argument("path")
+    disk_partitions.add_argument("--sector-size",type=int,choices=(512,4096),default=512)
+    disk_entries = sub.add_parser("disk-entries",help="Real Sleuth Kit (fls) filesystem entry listing, including deleted entries")
+    disk_entries.add_argument("case")
+    disk_entries.add_argument("path")
+    disk_entries.add_argument("--partition-offset-sectors",type=int,required=True)
+    disk_entries.add_argument("--sector-size",type=int,choices=(512,4096),default=512)
+    disk_entries.add_argument("--deleted-only",action="store_true")
+    disk_entries.add_argument("--recursive",action="store_true")
+    disk_recover = sub.add_parser("disk-recover",help="Recover exactly one file by inode (real Sleuth Kit icat)")
+    disk_recover.add_argument("case")
+    disk_recover.add_argument("path")
+    disk_recover.add_argument("--partition-offset-sectors",type=int,required=True)
+    disk_recover.add_argument("--inode",required=True)
+    disk_recover.add_argument("--sector-size",type=int,choices=(512,4096),default=512)
+    disk_recover.add_argument("--max-bytes",type=int,default=16777216)
     agent = sub.add_parser("agent-jobs",help="Persistent Codex/Claude metadata reviews")
     commands = agent.add_subparsers(dest="agent_action",required=True)
     for action in ("enqueue","run","list","retry"):
@@ -158,7 +176,7 @@ def configure(sub):
             parser.add_argument("--reason",required=True)
             parser.add_argument("--priority",action="store_true")
 
-COMMANDS = ("web-active","web-session-check","web-access","crypto-inspect","web-passive","api-inventory","pentest","web-probe","firmware-timeline","web-lab","symbols","functions","installer","external-analyze","external-tools","recovery-formats","keys","inventory-disk","inventory-pcap","agent-jobs","recovery-session")
+COMMANDS = ("web-active","web-session-check","web-access","crypto-inspect","web-passive","api-inventory","pentest","web-probe","firmware-timeline","web-lab","symbols","functions","installer","external-analyze","external-tools","recovery-formats","keys","inventory-disk","inventory-pcap","disk-partitions","disk-entries","disk-recover","agent-jobs","recovery-session")
 
 def execute(core,args):
     if args.command in ('web-active','web-session-check','web-access'):
@@ -239,6 +257,17 @@ def execute(core,args):
     if args.command == "inventory-pcap":
         from cyber_core.operations import inventory_pcap
         return inventory_pcap(core,args.case,args.path,max_bytes=args.inventory_max_bytes,max_packets=args.max_packets)
+    if args.command == "disk-partitions":
+        from cyber_core.forensics.sleuthkit import list_partitions
+        return list_partitions(core,args.case,args.path,sector_size=args.sector_size)
+    if args.command == "disk-entries":
+        from cyber_core.forensics.sleuthkit import list_filesystem_entries
+        return list_filesystem_entries(core,args.case,args.path,partition_offset_sectors=args.partition_offset_sectors,
+                                       sector_size=args.sector_size,deleted_only=args.deleted_only,recursive=args.recursive)
+    if args.command == "disk-recover":
+        from cyber_core.forensics.sleuthkit import recover_file
+        return recover_file(core,args.case,args.path,partition_offset_sectors=args.partition_offset_sectors,
+                            inode=args.inode,sector_size=args.sector_size,max_bytes=args.max_bytes)
     if args.command == "agent-jobs":
         from cyber_core.orchestrator.broker import Broker
         broker = Broker(core)

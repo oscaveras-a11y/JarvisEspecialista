@@ -10,7 +10,8 @@ import threading
 import time
 from cyber_core.errors import CoreError
 
-TOOLS = ("hashcat","john","qpdf","openssl","die","unblob","semgrep","detect-secrets","pip-audit")
+TOOLS = ("hashcat","john","qpdf","openssl","die","unblob","semgrep","detect-secrets","pip-audit",
+         "mmls","fls","icat","fsstat")
 # Tools in NETWORK_TOOLS are the only ones ever run with Runner.run(..., network=True):
 # an explicit, narrow exception to this module's otherwise strict no-network posture,
 # made only for an owner-approved SCA lookup against the package index itself (never
@@ -238,7 +239,7 @@ def version(runner,tool,path):
             # the network by default even with a fresh HOME; --disable-version-check
             # is required here too, not just on the scan invocation in analyze().
             "semgrep":["--version","--disable-version-check"],"detect-secrets":["--version"],
-            "pip-audit":["--version"]}[tool]
+            "pip-audit":["--version"],"mmls":["-V"],"fls":["-V"],"icat":["-V"],"fsstat":["-V"]}[tool]
     _,stdout,stderr = runner.run([path,*args])
     match = re.search(rb"(?<![0-9.])\d+(?:\.\d+){1,3}(?![0-9.])",stdout+stderr)
     if not match:

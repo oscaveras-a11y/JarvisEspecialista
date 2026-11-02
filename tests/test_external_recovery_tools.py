@@ -20,7 +20,7 @@ from cyber_core.service import Core
 from cyber_core.cryptanalysis.sessions import RecoverySessions
 
 class ToolInventoryContracts(unittest.TestCase):
-    def test_nine_backends_have_explicit_availability_without_executing_input(self):
+    def test_thirteen_backends_have_explicit_availability_without_executing_input(self):
         try:
             from cyber_core.external_tools import tool_inventory
         except ImportError:
@@ -28,7 +28,8 @@ class ToolInventoryContracts(unittest.TestCase):
         with patch.dict(os.environ, {}, clear=True):
             inventory = tool_inventory()
         self.assertEqual(set(inventory), {"hashcat", "john", "qpdf", "openssl", "die", "unblob",
-                                           "semgrep", "detect-secrets", "pip-audit"})
+                                           "semgrep", "detect-secrets", "pip-audit",
+                                           "mmls", "fls", "icat", "fsstat"})
         for item in inventory.values():
             self.assertFalse(item["available"])
             self.assertIn("reason", item)
@@ -224,14 +225,15 @@ class RealExternalRecoveryTests(unittest.TestCase):
         self.assertNotIn(self.password.decode(), self.core.report(self.case).read_text(encoding="utf-8"))
         return done
 
-    def test_all_nine_real_tools_are_available(self):
+    def test_all_thirteen_real_tools_are_available(self):
         try:
             from cyber_core.external_tools import tool_inventory
         except ImportError:
             self.fail("External tool inventory is not implemented")
         inventory = tool_inventory()
         self.assertEqual(set(inventory), {"hashcat","john","qpdf","openssl","die","unblob",
-                                           "semgrep","detect-secrets","pip-audit"})
+                                           "semgrep","detect-secrets","pip-audit",
+                                           "mmls","fls","icat","fsstat"})
         self.assertTrue(all(item["available"] for item in inventory.values()), inventory)
 
     def test_qpdf_wrong_correct_without_plaintext_export(self):

@@ -11,7 +11,7 @@ for source_list in /etc/apt/apt-mirrors*.txt /etc/apt/sources.list /etc/apt/sour
   fi
 done
 sudo apt-get -o Acquire::Retries=2 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 update -qq
-sudo apt-get -o Acquire::Retries=2 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 install -y --no-install-recommends hashcat ocl-icd-libopencl1 pocl-opencl-icd clinfo qpdf openssl build-essential libssl-dev zlib1g-dev pkg-config libgmp-dev libpcap-dev libbz2-dev libmagic1 squashfs-tools e2fsprogs p7zip-full liblzo2-dev liblz4-dev libzstd-dev
+sudo apt-get -o Acquire::Retries=2 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 install -y --no-install-recommends hashcat ocl-icd-libopencl1 pocl-opencl-icd clinfo qpdf openssl build-essential libssl-dev zlib1g-dev pkg-config libgmp-dev libpcap-dev libbz2-dev libmagic1 squashfs-tools e2fsprogs p7zip-full liblzo2-dev liblz4-dev libzstd-dev sleuthkit dosfstools mtools
 # The loader is separate from the POCL vendor runtime when recommends are disabled.
 clinfo --list
 hashcat --backend-info
@@ -65,6 +65,10 @@ sudo install -m 755 "$(command -v debugfs)" /usr/bin/debugfs
   echo "CYBER_SEMGREP_RULES_PATH=$(pwd)/config/semgrep-rules/python-security.yml"
   echo "CYBER_DETECT_SECRETS_EXECUTABLE=$(command -v detect-secrets)"
   echo "CYBER_PIP_AUDIT_EXECUTABLE=$(command -v pip-audit)"
+  echo "CYBER_MMLS_EXECUTABLE=$(command -v mmls)"
+  echo "CYBER_FLS_EXECUTABLE=$(command -v fls)"
+  echo "CYBER_ICAT_EXECUTABLE=$(command -v icat)"
+  echo "CYBER_FSSTAT_EXECUTABLE=$(command -v fsstat)"
 } >> "$GITHUB_ENV"
 hashcat --version
 "$root/john/run/john" --list=build-info
@@ -78,6 +82,10 @@ pip-audit --version
 sasquatch -version 2>&1 | head -1
 sasquatch-v4be -version 2>&1 | head -1
 debugfs -V 2>&1 | head -1
+mmls -V
+fls -V
+icat -V
+fsstat -V
 
 if [[ "${CYBER_REQUIRE_RAR5:-0}" == 1 ]]; then
   sudo apt-get -o Acquire::Retries=2 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 install -y --no-install-recommends rar
