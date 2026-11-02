@@ -61,7 +61,7 @@ def search_index(query, path=None, limit=5):
         raise ValueError('Query must contain 1 to 256 characters')
     if not isinstance(limit, int) or isinstance(limit, bool) or not 1 <= limit <= _MAX_LIMIT:
         raise ValueError('Limit must be between 1 and 10')
-    terms = re.findall(r'[^\\W_]+', query, flags=re.UNICODE)
+    terms = re.findall(r'[^\W_]+', query, flags=re.UNICODE)
     if not terms:
         raise ValueError('Query must include at least one searchable word')
     expression = ' AND '.join('"' + term.replace('"', '""') + '"' for term in terms)
