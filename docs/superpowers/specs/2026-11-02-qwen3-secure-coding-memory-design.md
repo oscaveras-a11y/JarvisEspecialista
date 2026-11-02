@@ -1,14 +1,14 @@
-# Memória local de programação segura para o Jarvis
+# Memória local ampla de programação segura para o Jarvis
 
-**Estado:** desenho aprovado; primeira entrega sem integração de modelo  
+**Estado:** escopo aprovado pelo proprietário; primeira entrega sem integração de modelo  
 **Data:** 2026-11-02  
 **Base examinada:** `main` em `d7218fbfde77097dac79e3d490efa16cd978ec98`
 
 ## Intenção
 
-Adicionar ao Jarvis uma biblioteca local, pequena e revisável de programação segura, consultável por busca textual e persistida em SQLite no disco. Esta etapa prepara a memória para uso futuro por Qwen3, mas não integra nem chama Ollama agora. O objetivo é ajudar a localizar riscos em código autorizado e apresentar evidências, correções e fontes; não prometer código sem erros.
+Adicionar ao Jarvis uma biblioteca local, ampla, revisável e pesquisável de programação segura, persistida em SQLite no disco. Esta etapa prepara a memória para uso futuro pela Qwen3, mas não integra nem chama Ollama agora. O objetivo é ajudar a reconhecer pontos frágeis em código autorizado, explicar evidências, propor correções e sugerir testes — sem prometer código sem erros.
 
-A expressão “locais frágeis de invadir” será tratada como pontos de código que merecem revisão defensiva: entradas, validação, autenticação/autorização, limites de confiança e tratamento de segredos.
+“Locais frágeis de invadir” significa pontos de revisão defensiva: entradas, consultas, execução de processos, saída em navegador, autenticação/autorização, dados serializados, arquivos, configuração, dependências, serviços expostos e tratamento de segredos.
 
 ## Estado encontrado
 
@@ -20,38 +20,39 @@ A expressão “locais frágeis de invadir” será tratada como pontos de códi
 ## Abordagens consideradas
 
 1. Arquivos Markdown com busca simples: muito simples, mas sem ranking ou limites uniformes de resultado.
-2. Guias Markdown versionados + índice SQLite FTS5 local e reconstruível: mantém fontes legíveis, busca ordenada, baixo consumo e nenhuma dependência de embeddings. **Escolhida.**
-3. Banco vetorial/embeddings: busca semântica potencialmente útil, mas exige outro modelo, mais dependências e memória; não é necessário para esta primeira versão.
+2. Guias Markdown detalhados e catalogados + índice SQLite FTS5 local/reconstruível: mantém fontes legíveis, busca ordenada, baixo consumo e nenhuma dependência de embeddings. **Escolhida.**
+3. Banco vetorial/embeddings: busca semântica potencialmente útil, mas exige outro modelo, dependências e RAM; desnecessário para esta etapa.
 
 ## Escopo da primeira entrega
 
-- Guias Markdown incluídos no pacote, com catálogo estável de ID, tópico, título, versão e referências.
-- Conteúdo defensivo sobre SQL parametrizado, chamadas de processo, XSS, autenticação, autorização, segredos, dependências, serviços expostos, uploads e testes de regressão.
-- Cada guia descreve sinais de risco no fluxo de dados/código, evidências a verificar, mitigação e teste corretivo. Não traz receitas de exploração ou descoberta de credenciais.
-- Um módulo `KnowledgeBase` dedicado cria/recria índice FTS5 num banco separado e expõe busca lexical limitada com título, tópico, trecho e fontes.
-- CLI `cyber knowledge index` e `cyber knowledge search`. Os comandos não inicializam nem alteram o banco de casos.
-- Caminho padrão do índice fica na pasta local de dados do usuário (XDG no Linux/macOS; LOCALAPPDATA no Windows); `--db` permite teste/configuração explícita. O índice é derivado e pode ser reconstruído.
-- Nenhuma conversa, código do proprietário, evidência ou resultado será indexado automaticamente. Nenhum prompt será gravado.
-- A integração que injeta resultados na Qwen3/Ollama é uma etapa futura e requer novo desenho/teste. Nenhum modelo ou adaptador é alterado nesta entrega.
-- Validação de recuperação usa consultas sintéticas por tópico no GitHub Actions; não mede geração nem proficiência de IA.
+- Uma biblioteca extensa, autoral e em português com **18 guias**: visão geral/revisão segura; Python; JavaScript/TypeScript; validação de entradas; SQL; comandos de sistema; XSS; autenticação e armazenamento defensivo de senhas; autorização; segredos/configuração; dependências; serviços/APIs expostos; uploads; caminhos/arquivos; desserialização; logs/erros; criptografia aplicada; testes/revisão de código.
+- Cada guia cobre contexto, sinais de risco no fluxo de código, evidências para confirmar ou descartar alerta, correções, teste de regressão e fontes oficiais. Conteúdo original em resumo, não cópia extensa de terceiros.
+- A biblioteca foca proteção, revisão em código autorizado e correção. Não contém payloads ou receitas passo a passo para explorar alvos.
+- Um catálogo versionado fornece ID, tópico, título, versão e referências. Guias ficam empacotados como Markdown; o índice FTS5 é derivado e reconstruível.
+- Módulo `KnowledgeBase` separado cria o índice no disco e oferece busca lexical limitada com título, tópico, trecho e fontes.
+- CLI `cyber knowledge index` e `cyber knowledge search`. Os comandos não inicializam nem alteram o banco operacional de casos.
+- Caminho padrão do índice fica na pasta local de dados do usuário (XDG no Linux/macOS; LOCALAPPDATA no Windows); `--db` permite configuração explícita e testes. Nenhuma conversa, código do proprietário, evidência ou resultado será indexado automaticamente.
+- Integração que injeta contexto na Qwen3/Ollama fica para etapa futura e exige novo desenho/teste. Nenhum peso ou adaptador será alterado nesta entrega.
+- Consultas sintéticas por tópico avaliam a recuperação no GitHub Actions; isso não mede geração ou proficiência de IA.
 
 ## Fora do escopo
 
-- Integração com chat, API Ollama/Qwen3, qualquer chamada de modelo ou treinamento/fusão de pesos.
-- Importar repositórios/código privados, documentos arbitrários ou gravar conversas sem pedido explícito.
+- Integração com chat, API Ollama/Qwen3, chamadas de modelo, treinamento ou fusão de pesos.
+- Importação automática de repositórios/código privados, documentos arbitrários ou conversas.
 - Senhas, credential stuffing, quebra de credenciais, instruções para invadir ou exploração de sistemas reais.
-- Dependências externas de busca vetorial, embeddings ou serviço online.
-- Instalar ou executar o produto no computador do proprietário.
+- Embeddings, banco vetorial, serviço online ou dependência externa de busca.
+- Instalar/executar o produto no computador do proprietário.
 
 ## Critérios de aceitação
 
-1. `cyber knowledge index` constrói ou reconstrói o banco local a partir dos guias empacotados, de forma idempotente.
-2. `cyber knowledge search` retorna até 10 resultados relevantes, com tópico, título, trecho e referências verificáveis; consulta vazia/sem correspondência não inventa resultado.
-3. Limites de tamanho da consulta e quantidade de resultados são aplicados; texto de busca é passado como dado, não como SQL/FTS bruto.
-4. Os comandos falham claramente se SQLite não oferecer FTS5 e não alteram o banco operacional.
-5. Testes em Linux e Windows do GitHub usam somente diretórios/banco e conteúdo sintéticos; não executam Ollama nem código analisado.
-6. PR permanece separado; integração na `main` só após a validação em CI desta entrega. A autorização atual do proprietário permite integrar quando os checks forem aprovados.
+1. O catálogo contém 18 guias completos, com tamanho mínimo verificável, as seções de sinais, evidência, correção e teste, e referências oficiais HTTPS.
+2. `cyber knowledge index` constrói/reconstrói o banco separado de forma idempotente; a busca retorna até 10 resultados com tópico, título, trecho e fontes.
+3. Uma consulta sintética por guia recupera o tópico esperado; consulta vazia/sem correspondência não inventa material.
+4. Limites de consulta/resultado são aplicados; termos são tratados como dados, não como SQL/FTS bruto.
+5. FTS5 ausente falha claramente sem traceback e sem tocar no banco operacional.
+6. Linux e Windows no GitHub Actions usam só dados sintéticos. A integração Qwen3/Ollama permanece explicitamente pendente.
+7. O PR só é integrado à `main` após checks aprovados, conforme autorização expressa do proprietário.
 
 ## Limitações
 
-Busca lexical pode não encontrar sinônimos; artigos curtos e curados não cobrem todas as linguagens/frameworks. O conteúdo fornece referência para revisão, não resultado de scanner nem prova de vulnerabilidade. A memória não torna a Qwen3 melhor até uma integração futura conectar a recuperação ao prompt. Os checks de CI validam apenas índice e busca, não inferência real.
+FTS5 é busca lexical e pode não encontrar sinônimos; corpus curado não cobre todas as linguagens/frameworks. A memória oferece referências para revisão, não um scanner ou prova de vulnerabilidade. Ela não altera a Qwen3 até a futura etapa de integração. CI valida índice e busca, não inferência real. Material externo deve ser revisado quando suas referências ou versões mudarem.
