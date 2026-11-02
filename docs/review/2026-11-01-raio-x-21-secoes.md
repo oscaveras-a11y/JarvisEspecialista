@@ -47,9 +47,10 @@ funcionalidade "desaparecida".
   `scripts/check-reasoning-handoff.py` passando (`"item4_item5_handoff":
   "passed"`, dois ciclos reais com outcomes `refutes`/`supports`,
   relatório e recall persistentes). ✅ Pronto. Única ressalva honesta:
-  o passo 4 do ciclo ("pesquisar documentação") depende de fontes
-  registradas manualmente — a busca autônoma é escopo da seção 11
-  (pesquisa técnica), que continua fraca.
+  o passo 4 do ciclo ("pesquisar documentação") ainda depende de o
+  operador/agente nomear a fonte (manual ou por fetch explícito,
+  seção 11) — não existe busca autônoma que decida sozinha o que
+  consultar.
 - **6. Engenharia reversa** — `reverse_engineering/{coff.py,
   disassembly.py,strings.py,crypto_inspect.py,external.py}` com Ghidra/
   Capstone/Binwalk via subprocess limitado, parte testada real em CI
@@ -135,6 +136,29 @@ funcionalidade "desaparecida".
 - **10. Análise de protocolos** — `protocol/__init__.py` (captura hex
   genérica) e `automotive/__init__.py` (CAN clássico offline) testados.
   Sem CAN FD/DBC, sem USB/UART/SPI/I2C, sem PCAPNG real.
+- **11. Pesquisa técnica** — **atualizado em 2026-11-02, saiu de
+  "pendente na essência" para parcial.** Até então, `research/
+  __init__.py` (ainda só a classificação por heurística de domínio,
+  ~51 linhas) era tudo que existia — nenhuma busca/fetch real.
+  Decisão do proprietário: liberar rede só para uma URL explícita que
+  o chamador nomeia (nunca uma busca autônoma, nunca o programa
+  decidindo sozinho o que consultar). `research/fetch.py` +
+  `fetch_child.py` fazem um GET HTTPS real e limitado de exatamente
+  essa URL, isolado em processo próprio (mesmo padrão do pip-audit/
+  npm-audit), com verificação de TLS sempre ligada, limite de
+  redirecionamentos (só https), limite de bytes e um recorte de texto
+  limitado — nunca executa, importa nem avalia o que baixa. O
+  resultado já sai registrado como fonte real (`workflow.add_source`),
+  com hash SHA-256 e `Last-Modified`/`ETag` reais em vez de versão
+  digitada pelo operador, mais a classificação oficial/acadêmica/
+  comunitária automática. CLI: `cyber research-fetch`. Testado de
+  verdade contra um host real (`tests/test_research.py`, opt-in
+  `CYBER_REQUIRE_RESEARCH_FETCH_NETWORK=1`). Honesto sobre o que
+  continua faltando: não é busca (sem motor de busca, sem descoberta
+  de links) — só fetch de uma URL já conhecida; sem consulta
+  estruturada a bases de vulnerabilidade (OSV/NVD) ainda; "diferenciar
+  hipóteses dos agentes" (pedido do escopo) ainda não tem nenhum
+  mecanismo formal além da classificação por fonte.
 - **12. Execução autônoma prolongada** — fila/leases/checkpoints/
   cancelamento reais e testados. Sem controle rígido de RAM/CPU por
   tarefa nem orçamento de custo/tokens aplicado; investigação de "dias"
@@ -165,11 +189,8 @@ funcionalidade "desaparecida".
 
 ## ⛔ Pendente na essência
 
-- **11. Pesquisa técnica** — o ponto mais fraco. `research/__init__.py`
-  tem só ~51 linhas: `classify_source()` é heurística de sufixo textual
-  sobre URL fornecida manualmente, sem busca/fetch real, sem consulta a
-  documentação/base de vulnerabilidades. Não é o "motor de pesquisa"
-  descrito no escopo.
+(nenhuma seção nesta categoria no momento — a 11 subiu para parcial em
+2026-11-02, ver abaixo.)
 
 ## Prioridades definidas pelo proprietário em 2026-11-01
 
@@ -199,11 +220,16 @@ raio-x.
   listagem de entradas (incluindo apagadas) e recuperação de um
   arquivo por inode, testado de ponta a ponta com recuperação real de
   um arquivo apagado (ver seção 8 acima).
-- **9** — Semgrep, detect-secrets, pip-audit e agora npm audit
-  integrados e testados de verdade (ver seção 9 acima; proprietário
-  decidiu liberar rede só para essas duas consultas de índice de
-  pacotes). Falta só Nmap (inventário de rede, escopo próprio ainda não
-  definido).
+- **9** — Semgrep, detect-secrets, pip-audit e npm audit integrados e
+  testados de verdade (ver seção 9 acima; proprietário decidiu liberar
+  rede só para essas duas consultas de índice de pacotes). Falta só
+  Nmap (inventário de rede, escopo próprio ainda não definido).
+- **11** — saiu de "pendente na essência" para parcial: fetch real de
+  URL explícita, limitado e isolado, com registro automático de fonte
+  (hash, data, classificação) em vez de só registro manual (ver seção
+  11 acima; proprietário decidiu liberar rede só para a URL explícita
+  que o chamador nomeia, nunca busca autônoma).
 
-Ordem combinada 4 → 6 → 8 → 9 concluída. Próximo: seção 11 (pesquisa
-técnica, a mais fraca do raio-x), por pedido do proprietário.
+Ordem combinada 4 → 6 → 8 → 9 concluída, seção 11 (pedida à parte pelo
+proprietário) também concluída nesta rodada. Resta retomar o resto do
+raio-x quando o proprietário quiser.

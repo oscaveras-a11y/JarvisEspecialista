@@ -239,7 +239,7 @@ def _main(argv=None):
             core = Core(args.home, max_bytes=args.max_bytes, timeout=args.timeout,
                         max_attempts=args.max_attempts, agent_calls_per_case=args.agent_calls_per_case)
             cmd = args.command
-            if cmd in ('hypothesis', 'experiment', 'research', 'verify', 'history'):
+            if cmd in ('hypothesis', 'experiment', 'research', 'research-fetch', 'verify', 'history'):
                 from cyber_core.cli.science import execute
                 result = execute(core, args)
             elif cmd in OPERATION_COMMANDS:

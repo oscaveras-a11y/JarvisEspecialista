@@ -3,7 +3,7 @@ import json
 from cyber_core.errors import CoreError
 from cyber_core.investigation.workflow import Workflow
 
-COMMANDS = ('hypothesis', 'experiment', 'research', 'verify', 'history')
+COMMANDS = ('hypothesis', 'experiment', 'research', 'research-fetch', 'verify', 'history')
 
 def configure(sub):
     hyp = sub.add_parser('hypothesis', help='Register, revise and inspect scientific hypotheses')
@@ -35,6 +35,15 @@ def configure(sub):
     for name in ('title', 'url', 'version', 'author'):
         source.add_argument('--' + name, required=True)
     source.add_argument('--provenance', choices=('documented', 'inference', 'experimental'), required=True)
+    fetch = sub.add_parser('research-fetch',
+        help='Fetch exactly one explicit https URL (real network, owner-approved), hash it and register it as a source')
+    fetch.add_argument('case')
+    fetch.add_argument('--url', required=True)
+    fetch.add_argument('--author', required=True)
+    fetch.add_argument('--provenance', choices=('documented', 'inference', 'experimental'), required=True)
+    fetch.add_argument('--title')
+    fetch.add_argument('--max-bytes', type=int, default=4 * 1024 * 1024)
+    fetch.add_argument('--timeout', type=float, default=30)
     verify = sub.add_parser('verify', help='Apply evidence and independent-review gates before changing state')
     verify.add_argument('case')
     for name in ('state', 'actor', 'reason'):
@@ -77,6 +86,10 @@ def execute(core, args):
         return {'id': flow.add_source(args.case, title=args.title, url=args.url, version=args.version,
                                       provenance=args.provenance, author=args.author),
                 'retrieval': 'operator_reference_registration_only'}
+    if cmd == 'research-fetch':
+        from cyber_core.research.fetch import fetch_source
+        return fetch_source(core, args.case, args.url, provenance=args.provenance, author=args.author,
+                            title=args.title, max_bytes=args.max_bytes, timeout=args.timeout)
     if cmd == 'verify':
         return flow.finalize(args.case, args.state, actor=args.actor, reason=args.reason)
     raise CoreError('Unknown scientific workflow operation')

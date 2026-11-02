@@ -6,6 +6,7 @@ on:
       - 'src/cyber_core/**'
       - 'tests/test_external_recovery_tools.py'
       - 'tests/test_forensics_sleuthkit.py'
+      - 'tests/test_research.py'
       - 'tests/test_recovery_rar5.py'
       - 'scripts/setup-reverse-tools-actions.sh'
       - 'scripts/check-real-backends.py'
@@ -40,6 +41,10 @@ jobs:
       # needed), unlike the author's own sandboxed session. pip-audit is the
       # one adapter allowed to use it, and only to query the package index.
       CYBER_REQUIRE_PIP_AUDIT_NETWORK: '1'
+      # Item 11 (research engine): owner approved network only for an explicit
+      # URL the caller names, never a search — narrower than pip-audit/npm-
+      # audit's own index lookups, so it gets its own opt-in flag.
+      CYBER_REQUIRE_RESEARCH_FETCH_NETWORK: '1'
       PYTHONUTF8: '1'
       PYTHONUNBUFFERED: '1'
       OMP_NUM_THREADS: '2'
@@ -75,6 +80,8 @@ jobs:
         run: python scripts/run-tests.py test_external_recovery_tools.py
       - name: Real Sleuth Kit partition/entry/recovery contracts
         run: python scripts/run-tests.py test_forensics_sleuthkit.py
+      - name: Real explicit-URL research fetch contracts
+        run: python scripts/run-tests.py test_research.py
       - name: Complete suite with all sixteen real tools
         if: ${{ !cancelled() && steps.provision.outcome == 'success' }}
         run: python scripts/run-tests.py
