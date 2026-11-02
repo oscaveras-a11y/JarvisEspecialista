@@ -77,7 +77,7 @@ def search_index(query, path=None, limit=5):
     db = sqlite3.connect(target)
     db.row_factory = sqlite3.Row
     try:
-        rows = db.execute('SELECT id, topic, version, title, snippet(guide_search,3,\'[\',\']\',\' … \',24) AS excerpt, sources FROM guide_search WHERE guide_search MATCH ? ORDER BY rank LIMIT ?', (expression, limit)).fetchall()
+        rows = db.execute('SELECT id, topic, version, title, snippet(guide_search,4,\'[\',\']\',\' … \',24) AS snippet, sources FROM guide_search WHERE guide_search MATCH ? ORDER BY rank LIMIT ?', (expression, limit)).fetchall()
         return {'query': query, 'results': [dict(row) for row in rows], 'count': len(rows), 'database': str(target)}
     finally:
         db.close()
