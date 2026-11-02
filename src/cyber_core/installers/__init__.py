@@ -22,16 +22,19 @@ def safe_member(value):
             raise CoreError('Unsafe archive member')
     return value
 
-def parse_listing(text, max_entries, max_bytes):
-    if '----------\n' not in text.replace('\r\n','\n'):
+def _parse_listing(text, max_entries, max_bytes, *, skip_unsafe):
+    if '----------\\n' not in text.replace('\\r\\n','\\n'):
         raise CoreError('Unsupported 7-Zip listing')
-    header, body = text.replace('\r\n','\n').split('----------\n', 1)
-    if not re.search(r'^Type = Nsis\s*$', header, re.MULTILINE | re.IGNORECASE):
+    header, body = text.replace('\\r\\n','\\n').split('----------\\n', 1)
+    if not re.search(r'^Type = Nsis\\s*$', header, re.MULTILINE | re.IGNORECASE):
         raise CoreError('Input is not identified as NSIS by 7-Zip')
-    result, seen = [], set()
-    for block in body.strip().split('\n\n'):
+    result, seen, skipped, total = [], set(), 0, 0
+    for block in body.strip().split('\\n\\n'):
         if not block.strip():
             continue
+        total += 1
+        if total > max_entries:
+            raise CoreError('Archive listing resource limit')
         fields = {}
         for line in block.splitlines():
             if ' = ' not in line:
@@ -40,26 +43,38 @@ def parse_listing(text, max_entries, max_bytes):
             if key in fields:
                 raise CoreError('Duplicate archive listing field')
             fields[key] = value
-        # 7-Zip uses host separators; a literal backslash on Unix is not accepted.
-        name = safe_member(fields.get('Path'))
-        key = name.casefold()
-        if key in seen:
-            raise CoreError('Archive member collision')
-        seen.add(key)
         if any('link' in k.lower() for k in fields) or 'l' in fields.get('Attributes','').lower():
             raise CoreError('Archive links unsupported')
         folder = fields.get('Folder') == '+' or 'D' in fields.get('Attributes','')
         raw = fields.get('Size', '0' if folder else '')
         if raw == '' and 'Size' in fields and not folder:
-            size = None  # NSIS solid streams may omit the last member size.
+            size = None
         elif raw.isascii() and raw.isdigit() and len(raw) <= 16:
             size = int(raw)
         else:
             raise CoreError('Invalid archive size')
-        if (size is not None and size > max_bytes) or len(result) >= max_entries:
+        if size is not None and size > max_bytes:
             raise CoreError('Archive listing resource limit')
+        try:
+            name = safe_member(fields.get('Path'))
+        except CoreError:
+            if not skip_unsafe:
+                raise
+            skipped += 1
+            continue
+        key = name.casefold()
+        if key in seen:
+            raise CoreError('Archive member collision')
+        seen.add(key)
         result.append({'member': name, 'size': size, 'folder': folder})
-    return result
+    return {'members': result, 'members_total': total, 'unsafe_members_skipped': skipped}
+
+def parse_listing(text, max_entries, max_bytes):
+    return _parse_listing(text, max_entries, max_bytes, skip_unsafe=False)['members']
+
+def parse_listing_safe(text, max_entries, max_bytes):
+    """List safe members while counting unsafe names without exposing them."""
+    return _parse_listing(text, max_entries, max_bytes, skip_unsafe=True)
 
 def selected_member(name):
     path = PurePosixPath(name)
