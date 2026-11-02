@@ -28,8 +28,11 @@ class TestKnowledgeIndex(unittest.TestCase):
     def test_rebuild_replaces_rows_without_duplicates(self):
         build_index(self.database)
         build_index(self.database)
-        with sqlite3.connect(self.database) as db:
+        db = sqlite3.connect(self.database)
+        try:
             count = db.execute("SELECT count(*) FROM guide_search").fetchone()[0]
+        finally:
+            db.close()
         self.assertEqual(count, 18)
 
     def test_query_and_limit_are_bounded(self):
