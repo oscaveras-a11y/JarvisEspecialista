@@ -23,13 +23,13 @@ def safe_member(value):
     return value
 
 def _parse_listing(text, max_entries, max_bytes, *, skip_unsafe):
-    if '----------\\n' not in text.replace('\\r\\n','\\n'):
+    if '----------\n' not in text.replace('\r\n','\n'):
         raise CoreError('Unsupported 7-Zip listing')
-    header, body = text.replace('\\r\\n','\\n').split('----------\\n', 1)
-    if not re.search(r'^Type = Nsis\\s*$', header, re.MULTILINE | re.IGNORECASE):
+    header, body = text.replace('\r\n','\n').split('----------\n', 1)
+    if not re.search(r'^Type = Nsis\s*$', header, re.MULTILINE | re.IGNORECASE):
         raise CoreError('Input is not identified as NSIS by 7-Zip')
     result, seen, skipped, total = [], set(), 0, 0
-    for block in body.strip().split('\\n\\n'):
+    for block in body.strip().split('\n\n'):
         if not block.strip():
             continue
         total += 1
