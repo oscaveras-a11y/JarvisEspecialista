@@ -20,7 +20,7 @@ from cyber_core.service import Core
 from cyber_core.cryptanalysis.sessions import RecoverySessions
 
 class ToolInventoryContracts(unittest.TestCase):
-    def test_thirteen_backends_have_explicit_availability_without_executing_input(self):
+    def test_fourteen_backends_have_explicit_availability_without_executing_input(self):
         try:
             from cyber_core.external_tools import tool_inventory
         except ImportError:
@@ -29,7 +29,7 @@ class ToolInventoryContracts(unittest.TestCase):
             inventory = tool_inventory()
         self.assertEqual(set(inventory), {"hashcat", "john", "qpdf", "openssl", "die", "unblob",
                                            "semgrep", "detect-secrets", "pip-audit",
-                                           "mmls", "fls", "icat", "fsstat"})
+                                           "mmls", "fls", "icat", "fsstat", "npm-audit"})
         for item in inventory.values():
             self.assertFalse(item["available"])
             self.assertIn("reason", item)
@@ -146,6 +146,23 @@ class ExternalFailureContracts(unittest.TestCase):
         self.assertEqual(clean, {"identified": False, "findings": [], "findings_total": 0,
                                   "truncated": False, "extraction_enabled": False})
 
+    def test_malformed_npm_audit_analysis_is_rejected(self):
+        from cyber_core.external_tools_child import normalize_npm_audit
+        with self.assertRaises(CoreError):
+            normalize_npm_audit({"vulnerabilities": "truncated"})
+        with self.assertRaises(CoreError):
+            # Missing title/url/severity on an advisory inside "via".
+            normalize_npm_audit({"vulnerabilities": {"lodash": {"severity": "high", "via": [{}]}}})
+        # A "via" entry that is just a package-name string (a transitive
+        # reference, not its own advisory) is skipped, never fatal.
+        transitive_only = normalize_npm_audit({"vulnerabilities": {"a": {"severity": "high", "via": ["b"]}}})
+        self.assertEqual(transitive_only, {"identified": False, "findings": [], "findings_total": 0,
+                                           "truncated": False, "extraction_enabled": False})
+        clean = normalize_npm_audit({"vulnerabilities": {"lodash": {"severity": "high", "via": [
+            {"title": "t", "url": "u", "severity": "high", "range": "<1.0.0"}]}}})
+        self.assertEqual(clean["findings"], [{"package": "lodash", "severity": "high", "title": "t",
+                                              "url": "u", "range": "<1.0.0"}])
+
     @unittest.skipUnless(sys.platform == "linux", "Linux CLI runtime")
     def test_raw_failure_output_and_environment_are_not_exposed(self):
         from cyber_core.external_tool_runtime import Runner
@@ -225,7 +242,7 @@ class RealExternalRecoveryTests(unittest.TestCase):
         self.assertNotIn(self.password.decode(), self.core.report(self.case).read_text(encoding="utf-8"))
         return done
 
-    def test_all_thirteen_real_tools_are_available(self):
+    def test_all_fourteen_real_tools_are_available(self):
         try:
             from cyber_core.external_tools import tool_inventory
         except ImportError:
@@ -233,7 +250,7 @@ class RealExternalRecoveryTests(unittest.TestCase):
         inventory = tool_inventory()
         self.assertEqual(set(inventory), {"hashcat","john","qpdf","openssl","die","unblob",
                                            "semgrep","detect-secrets","pip-audit",
-                                           "mmls","fls","icat","fsstat"})
+                                           "mmls","fls","icat","fsstat","npm-audit"})
         self.assertTrue(all(item["available"] for item in inventory.values()), inventory)
 
     def test_qpdf_wrong_correct_without_plaintext_export(self):
@@ -396,6 +413,32 @@ class RealExternalRecoveryTests(unittest.TestCase):
         self.assertEqual(analysis["backend"], "pip-audit")
         self.assertTrue(analysis["identified"])
         self.assertTrue(any(f["package"] == "requests" for f in analysis["findings"]))
+        self.assertTrue(self.core.verify_audit(self.case))
+
+    @unittest.skipUnless(os.environ.get("CYBER_REQUIRE_PIP_AUDIT_NETWORK") == "1",
+                         "Requires outbound network to the package index; opt-in separately "
+                         "(same flag as pip-audit's own network opt-in)")
+    def test_npm_audit_finds_a_real_known_vulnerable_pin(self):
+        try:
+            from cyber_core.external_tools import analyze_tool
+        except ImportError:
+            self.fail("External analysis integration is not implemented")
+        source = self.scope / "package-lock.json"
+        source.write_text(json.dumps({
+            "name": "synthetic-audit-fixture", "version": "1.0.0", "lockfileVersion": 3, "requires": True,
+            "packages": {
+                "": {"name": "synthetic-audit-fixture", "version": "1.0.0",
+                     "dependencies": {"lodash": "4.17.11"}},
+                "node_modules/lodash": {
+                    "version": "4.17.11",
+                    "resolved": "https://registry.npmjs.org/lodash/-/lodash-4.17.11.tgz",
+                    "integrity": "sha512-cQKh8igo5QUhZ7lg38DYWAxMvjSAKG0A8wGSVimP07SIUEK2UO+arSRKbRZWtelMtN5V0Hkwh5ryOto/SshYIg==",
+                    "license": "MIT"}}}))
+        result = analyze_tool(self.core, self.case, source, tool="npm-audit")
+        analysis = result["analysis"]
+        self.assertEqual(analysis["backend"], "npm-audit")
+        self.assertTrue(analysis["identified"])
+        self.assertTrue(any(f["package"] == "lodash" for f in analysis["findings"]))
         self.assertTrue(self.core.verify_audit(self.case))
 
     def test_external_profile_rechecks_pause_and_cancel(self):

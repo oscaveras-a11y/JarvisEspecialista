@@ -58,8 +58,8 @@ def read_small(path, maximum=262144):
         raise CoreError("External result exceeds limit")
     return value
 
-def validate_config(config, tool, *, converter=False, rar_converter=False, rules_path=False):
-    if not isinstance(config, dict) or set(config) - {"executable", "converter", "rar_converter", "rules_path"}:
+def validate_config(config, tool, *, converter=False, rar_converter=False, rules_path=False, npm_cli=False):
+    if not isinstance(config, dict) or set(config) - {"executable", "converter", "rar_converter", "rules_path", "npm_cli"}:
         raise CoreError("Invalid external configuration")
     result = {"executable": executable(config.get("executable"))}
     if converter:
@@ -69,6 +69,9 @@ def validate_config(config, tool, *, converter=False, rar_converter=False, rules
     if rules_path:
         from cyber_core.external_tool_runtime import semgrep_rules_path
         result["rules_path"] = semgrep_rules_path(config.get("rules_path"))
+    if npm_cli:
+        from cyber_core.external_tool_runtime import npm_cli_path
+        result["npm_cli"] = npm_cli_path(config.get("npm_cli"))
     return result
 
 def trial(mode, raw, candidate, config, *, timeout=60, scratch_parent=None):
@@ -343,9 +346,40 @@ def normalize_pip_audit(data):
     return {"identified": bool(findings), "findings": findings, "findings_total": total,
             "truncated": total > len(findings), "extraction_enabled": False}
 
+MAX_NPM_PACKAGES = 256
+
+def normalize_npm_audit(data):
+    if not isinstance(data, dict) or not isinstance(data.get("vulnerabilities"), dict):
+        raise CoreError("Invalid npm audit JSON")
+    vulns = data["vulnerabilities"]
+    if len(vulns) > 4096:
+        raise CoreError("Invalid npm audit package count")
+    findings, total = [], 0
+    for name, info in vulns.items():
+        if (not isinstance(name, str) or not isinstance(info, dict)
+                or info.get("severity") not in ("info", "low", "moderate", "high", "critical")
+                or not isinstance(info.get("via"), list) or len(info["via"]) > 32):
+            raise CoreError("Invalid npm audit entry")
+        for item in info["via"]:
+            if isinstance(item, str):
+                continue  # a transitive reference to another audited package, not its own advisory
+            if (not isinstance(item, dict) or not isinstance(item.get("title"), str)
+                    or not isinstance(item.get("url"), str)
+                    or item.get("severity") not in ("info", "low", "moderate", "high", "critical")):
+                raise CoreError("Invalid npm audit advisory")
+            total += 1
+            if len(findings) < MAX_NPM_PACKAGES:
+                range_ = item.get("range")
+                findings.append({"package": name[:256], "severity": item["severity"],
+                                  "title": item["title"][:256], "url": item["url"][:256],
+                                  "range": str(range_)[:64] if range_ is not None else None})
+    return {"identified": bool(findings), "findings": findings, "findings_total": total,
+            "truncated": total > len(findings), "extraction_enabled": False}
+
 def analyze(tool, raw, config, *, timeout, scratch_parent):
     limit = MAX_FIRMWARE_INPUT if tool in ("die", "unblob") else MAX_INPUT
-    if tool not in ("die", "unblob", "semgrep", "detect-secrets", "pip-audit") or not 0 < len(raw) <= limit:
+    if (tool not in ("die", "unblob", "semgrep", "detect-secrets", "pip-audit", "npm-audit")
+            or not 0 < len(raw) <= limit):
         raise CoreError("Unsupported external analysis")
     if tool == "pip-audit":
         try:
@@ -355,7 +389,14 @@ def analyze(tool, raw, config, *, timeout, scratch_parent):
         lines = [line for line in text.splitlines() if line.strip() and not line.strip().startswith("#")]
         if not lines or len(lines) > MAX_REQUIREMENT_LINES:
             raise CoreError("Invalid pip-audit requirements line count")
-    config = validate_config(config, tool, rules_path=tool == "semgrep")
+    if tool == "npm-audit":
+        try:
+            lock = json.loads(raw)
+        except ValueError:
+            raise CoreError("Invalid package-lock.json") from None
+        if not isinstance(lock, dict) or "lockfileVersion" not in lock:
+            raise CoreError("Not an npm package-lock.json")
+    config = validate_config(config, tool, rules_path=tool == "semgrep", npm_cli=tool == "npm-audit")
     with tempfile.TemporaryDirectory(prefix="external-", dir=scratch_parent) as directory:
         root = Path(directory)
         if tool in ("die", "unblob"):
@@ -369,8 +410,23 @@ def analyze(tool, raw, config, *, timeout, scratch_parent):
         else:
             runner = Runner(root, timeout)
         path = config["executable"]
-        backend_version = version(runner, tool, path)
-        source = private_file(root, "target", raw)
+        if tool == "npm-audit":
+            # version() assumes a single-executable `[path, *args]` invocation;
+            # npm-audit always runs as `node <npm-cli.js> ...` instead (see
+            # npm_cli_path's own docstring for why), so its version is read the
+            # same way, not through that shared helper.
+            _, vout, verr = runner.run([path, config["npm_cli"], "--version"])
+            vmatch = re.search(rb"(?<![0-9.])\d+(?:\.\d+){1,3}(?![0-9.])", vout + verr)
+            if not vmatch:
+                raise CoreError("External tool version not recognized")
+            backend_version = vmatch.group().decode("ascii")
+            # npm audit resolves relative to its cwd, which Runner always sets
+            # to its own `root`, and insists on the file being literally named
+            # package-lock.json (no package.json required alongside it).
+            source = private_file(root, "package-lock.json", raw)
+        else:
+            backend_version = version(runner, tool, path)
+            source = private_file(root, "target", raw)
         if tool == "die":
             _, output, _ = runner.run([path, "--json", source])
             result = normalize_die(json.loads(output))
@@ -403,8 +459,8 @@ def analyze(tool, raw, config, *, timeout, scratch_parent):
         elif tool == "detect-secrets":
             _, stdout, _ = runner.run([path, "scan", source], allowed=(0,))
             result = normalize_detect_secrets(json.loads(stdout), source)
-        else:
-            # The only call in this module that ever runs with network access
+        elif tool == "pip-audit":
+            # One of two calls in this module that ever runs with network access
             # (see NETWORK_TOOLS in external_tool_runtime.py): --no-deps and
             # --disable-pip mean it looks up only the exact pinned name/version
             # pairs already in the acquired requirements file, against the
@@ -414,6 +470,15 @@ def analyze(tool, raw, config, *, timeout, scratch_parent):
                                         "-s", "pypi", "--timeout", str(min(int(timeout), 60)),
                                         "-f", "json"], allowed=(0, 1), network=True)
             result = normalize_pip_audit(json.loads(stdout))
+        else:
+            # The other NETWORK_TOOLS call: --package-lock-only means it audits
+            # only the exact pinned name/version pairs already resolved in the
+            # acquired package-lock.json, against the npm registry's advisory
+            # API — never installs anything, never runs an install/postinstall
+            # script, never touches anything beyond that one file.
+            _, stdout, _ = runner.run([path, config["npm_cli"], "audit", "--package-lock-only", "--json"],
+                                      allowed=(0, 1), network=True)
+            result = normalize_npm_audit(json.loads(stdout))
         input_sha256 = hashlib.sha256(raw).hexdigest()
         # Stream-hash rather than reading a second copy into memory and
         # comparing bytes: for a multi-GB firmware, re-reading the whole file

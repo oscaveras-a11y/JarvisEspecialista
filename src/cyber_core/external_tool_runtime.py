@@ -11,14 +11,14 @@ import time
 from cyber_core.errors import CoreError
 
 TOOLS = ("hashcat","john","qpdf","openssl","die","unblob","semgrep","detect-secrets","pip-audit",
-         "mmls","fls","icat","fsstat")
+         "mmls","fls","icat","fsstat","npm-audit")
 # Tools in NETWORK_TOOLS are the only ones ever run with Runner.run(..., network=True):
 # an explicit, narrow exception to this module's otherwise strict no-network posture,
 # made only for an owner-approved SCA lookup against the package index itself (never
 # the sample under analysis). Every other tool keeps the fully isolated environment.
-NETWORK_TOOLS = ("pip-audit",)
+NETWORK_TOOLS = ("pip-audit","npm-audit")
 NETWORK_ENV_NAMES = ("HTTPS_PROXY","HTTP_PROXY","NO_PROXY","https_proxy","http_proxy","no_proxy",
-                      "SSL_CERT_FILE","REQUESTS_CA_BUNDLE","CURL_CA_BUNDLE")
+                      "SSL_CERT_FILE","REQUESTS_CA_BUNDLE","CURL_CA_BUNDLE","NODE_EXTRA_CA_CERTS")
 ENV_NAMES = {tool:"CYBER_"+tool.upper().replace("-","_")+"_EXECUTABLE" for tool in TOOLS}
 MODES = {"qpdf-pdf":"qpdf", "openssl-pkcs12":"openssl", 
          "hashcat-sha256":"hashcat", "john-sha256":"john",
@@ -66,6 +66,19 @@ def semgrep_rules_path(value):
         raise CoreError("Semgrep rules path does not exist")
     return str(path.resolve())
 
+def npm_cli_path(value):
+    # npm-audit invokes `node <npm-cli.js> audit ...` directly (CYBER_NPM_AUDIT_
+    # EXECUTABLE is the node runtime itself) instead of relying on npm's own
+    # "#!/usr/bin/env node" shebang, which Runner's deliberately minimal PATH
+    # (/usr/bin:/bin) would not resolve. Operator CONFIGURATION, like the
+    # semgrep rules path: trusted, explicit, never derived from the sample.
+    if not isinstance(value,str) or not value:
+        raise CoreError("npm-audit requires an explicit, trusted npm-cli.js path")
+    path = Path(value)
+    if not path.is_absolute() or path.is_symlink() or not path.is_file() or path.suffix != ".js":
+        raise CoreError("npm-cli.js path must be an absolute, trusted, existing .js file")
+    return str(path.resolve())
+
 def external_configuration(tool):
     if tool not in TOOLS:
         raise CoreError("Unknown external tool")
@@ -80,6 +93,8 @@ def external_configuration(tool):
         config["rar_converter"] = executable(rar_converter)
     if tool == "semgrep":
         config["rules_path"] = semgrep_rules_path(os.environ.get("CYBER_SEMGREP_RULES_PATH"))
+    if tool == "npm-audit":
+        config["npm_cli"] = npm_cli_path(os.environ.get("CYBER_NPM_CLI_PATH"))
     return config
 
 def tool_inventory():

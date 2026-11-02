@@ -69,6 +69,12 @@ sudo install -m 755 "$(command -v debugfs)" /usr/bin/debugfs
   echo "CYBER_FLS_EXECUTABLE=$(command -v fls)"
   echo "CYBER_ICAT_EXECUTABLE=$(command -v icat)"
   echo "CYBER_FSSTAT_EXECUTABLE=$(command -v fsstat)"
+  # npm-audit invokes `node <npm-cli.js> ...` directly (see npm_cli_path's own
+  # docstring in external_tool_runtime.py) rather than relying on npm's own
+  # "#!/usr/bin/env node" shebang, which Runner's deliberately minimal PATH
+  # would not resolve.
+  echo "CYBER_NPM_AUDIT_EXECUTABLE=$(command -v node)"
+  echo "CYBER_NPM_CLI_PATH=$(readlink -f "$(command -v npm)")"
 } >> "$GITHUB_ENV"
 hashcat --version
 "$root/john/run/john" --list=build-info
@@ -86,6 +92,8 @@ mmls -V
 fls -V
 icat -V
 fsstat -V
+node --version
+npm --version
 
 if [[ "${CYBER_REQUIRE_RAR5:-0}" == 1 ]]; then
   sudo apt-get -o Acquire::Retries=2 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 install -y --no-install-recommends rar

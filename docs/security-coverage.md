@@ -49,10 +49,19 @@ contra uma dependência com vulnerabilidade pública conhecida
 próprio `CYBER_REQUIRE_PIP_AUDIT_NETWORK=1` para não tornar a suíte
 dependente de rede por padrão).
 
+**Atualização de 2026-11-02:** npm audit também está integrado, mesmo
+princípio e mesma decisão de rede do pip-audit — `network=True` só pra essa
+consulta, nunca pra mais nada. Invoca `node <npm-cli.js> audit
+--package-lock-only --json` diretamente (em vez de depender do `#!/usr/bin/env
+node` do próprio `npm`, que o PATH restrito do `Runner` não resolveria) sobre
+um `package-lock.json` já adquirido do operador — nunca roda `npm install`,
+então nenhum script de instalação de pacote (`postinstall` etc.) executa.
+Testado de verdade contra uma dependência com vulnerabilidade pública
+conhecida (`test_npm_audit_finds_a_real_known_vulnerable_pin`, mesmo opt-in
+de rede do pip-audit).
+
 Pendente nesta entrega:
 
-- **npm audit** — mesmo princípio do pip-audit, ainda não implementado para
-  o ecossistema Node.
 - **Nmap (inventário de rede)** — precisa de um escopo de rede autorizado
   explícito (IPs/portas fixos declarados pelo operador), separado do
   gateway web atual, igual ao que o pentest ativo (seção 9 original) já

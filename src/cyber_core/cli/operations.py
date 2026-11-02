@@ -94,7 +94,7 @@ def configure(sub):
     external = sub.add_parser("external-analyze", help="Static external identification of verified evidence")
     external.add_argument("case")
     external.add_argument("path")
-    external.add_argument("--tool", choices=("die", "unblob", "semgrep", "detect-secrets", "pip-audit"), required=True)
+    external.add_argument("--tool", choices=("die", "unblob", "semgrep", "detect-secrets", "pip-audit", "npm-audit"), required=True)
     sub.add_parser("external-tools", help="Show configured external tool availability")
     keys = sub.add_parser("keys",help="Inspect key metadata or inventory an authorized directory")
     actions = keys.add_subparsers(dest="keys_action",required=True)

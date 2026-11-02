@@ -1,4 +1,4 @@
-name: Fifteen real tools together
+name: Sixteen real tools together
 on:
   pull_request:
     branches: [main]
@@ -56,6 +56,9 @@ jobs:
         with:
           distribution: temurin
           java-version: '21'
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '22'
       - name: Provision six real CLIs on ephemeral runner
         id: provision
         timeout-minutes: 15
@@ -72,7 +75,7 @@ jobs:
         run: python scripts/run-tests.py test_external_recovery_tools.py
       - name: Real Sleuth Kit partition/entry/recovery contracts
         run: python scripts/run-tests.py test_forensics_sleuthkit.py
-      - name: Complete suite with all fifteen real tools
+      - name: Complete suite with all sixteen real tools
         if: ${{ !cancelled() && steps.provision.outcome == 'success' }}
         run: python scripts/run-tests.py
       - name: Synthetic demonstration

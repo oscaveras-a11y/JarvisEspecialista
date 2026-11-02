@@ -122,11 +122,16 @@ funcionalidade "desaparecida".
   `NETWORK_TOOLS`), consultando apenas o índice de pacotes pelos pares
   nome/versão já fixados no requirements.txt adquirido, nunca a amostra.
   Testado de verdade contra uma vulnerabilidade pública conhecida
-  (`test_pip_audit_finds_a_real_known_vulnerable_pin`). Honesto sobre o
-  que falta: **npm audit e Nmap (inventário de rede) continuam
-  pendentes** — Nmap precisa de um escopo de rede autorizado próprio
-  (alvo declarado, não é "ler um arquivo"), ainda não implementado.
-  `docs/security-coverage.md` detalha.
+  (`test_pip_audit_finds_a_real_known_vulnerable_pin`). **npm audit
+  também integrado (2026-11-02)**, mesmo princípio e mesma decisão de
+  rede do pip-audit (`network=True` só pra essa consulta), invocando
+  `node <npm-cli.js> audit --package-lock-only` direto — nunca `npm
+  install`, nenhum script de pacote executa. Testado de verdade
+  (`test_npm_audit_finds_a_real_known_vulnerable_pin`). Honesto sobre o
+  que falta: **Nmap (inventário de rede) continua pendente** — precisa
+  de um escopo de rede autorizado próprio (alvo declarado, não é "ler
+  um arquivo"), ainda não implementado. `docs/security-coverage.md`
+  detalha.
 - **10. Análise de protocolos** — `protocol/__init__.py` (captura hex
   genérica) e `automotive/__init__.py` (CAN clássico offline) testados.
   Sem CAN FD/DBC, sem USB/UART/SPI/I2C, sem PCAPNG real.
@@ -186,8 +191,19 @@ raio-x.
 ## Progresso em 2026-11-02
 
 - **4** — confirmado concluído (ver correção acima), nada pendente de código.
-- **9** — Semgrep, detect-secrets e agora pip-audit integrados e testados
-  de verdade (ver seção 9 acima; proprietário decidiu liberar rede só
-  para a consulta do pip-audit ao índice de pacotes). Falta só npm audit
-  e Nmap (inventário de rede, escopo próprio ainda não definido).
-- **6 e 8** ainda pendentes nesta sessão — próximos da ordem combinada.
+- **6** — decomposição completa de firmware real validada de ponta a
+  ponta contra um firmware OpenWrt real (ver seção 6 acima). Skill de
+  terceiros vendorizada para uso offline, ainda não ligada ao Qwen3
+  (decisão deliberada do proprietário, espera o treinamento terminar).
+- **8** — The Sleuth Kit real integrado: identificação de partição,
+  listagem de entradas (incluindo apagadas) e recuperação de um
+  arquivo por inode, testado de ponta a ponta com recuperação real de
+  um arquivo apagado (ver seção 8 acima).
+- **9** — Semgrep, detect-secrets, pip-audit e agora npm audit
+  integrados e testados de verdade (ver seção 9 acima; proprietário
+  decidiu liberar rede só para essas duas consultas de índice de
+  pacotes). Falta só Nmap (inventário de rede, escopo próprio ainda não
+  definido).
+
+Ordem combinada 4 → 6 → 8 → 9 concluída. Próximo: seção 11 (pesquisa
+técnica, a mais fraca do raio-x), por pedido do proprietário.
