@@ -1,0 +1,182 @@
+[
+  {
+    "id": "secure-review",
+    "topic": "secure-review",
+    "title": "Revisão segura de código",
+    "path": "secure-review.md",
+    "version": "2026-11",
+    "sources": [
+      "https://cheatsheetseries.owasp.org/cheatsheets/Secure_Code_Review_Cheat_Sheet.html"
+    ]
+  },
+  {
+    "id": "python",
+    "topic": "python",
+    "title": "Python seguro",
+    "path": "python.md",
+    "version": "2026-11",
+    "sources": [
+      "https://docs.python.org/3/library/security_warnings.html"
+    ]
+  },
+  {
+    "id": "javascript-typescript",
+    "topic": "javascript-typescript",
+    "title": "JavaScript e TypeScript seguros",
+    "path": "javascript-typescript.md",
+    "version": "2026-11",
+    "sources": [
+      "https://developer.mozilla.org/en-US/docs/Web/Security"
+    ]
+  },
+  {
+    "id": "input-validation",
+    "topic": "input-validation",
+    "title": "Validação de entradas",
+    "path": "input-validation.md",
+    "version": "2026-11",
+    "sources": [
+      "https://cheatsheetseries.owasp.org/cheatsheets/Input_Validation_Cheat_Sheet.html"
+    ]
+  },
+  {
+    "id": "sql-injection",
+    "topic": "sql-injection",
+    "title": "Prevenção de injeção SQL",
+    "path": "sql-injection.md",
+    "version": "2026-11",
+    "sources": [
+      "https://cheatsheetseries.owasp.org/cheatsheets/SQL_Injection_Prevention_Cheat_Sheet.html"
+    ]
+  },
+  {
+    "id": "command-injection",
+    "topic": "command-injection",
+    "title": "Prevenção de injeção de comandos",
+    "path": "command-injection.md",
+    "version": "2026-11",
+    "sources": [
+      "https://cheatsheetseries.owasp.org/cheatsheets/OS_Command_Injection_Defense_Cheat_Sheet.html"
+    ]
+  },
+  {
+    "id": "xss",
+    "topic": "xss",
+    "title": "Prevenção de XSS",
+    "path": "xss.md",
+    "version": "2026-11",
+    "sources": [
+      "https://cheatsheetseries.owasp.org/cheatsheets/Cross_Site_Scripting_Prevention_Cheat_Sheet.html"
+    ]
+  },
+  {
+    "id": "authentication",
+    "topic": "authentication",
+    "title": "Autenticação e armazenamento de senhas",
+    "path": "authentication.md",
+    "version": "2026-11",
+    "sources": [
+      "https://cheatsheetseries.owasp.org/cheatsheets/Authentication_Cheat_Sheet.html"
+    ]
+  },
+  {
+    "id": "authorization",
+    "topic": "authorization",
+    "title": "Autorização e controle de acesso",
+    "path": "authorization.md",
+    "version": "2026-11",
+    "sources": [
+      "https://cheatsheetseries.owasp.org/cheatsheets/Authorization_Cheat_Sheet.html"
+    ]
+  },
+  {
+    "id": "secrets",
+    "topic": "secrets",
+    "title": "Segredos e configuração",
+    "path": "secrets.md",
+    "version": "2026-11",
+    "sources": [
+      "https://cheatsheetseries.owasp.org/cheatsheets/Secrets_Management_Cheat_Sheet.html"
+    ]
+  },
+  {
+    "id": "dependencies",
+    "topic": "dependencies",
+    "title": "Dependências e cadeia de suprimentos",
+    "path": "dependencies.md",
+    "version": "2026-11",
+    "sources": [
+      "https://cheatsheetseries.owasp.org/cheatsheets/Software_Supply_Chain_Security_Cheat_Sheet.html"
+    ]
+  },
+  {
+    "id": "exposed-services",
+    "topic": "exposed-services",
+    "title": "APIs e serviços expostos",
+    "path": "exposed-services.md",
+    "version": "2026-11",
+    "sources": [
+      "https://cheatsheetseries.owasp.org/cheatsheets/REST_Security_Cheat_Sheet.html"
+    ]
+  },
+  {
+    "id": "uploads",
+    "topic": "uploads",
+    "title": "Upload e processamento de arquivos",
+    "path": "uploads.md",
+    "version": "2026-11",
+    "sources": [
+      "https://cheatsheetseries.owasp.org/cheatsheets/File_Upload_Cheat_Sheet.html"
+    ]
+  },
+  {
+    "id": "path-traversal",
+    "topic": "path-traversal",
+    "title": "Acesso seguro a arquivos e caminhos",
+    "path": "path-traversal.md",
+    "version": "2026-11",
+    "sources": [
+      "https://cwe.mitre.org/data/definitions/22.html"
+    ]
+  },
+  {
+    "id": "deserialization",
+    "topic": "deserialization",
+    "title": "Desserialização e formatos de dados",
+    "path": "deserialization.md",
+    "version": "2026-11",
+    "sources": [
+      "https://cheatsheetseries.owasp.org/cheatsheets/Deserialization_Cheat_Sheet.html"
+    ]
+  },
+  {
+    "id": "logging",
+    "topic": "logging",
+    "title": "Logs, erros e evidências",
+    "path": "logging.md",
+    "version": "2026-11",
+    "sources": [
+      "https://cheatsheetseries.owasp.org/cheatsheets/Logging_Cheat_Sheet.html"
+    ]
+  },
+  {
+    "id": "cryptography",
+    "topic": "cryptography",
+    "title": "Uso seguro de criptografia aplicada",
+    "path": "cryptography.md",
+    "version": "2026-11",
+    "sources": [
+      "https://cheatsheetseries.owasp.org/cheatsheets/Cryptographic_Storage_Cheat_Sheet.html"
+    ]
+  },
+  {
+    "id": "secure-testing",
+    "topic": "secure-testing",
+    "title": "Testes seguros e regressão",
+    "path": "secure-testing.md",
+    "version": "2026-11",
+    "sources": [
+      "https://cheatsheetseries.owasp.org/cheatsheets/Software_Security_Testing_Cheat_Sheet.html"
+    ]
+  }
+]

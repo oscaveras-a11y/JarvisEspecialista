@@ -22,4 +22,4 @@ where = ["src"]
 
 [tool.setuptools.package-data]
 "cyber_core.reverse_engineering" = ["ghidra_scripts/*.java"]
-"cyber_core" = ["data/wordlists/*.gz"]
+"cyber_core" = ["data/wordlists/*.gz", "memory/guides/*.json", "memory/guides/*.md"]

@@ -96,3 +96,11 @@
 - [ ] **Step 4: Review the exact PR diff and Actions results**; resolve failures before integration.
 - [ ] **Step 5: Merge to `main` only after all required checks pass**, as authorized by the owner.
 
+
+
+## Progresso e decisão de execução
+
+- Memória ampla definida: 18 guias offline, abrangendo revisão segura, linguagens, vulnerabilidades comuns e remediação defensiva.
+- Integração com Qwen3/Ollama fica para fase futura; este PR entrega recuperação local pesquisável no CLI.
+- Política do repositório exige mudanças e validações somente pelo GitHub. Por isso a implementação usa commits na branch e GitHub Actions Linux/Windows; nenhum teste local ou instalação de produto foi executado.
+- O banco de conhecimento é arquivo SQLite separado; não altera o esquema operacional existente.
