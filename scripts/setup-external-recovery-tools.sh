@@ -26,7 +26,7 @@ timeout 180 git -C "$root/john" checkout --detach 5184bc0b8c105f8c5978b112e723d6
 )
 python -m venv "$root/unblob"
 "$root/unblob/bin/python" -m pip install --timeout 30 --retries 2 'unblob==26.6.4'
-python -m pip install --timeout 30 --retries 2 'semgrep==1.183.0' 'detect-secrets==1.5.0'
+python -m pip install --timeout 30 --retries 2 'semgrep==1.183.0' 'detect-secrets==1.5.0' 'pip-audit==2.10.1'
 {
   echo "CYBER_HASHCAT_EXECUTABLE=$(command -v hashcat)"
   echo "CYBER_JOHN_EXECUTABLE=$root/john/run/john"
@@ -39,6 +39,7 @@ python -m pip install --timeout 30 --retries 2 'semgrep==1.183.0' 'detect-secret
   echo "CYBER_SEMGREP_EXECUTABLE=$(command -v semgrep)"
   echo "CYBER_SEMGREP_RULES_PATH=$(pwd)/config/semgrep-rules/python-security.yml"
   echo "CYBER_DETECT_SECRETS_EXECUTABLE=$(command -v detect-secrets)"
+  echo "CYBER_PIP_AUDIT_EXECUTABLE=$(command -v pip-audit)"
 } >> "$GITHUB_ENV"
 hashcat --version
 "$root/john/run/john" --list=build-info
@@ -48,6 +49,7 @@ diec --version
 "$root/unblob/bin/unblob" --version
 semgrep --version --disable-version-check
 detect-secrets --version
+pip-audit --version
 
 if [[ "${CYBER_REQUIRE_RAR5:-0}" == 1 ]]; then
   sudo apt-get -o Acquire::Retries=2 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 install -y --no-install-recommends rar

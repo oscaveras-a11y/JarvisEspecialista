@@ -36,17 +36,29 @@ ferramenta. Cobertos por `tests/test_external_recovery_tools.py`
 rejeição de JSON malformado), providos no CI dedicado por
 `scripts/setup-external-recovery-tools.sh`.
 
-Pendente nesta entrega, por exigirem rede (incompatível com a postura "sem
-rede" deste módulo) ou escopo próprio ainda não definido:
+**Atualização de 2026-11-02 (decisão do proprietário: liberar rede só para
+isso):** pip-audit (SCA) também está integrado. É o único adaptador deste
+módulo que roda com `network=True` — uma exceção estreita e explícita
+(`external_tool_runtime.NETWORK_TOOLS`) à postura "sem rede" do resto da
+classe `Runner`: só para consultar o índice de pacotes (PyPI, serviço
+`pypi` do próprio pip-audit) pelos pares nome/versão já fixados no arquivo de
+requisitos adquirido (`--no-deps --disable-pip`, nunca resolvendo nem
+instalando nada), nunca sobre a amostra sob investigação. Testado de verdade
+contra uma dependência com vulnerabilidade pública conhecida
+(`test_pip_audit_finds_a_real_known_vulnerable_pin`, com gate de opt-in
+próprio `CYBER_REQUIRE_PIP_AUDIT_NETWORK=1` para não tornar a suíte
+dependente de rede por padrão).
 
-- **pip-audit/npm audit (SCA)** — consultam bases de vulnerabilidade on-line
-  (OSV/PyPI) por padrão; não há cache/base offline provisionada neste ambiente.
-  Precisa de decisão do proprietário: aceitar rede explicitamente liberada
-  só para essa consulta, ou providenciar uma base OSV offline.
+Pendente nesta entrega:
+
+- **npm audit** — mesmo princípio do pip-audit, ainda não implementado para
+  o ecossistema Node.
 - **Nmap (inventário de rede)** — precisa de um escopo de rede autorizado
-  explícito (IPs/portas fixos), separado do gateway web atual, igual ao que
-  o pentest ativo (seção 9 original) já exige para HTTP. Ainda não
-  implementado.
+  explícito (IPs/portas fixos declarados pelo operador), separado do
+  gateway web atual, igual ao que o pentest ativo (seção 9 original) já
+  exige para HTTP. Ainda não implementado — é uma mudança de forma
+  diferente do pip-audit (não é "ler um arquivo e consultar um índice", é
+  "varrer um alvo de rede"), por isso tratada como próximo passo separado.
 
 Seleção de versão, licença, limites, formato de saída e testes reais em runner
 devem preceder a disponibilidade operacional de qualquer adaptador novo.

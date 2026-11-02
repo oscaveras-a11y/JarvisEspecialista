@@ -1,13 +1,14 @@
 """Authorized external-tool entrypoints; isolated children emit metadata only."""
 import hashlib
 import json
+import os
 from pathlib import Path
 import sys
 import tempfile
 from cyber_core.agents.runner import run_bounded
 from cyber_core.errors import CoreError
 from cyber_core.external_tool_runtime import (
-    MODES, VALIDATION, SIGNATURES, external_configuration, tool_inventory)
+    MODES, VALIDATION, SIGNATURES, NETWORK_TOOLS, NETWORK_ENV_NAMES, external_configuration, tool_inventory)
 
 def select_external_mode(mode, header):
     if mode not in MODES:
@@ -28,7 +29,7 @@ def external_trial(mode, raw, candidate, config, *, timeout=60, scratch_parent=N
     return trial(mode, raw, candidate, config, timeout=timeout, scratch_parent=scratch_parent)
 
 def analyze_tool(core, case, path, *, tool):
-    if tool not in ("die", "unblob", "semgrep", "detect-secrets"):
+    if tool not in ("die", "unblob", "semgrep", "detect-secrets", "pip-audit"):
         raise CoreError("Unsupported external analysis tool")
     config = external_configuration(tool)
     from cyber_core.operations import _acquire, save_operation
@@ -49,16 +50,23 @@ def analyze_tool(core, case, path, *, tool):
         # RAM/CPU headroom needed for the same reason: _limit_exec.py raises
         # its own RLIMIT_CPU to timeout*OMP_NUM_THREADS, which fails if the
         # outer hard ceiling here isn't already at least that large.
+        # pip-audit is the one tool (NETWORK_TOOLS) allowed to reach the package
+        # index for its own lookup; it needs this process's own proxy/CA
+        # variables (if any) to survive down to Runner.run(..., network=True)
+        # two process layers below. Every other tool keeps env={} (no inherited
+        # variables at all).
+        child_env = ({name: os.environ[name] for name in NETWORK_ENV_NAMES if name in os.environ}
+                     if tool in NETWORK_TOOLS else {})
         response = run_bounded([sys.executable, "-I", str(Path(__file__).with_name("external_tools_child.py"))],
             json.dumps(request), cwd=scratch, timeout=core.timeout, max_output=65536,
-            should_stop=stopped, env={},
+            should_stop=stopped, env=child_env,
             max_memory_bytes=5 * 1024 * 1024 * 1024, max_cpu_seconds=min(core.timeout * 2 + 30, 3605))
         analysis = json.loads(response["stdout"])
         if (analysis.get("backend") != tool or analysis.get("input_sha256") != evidence["sha256"]
                 or analysis.get("input_bytes") != len(raw) or type(analysis.get("identified")) is not bool
                 or analysis.get("extraction_enabled") is not False):
             raise CoreError("Invalid external analysis result")
-        if tool in ("semgrep", "detect-secrets"):
+        if tool in ("semgrep", "detect-secrets", "pip-audit"):
             findings = analysis.get("findings")
             if (not isinstance(findings, list) or len(findings) > 256
                     or type(analysis.get("findings_total")) is not int or analysis["findings_total"] < len(findings)

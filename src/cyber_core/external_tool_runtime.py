@@ -10,7 +10,14 @@ import threading
 import time
 from cyber_core.errors import CoreError
 
-TOOLS = ("hashcat","john","qpdf","openssl","die","unblob","semgrep","detect-secrets")
+TOOLS = ("hashcat","john","qpdf","openssl","die","unblob","semgrep","detect-secrets","pip-audit")
+# Tools in NETWORK_TOOLS are the only ones ever run with Runner.run(..., network=True):
+# an explicit, narrow exception to this module's otherwise strict no-network posture,
+# made only for an owner-approved SCA lookup against the package index itself (never
+# the sample under analysis). Every other tool keeps the fully isolated environment.
+NETWORK_TOOLS = ("pip-audit",)
+NETWORK_ENV_NAMES = ("HTTPS_PROXY","HTTP_PROXY","NO_PROXY","https_proxy","http_proxy","no_proxy",
+                      "SSL_CERT_FILE","REQUESTS_CA_BUNDLE","CURL_CA_BUNDLE")
 ENV_NAMES = {tool:"CYBER_"+tool.upper().replace("-","_")+"_EXECUTABLE" for tool in TOOLS}
 MODES = {"qpdf-pdf":"qpdf", "openssl-pkcs12":"openssl", 
          "hashcat-sha256":"hashcat", "john-sha256":"john",
@@ -129,7 +136,7 @@ class Runner:
                     # despite its own CLI opt-out flags: this disables the SDK outright,
                     # independent of application-level flags, for every external backend.
                     "OTEL_SDK_DISABLED":"true"}
-    def run(self, command, *, data=b"", allowed=(0,), output_limit=262144):
+    def run(self, command, *, data=b"", allowed=(0,), output_limit=262144, network=False):
         if sys.platform != "linux":
             raise CoreError("External tools require Linux")
         command = [str(part) for part in command]
@@ -139,9 +146,19 @@ class Runner:
         remaining = self.deadline-time.monotonic()
         if remaining <= 0:
             raise CoreError("External shared timeout")
+        env = self.env
+        if network:
+            # Explicit, narrow exception to this class's own no-network isolation:
+            # only an owner-approved SCA lookup against the package index passes
+            # network=True (see NETWORK_TOOLS). This forwards the small whitelist
+            # of proxy/CA variables already present in THIS process's own
+            # environment (absent on a direct-internet CI runner; present only
+            # where an egress proxy requires them) — never arbitrary env vars,
+            # and never anything from the sample being analyzed.
+            env = {**self.env, **{name: os.environ[name] for name in NETWORK_ENV_NAMES if name in os.environ}}
         launcher = Path(__file__).parent/"reverse_engineering"/"_limit_exec.py"
         process = subprocess.Popen([sys.executable,"-I",str(launcher),str(remaining),*command],
-            cwd=self.root,env=self.env,stdin=subprocess.PIPE,stdout=subprocess.PIPE,stderr=subprocess.PIPE,
+            cwd=self.root,env=env,stdin=subprocess.PIPE,stdout=subprocess.PIPE,stderr=subprocess.PIPE,
             shell=False,close_fds=True)
         buffers = [bytearray(),bytearray()]
         exceeded = threading.Event()
@@ -194,7 +211,8 @@ def version(runner,tool,path):
             # Bare "semgrep --version" (unlike "semgrep scan") checks for updates over
             # the network by default even with a fresh HOME; --disable-version-check
             # is required here too, not just on the scan invocation in analyze().
-            "semgrep":["--version","--disable-version-check"],"detect-secrets":["--version"]}[tool]
+            "semgrep":["--version","--disable-version-check"],"detect-secrets":["--version"],
+            "pip-audit":["--version"]}[tool]
     _,stdout,stderr = runner.run([path,*args])
     match = re.search(rb"(?<![0-9.])\d+(?:\.\d+){1,3}(?![0-9.])",stdout+stderr)
     if not match:

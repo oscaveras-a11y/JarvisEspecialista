@@ -225,9 +225,49 @@ def normalize_detect_secrets(data, source):
     return {"identified": bool(findings), "findings": findings, "findings_total": len(records),
             "truncated": len(records) > len(findings), "extraction_enabled": False}
 
+MAX_REQUIREMENT_LINES = 128
+
+def normalize_pip_audit(data):
+    if not isinstance(data, dict) or not isinstance(data.get("dependencies"), list):
+        raise CoreError("Invalid pip-audit JSON")
+    deps = data["dependencies"]
+    if len(deps) > MAX_REQUIREMENT_LINES:
+        raise CoreError("Invalid pip-audit dependency count")
+    findings, total = [], 0
+    for dep in deps:
+        if (not isinstance(dep, dict) or not isinstance(dep.get("name"), str)
+                or not isinstance(dep.get("version"), str) or not isinstance(dep.get("vulns"), list)
+                or len(dep["vulns"]) > 64):
+            raise CoreError("Invalid pip-audit dependency")
+        for vuln in dep["vulns"]:
+            if (not isinstance(vuln, dict) or not isinstance(vuln.get("id"), str)
+                    or not isinstance(vuln.get("fix_versions"), list)
+                    or not all(isinstance(v, str) for v in vuln["fix_versions"])
+                    or not isinstance(vuln.get("aliases"), list)
+                    or not all(isinstance(v, str) for v in vuln["aliases"])):
+                raise CoreError("Invalid pip-audit vulnerability")
+            total += 1
+            if len(findings) < MAX_FINDINGS:
+                # The vulnerability database's own identifiers and fix versions are
+                # kept; its free-text description is bounded, never raw/unbounded.
+                findings.append({"package": dep["name"][:256], "installed_version": dep["version"][:64],
+                                  "vuln_id": vuln["id"][:64], "fix_versions": [v[:32] for v in vuln["fix_versions"]][:16],
+                                  "aliases": [v[:64] for v in vuln["aliases"]][:16],
+                                  "description": str(vuln.get("description", ""))[:500]})
+    return {"identified": bool(findings), "findings": findings, "findings_total": total,
+            "truncated": total > len(findings), "extraction_enabled": False}
+
 def analyze(tool, raw, config, *, timeout, scratch_parent):
-    if tool not in ("die", "unblob", "semgrep", "detect-secrets") or not 0 < len(raw) <= MAX_INPUT:
+    if tool not in ("die", "unblob", "semgrep", "detect-secrets", "pip-audit") or not 0 < len(raw) <= MAX_INPUT:
         raise CoreError("Unsupported external analysis")
+    if tool == "pip-audit":
+        try:
+            text = raw.decode("utf-8", "strict")
+        except UnicodeDecodeError:
+            raise CoreError("Requirements file must be UTF-8 text") from None
+        lines = [line for line in text.splitlines() if line.strip() and not line.strip().startswith("#")]
+        if not lines or len(lines) > MAX_REQUIREMENT_LINES:
+            raise CoreError("Invalid pip-audit requirements line count")
     config = validate_config(config, tool, rules_path=tool == "semgrep")
     with tempfile.TemporaryDirectory(prefix="external-", dir=scratch_parent) as directory:
         root = Path(directory)
@@ -253,9 +293,20 @@ def analyze(tool, raw, config, *, timeout, scratch_parent):
                         "--no-trace", "--oss-only", "--disable-version-check", "--scan-unknown-extensions",
                         "--output", output, source], allowed=(0, 1))
             result = normalize_semgrep(json.loads(read_small(output, maximum=4194304)), source)
-        else:
+        elif tool == "detect-secrets":
             _, stdout, _ = runner.run([path, "scan", source], allowed=(0,))
             result = normalize_detect_secrets(json.loads(stdout), source)
+        else:
+            # The only call in this module that ever runs with network access
+            # (see NETWORK_TOOLS in external_tool_runtime.py): --no-deps and
+            # --disable-pip mean it looks up only the exact pinned name/version
+            # pairs already in the acquired requirements file, against the
+            # package index itself — never anything derived from its content
+            # beyond those pins, and never the sample under investigation.
+            _, stdout, _ = runner.run([path, "-r", source, "--no-deps", "--disable-pip",
+                                        "-s", "pypi", "--timeout", str(min(int(timeout), 60)),
+                                        "-f", "json"], allowed=(0, 1), network=True)
+            result = normalize_pip_audit(json.loads(stdout))
         if source.read_bytes() != raw:
             raise CoreError("External analysis changed input")
         return {"backend": tool, "backend_version": backend_version, "backend_sha256": binary_digest(path),

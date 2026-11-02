@@ -74,13 +74,17 @@ funcionalidade "desaparecida".
   binários reais instalados neste ambiente
   (`test_semgrep_and_detect_secrets_find_real_synthetic_issues`), provido
   no CI dedicado (`scripts/setup-external-recovery-tools.sh`, workflow
-  "Ten real tools together"). Honesto sobre o que falta: **pip-audit/npm
-  audit (SCA) e Nmap (inventário de rede) continuam pendentes** — ambos
-  exigem rede por natureza (consulta a base de vulnerabilidades ou
-  varredura de portas), o que conflita com a postura "sem rede" deste
-  módulo; decisão do proprietário necessária (liberar rede explicitamente
-  para esse caso, ou providenciar uma base OSV offline / escopo de rede
-  autorizado separado). `docs/security-coverage.md` detalha.
+  "Eleven real tools together"). **pip-audit (SCA) também integrado** —
+  decisão do proprietário foi liberar rede só para essa consulta; é o
+  único adaptador com `network=True` (exceção estreita e explícita,
+  `NETWORK_TOOLS`), consultando apenas o índice de pacotes pelos pares
+  nome/versão já fixados no requirements.txt adquirido, nunca a amostra.
+  Testado de verdade contra uma vulnerabilidade pública conhecida
+  (`test_pip_audit_finds_a_real_known_vulnerable_pin`). Honesto sobre o
+  que falta: **npm audit e Nmap (inventário de rede) continuam
+  pendentes** — Nmap precisa de um escopo de rede autorizado próprio
+  (alvo declarado, não é "ler um arquivo"), ainda não implementado.
+  `docs/security-coverage.md` detalha.
 - **10. Análise de protocolos** — `protocol/__init__.py` (captura hex
   genérica) e `automotive/__init__.py` (CAN clássico offline) testados.
   Sem CAN FD/DBC, sem USB/UART/SPI/I2C, sem PCAPNG real.
@@ -140,8 +144,8 @@ raio-x.
 ## Progresso em 2026-11-02
 
 - **4** — confirmado concluído (ver correção acima), nada pendente de código.
-- **9** — Semgrep e detect-secrets integrados e testados de verdade (ver
-  seção 9 acima). Falta uma decisão do proprietário sobre rede para
-  pip-audit/npm audit (SCA) e sobre o escopo de Nmap (inventário de rede);
-  sem essa decisão, os dois ficam fora por exigirem rede.
+- **9** — Semgrep, detect-secrets e agora pip-audit integrados e testados
+  de verdade (ver seção 9 acima; proprietário decidiu liberar rede só
+  para a consulta do pip-audit ao índice de pacotes). Falta só npm audit
+  e Nmap (inventário de rede, escopo próprio ainda não definido).
 - **6 e 8** ainda pendentes nesta sessão — próximos da ordem combinada.

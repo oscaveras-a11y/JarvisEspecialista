@@ -1,4 +1,4 @@
-name: Ten real tools together
+name: Eleven real tools together
 on:
   pull_request:
     branches: [main]
@@ -35,6 +35,10 @@ jobs:
     env:
       CYBER_REQUIRE_EXTERNAL_TOOLS: '1'
       CYBER_REQUIRE_RAR5: '1'
+      # The disposable Actions runner has normal outbound internet (no proxy
+      # needed), unlike the author's own sandboxed session. pip-audit is the
+      # one adapter allowed to use it, and only to query the package index.
+      CYBER_REQUIRE_PIP_AUDIT_NETWORK: '1'
       PYTHONUTF8: '1'
       PYTHONUNBUFFERED: '1'
       OMP_NUM_THREADS: '2'
@@ -65,7 +69,7 @@ jobs:
         run: python scripts/probe-external-recovery.py
       - name: Real encrypted-file and identification contracts
         run: python scripts/run-tests.py test_external_recovery_tools.py
-      - name: Complete suite with all ten real tools
+      - name: Complete suite with all eleven real tools
         if: ${{ !cancelled() && steps.provision.outcome == 'success' }}
         run: python scripts/run-tests.py
       - name: Synthetic demonstration

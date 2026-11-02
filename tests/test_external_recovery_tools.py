@@ -19,7 +19,7 @@ from cyber_core.service import Core
 from cyber_core.cryptanalysis.sessions import RecoverySessions
 
 class ToolInventoryContracts(unittest.TestCase):
-    def test_eight_backends_have_explicit_availability_without_executing_input(self):
+    def test_nine_backends_have_explicit_availability_without_executing_input(self):
         try:
             from cyber_core.external_tools import tool_inventory
         except ImportError:
@@ -27,7 +27,7 @@ class ToolInventoryContracts(unittest.TestCase):
         with patch.dict(os.environ, {}, clear=True):
             inventory = tool_inventory()
         self.assertEqual(set(inventory), {"hashcat", "john", "qpdf", "openssl", "die", "unblob",
-                                           "semgrep", "detect-secrets"})
+                                           "semgrep", "detect-secrets", "pip-audit"})
         for item in inventory.values():
             self.assertFalse(item["available"])
             self.assertIn("reason", item)
@@ -90,6 +90,17 @@ class ExternalFailureContracts(unittest.TestCase):
             # Results keyed to a file other than the one that was scanned.
             normalize_detect_secrets({"results": {"other": []}}, source)
         clean = normalize_semgrep({"results": [], "errors": []}, source)
+        self.assertEqual(clean, {"identified": False, "findings": [], "findings_total": 0,
+                                  "truncated": False, "extraction_enabled": False})
+
+    def test_malformed_pip_audit_analysis_is_rejected(self):
+        from cyber_core.external_tools_child import normalize_pip_audit
+        with self.assertRaises(CoreError):
+            normalize_pip_audit({"dependencies": "truncated"})
+        with self.assertRaises(CoreError):
+            # Missing fix_versions/aliases on a reported vulnerability.
+            normalize_pip_audit({"dependencies": [{"name": "x", "version": "1", "vulns": [{"id": "V"}]}]})
+        clean = normalize_pip_audit({"dependencies": [{"name": "x", "version": "1", "vulns": []}]})
         self.assertEqual(clean, {"identified": False, "findings": [], "findings_total": 0,
                                   "truncated": False, "extraction_enabled": False})
 
@@ -172,14 +183,14 @@ class RealExternalRecoveryTests(unittest.TestCase):
         self.assertNotIn(self.password.decode(), self.core.report(self.case).read_text(encoding="utf-8"))
         return done
 
-    def test_all_eight_real_tools_are_available(self):
+    def test_all_nine_real_tools_are_available(self):
         try:
             from cyber_core.external_tools import tool_inventory
         except ImportError:
             self.fail("External tool inventory is not implemented")
         inventory = tool_inventory()
         self.assertEqual(set(inventory), {"hashcat","john","qpdf","openssl","die","unblob",
-                                           "semgrep","detect-secrets"})
+                                           "semgrep","detect-secrets","pip-audit"})
         self.assertTrue(all(item["available"] for item in inventory.values()), inventory)
 
     def test_qpdf_wrong_correct_without_plaintext_export(self):
@@ -302,6 +313,22 @@ class RealExternalRecoveryTests(unittest.TestCase):
         self.assertTrue(self.core.verify_audit(self.case))
         report = self.core.report(self.case).read_text(encoding="utf-8")
         self.assertNotIn(secret, report)
+
+    @unittest.skipUnless(os.environ.get("CYBER_REQUIRE_PIP_AUDIT_NETWORK") == "1",
+                         "Requires outbound network to the package index; opt-in separately")
+    def test_pip_audit_finds_a_real_known_vulnerable_pin(self):
+        try:
+            from cyber_core.external_tools import analyze_tool
+        except ImportError:
+            self.fail("External analysis integration is not implemented")
+        source = self.scope / "requirements.txt"
+        source.write_text("requests==2.6.0\n")
+        result = analyze_tool(self.core, self.case, source, tool="pip-audit")
+        analysis = result["analysis"]
+        self.assertEqual(analysis["backend"], "pip-audit")
+        self.assertTrue(analysis["identified"])
+        self.assertTrue(any(f["package"] == "requests" for f in analysis["findings"]))
+        self.assertTrue(self.core.verify_audit(self.case))
 
     def test_external_profile_rechecks_pause_and_cancel(self):
         source = self.scope / "sha256.txt"
