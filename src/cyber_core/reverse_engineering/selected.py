@@ -119,7 +119,11 @@ def analyze_functions(core, case, path, *, ghidra_home, java_home, **selectors):
                    'config':{key:{k:str(v) for k,v in fields.items()} for key,fields in config.items()}}
         response = run_bounded([sys.executable,'-I',str(Path(__file__).with_name('selected_child.py'))],
                                json.dumps(request),cwd=scratch,timeout=core.timeout,max_output=options['output_bytes'],
-                               should_stop=stopped,env={})
+                               should_stop=stopped,env={},
+                               # The JVM reserves more virtual address space than the
+                               # agent runner's 512 MiB default, even with a 1 GiB heap.
+                               # Keep a finite per-process address-space ceiling.
+                               max_memory_bytes=8 * 1024 * 1024 * 1024)
         result = json.loads(response['stdout'])
         if not isinstance(result,dict) or result.get('input_sha256')!=evidence['sha256']:
             raise CoreError('Selected analysis evidence mismatch')
