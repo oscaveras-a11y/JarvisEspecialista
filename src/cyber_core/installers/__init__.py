@@ -88,14 +88,14 @@ def file_hash(path):
     return digest.hexdigest()
 
 def inspect_installer(core, case, path, *, seven_zip, extract=False, max_extracted_bytes=1024*1024*1024,
-                      max_entries=1000, memory_bytes=512*1024*1024):
+                      max_entries=5000, memory_bytes=512*1024*1024):
     from cyber_core.agents.runner import run_bounded
     from cyber_core.operations import save_operation
     from cyber_core.permissions import storage_root
     from cyber_core.verification.artifacts import verified_result
     if sys.platform != 'linux':
         raise CoreError('NSIS backend currently requires Linux')
-    for value, lower, upper in ((max_extracted_bytes,1,2*1024**3),(max_entries,1,1000),(memory_bytes,128*1024**2,2*1024**3)):
+    for value, lower, upper in ((max_extracted_bytes,1,2*1024**3),(max_entries,1,5000),(memory_bytes,128*1024**2,2*1024**3)):
         if type(value) is not int or not lower <= value <= upper:
             raise CoreError('Invalid NSIS resource budget')
     if type(extract) is not bool or not Path(seven_zip).is_absolute() or not Path(seven_zip).is_file():
