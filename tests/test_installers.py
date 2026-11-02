@@ -36,6 +36,29 @@ class InstallerContracts(unittest.TestCase):
             with self.assertRaises(CoreError):
                 api.parse_listing(bad, 10, 100)
 
+    def test_safe_listing_skips_absolute_members_and_keeps_selected_files(self):
+        api = module(self)
+        self.assertTrue(callable(getattr(api, 'parse_listing_safe', None)))
+        listing = ('7-Zip lab\nType = Nsis\n----------\n'
+                   'Path = C:/outside/log.txt\nSize = 4\n\n'
+                   'Path = VisionFT.exe\nSize = 3\n\n'
+                   'Path = Firmwares/test.vftw\nSize = 2\n\n')
+        with self.assertRaises(CoreError):
+            api.parse_listing(listing, 5000, 100)
+        result = api.parse_listing_safe(listing, 5000, 100)
+        self.assertEqual(result['unsafe_members_skipped'], 1)
+        self.assertEqual(result['members_total'], 3)
+        self.assertEqual([item['member'] for item in result['members']],
+                         ['VisionFT.exe', 'Firmwares/test.vftw'])
+
+    def test_safe_listing_still_caps_all_entries(self):
+        api = module(self)
+        self.assertTrue(callable(getattr(api, 'parse_listing_safe', None)))
+        listing = ('7-Zip lab\nType = Nsis\n----------\n'
+                   + ''.join(f'Path = C:/outside/{i}.txt\nSize = 1\n\n' for i in range(3)))
+        with self.assertRaises(CoreError):
+            api.parse_listing_safe(listing, 2, 100)
+
     def test_cli_wires_installer_limits(self):
         from cyber_core.cli import parser
         args = parser().parse_args(['installer','case','input','--seven-zip','/usr/bin/7z','--extract'])

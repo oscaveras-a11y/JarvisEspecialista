@@ -10,7 +10,7 @@ import threading
 import time
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
-from cyber_core.installers import parse_listing, selected_member, file_hash
+from cyber_core.installers import parse_listing_safe, selected_member, file_hash
 from cyber_core.errors import CoreError
 
 def run(command, root, deadline, maximum, memory_bytes, destination=None):
@@ -90,7 +90,8 @@ def execute(data):
     listing, _ = run([executable,'l','-slt','-sccUTF-8','--',str(source)],root,deadline,524288,
                      data['memory_bytes'])
     text = listing.decode('utf-8', errors='strict')
-    entries = parse_listing(text, data['max_entries'], 2*1024**3)
+    listing_result = parse_listing_safe(text, data['max_entries'], 2*1024**3)
+    entries = listing_result['members']
     selected = [item for item in entries if not item['folder'] and selected_member(item['member'])]
     if data['extract'] and not selected:
         raise CoreError('No supported members selected')
@@ -114,7 +115,9 @@ def execute(data):
         raise CoreError('NSIS source changed')
     version = next((line.strip() for line in text.splitlines() if '7-Zip' in line), 'unknown')[:256]
     return {'format':'nsis','source_sha256':data['sha256'],'tool_version':version,
-            'tool_sha256':file_hash(executable),'members':entries,'selected':selected,'extracted':output,
+            'tool_sha256':file_hash(executable),'members':entries,'members_total':listing_result['members_total'],
+            'unsafe_members_skipped':listing_result['unsafe_members_skipped'],
+            'selected':selected,'extracted':output,
             'status':'extracted' if data['extract'] else 'listed','executed_input':False,
             'listing_sizes_partial':any(item['size'] is None for item in entries)}
 
