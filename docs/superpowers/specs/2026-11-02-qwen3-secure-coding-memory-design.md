@@ -29,7 +29,7 @@ Adicionar ao Jarvis uma biblioteca local, ampla, revisável e pesquisável de pr
 - Cada guia cobre contexto, sinais de risco no fluxo de código, evidências para confirmar ou descartar alerta, correções, teste de regressão e fontes oficiais. Conteúdo original em resumo, não cópia extensa de terceiros.
 - A biblioteca foca proteção, revisão em código autorizado e correção. Não contém payloads ou receitas passo a passo para explorar alvos.
 - Um catálogo versionado fornece ID, tópico, título, versão e referências. Guias ficam empacotados como Markdown; o índice FTS5 é derivado e reconstruível.
-- Módulo `KnowledgeBase` separado cria o índice no disco e oferece busca lexical limitada com título, tópico, trecho e fontes.
+- Funções `default_database_path()`, `build_index(path=None)` e `search_index(query, path=None, limit=5)` mantêm o índice no disco e oferecem busca lexical limitada com tópico, título, versão do guia, trecho e fontes.
 - CLI `cyber knowledge index` e `cyber knowledge search`. Os comandos não inicializam nem alteram o banco operacional de casos.
 - Caminho padrão do índice fica na pasta local de dados do usuário (XDG no Linux/macOS; LOCALAPPDATA no Windows); `--db` permite configuração explícita e testes. Nenhuma conversa, código do proprietário, evidência ou resultado será indexado automaticamente.
 - Integração que injeta contexto na Qwen3/Ollama fica para etapa futura e exige novo desenho/teste. Nenhum peso ou adaptador será alterado nesta entrega.

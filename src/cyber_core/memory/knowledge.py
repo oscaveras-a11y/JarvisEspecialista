@@ -33,10 +33,15 @@ def _connect(path):
     path.parent.mkdir(parents=True, exist_ok=True)
     db = sqlite3.connect(path)
     try:
-        db.execute('CREATE VIRTUAL TABLE IF NOT EXISTS guide_search USING fts5(id UNINDEXED, topic UNINDEXED, title, body, sources, tokenize=\'unicode61 remove_diacritics 2\')')
+        db.execute('CREATE VIRTUAL TABLE IF NOT EXISTS guide_search USING fts5(id UNINDEXED, topic UNINDEXED, version UNINDEXED, title, body, sources, tokenize=\'unicode61 remove_diacritics 2\')')
         db.execute('PRAGMA user_version = 1')
         db.commit()
         return db
+    except sqlite3.OperationalError as exc:
+        db.close()
+        if 'no such module: fts5' in str(exc).lower():
+            raise ValueError('SQLite FTS5 support is unavailable; install a Python build with FTS5 enabled') from None
+        raise
     except Exception:
         db.close()
         raise
@@ -47,12 +52,12 @@ def build_index(path=None):
     rows = []
     for entry in catalog:
         body = files('cyber_core.memory').joinpath('guides', entry['path']).read_text(encoding='utf-8')
-        rows.append((entry['id'], entry['topic'], entry['title'], body, ' '.join(entry['sources'])))
+        rows.append((entry['id'], entry['topic'], entry['version'], entry['title'], body, ' '.join(entry['sources'])))
     db = _connect(target)
     try:
         with db:
             db.execute('DELETE FROM guide_search')
-            db.executemany('INSERT INTO guide_search(id,topic,title,body,sources) VALUES(?,?,?,?,?)', rows)
+            db.executemany('INSERT INTO guide_search(id,topic,version,title,body,sources) VALUES(?,?,?,?,?,?)', rows)
         return {'indexed': len(rows), 'database': str(target), 'topics': [r[1] for r in rows]}
     finally:
         db.close()
@@ -72,7 +77,7 @@ def search_index(query, path=None, limit=5):
     db = sqlite3.connect(target)
     db.row_factory = sqlite3.Row
     try:
-        rows = db.execute('SELECT id, topic, title, snippet(guide_search,3,\'[\',\']\',\' … \',24) AS excerpt, sources FROM guide_search WHERE guide_search MATCH ? ORDER BY rank LIMIT ?', (expression, limit)).fetchall()
+        rows = db.execute('SELECT id, topic, version, title, snippet(guide_search,3,\'[\',\']\',\' … \',24) AS excerpt, sources FROM guide_search WHERE guide_search MATCH ? ORDER BY rank LIMIT ?', (expression, limit)).fetchall()
         return {'query': query, 'results': [dict(row) for row in rows], 'count': len(rows), 'database': str(target)}
     finally:
         db.close()
